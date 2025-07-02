@@ -1,0 +1,8 @@
+# workspace config
+.vscode/
+
+# samples
+test_samples/
+
+#.env
+.env
