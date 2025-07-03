@@ -87,13 +87,13 @@ func (l *Lexer) Tokenize(content string) {
 	chunks := strings.Split(content, "\n")
 
 	for idx, chunk := range chunks {
-		list := strings.Split(chunk, " ")
+		list := strings.Split(strings.TrimSpace(chunk), " ")
 
 		operation := list[0]
 		params := list[1:]
 
 		params = slices.DeleteFunc(params, func(param string) bool {
-			return len(strings.TrimSpace(param)) == 0
+			return len(param) <= 0
 		})
 
 		l.Line = uint(idx) + 1
@@ -127,7 +127,6 @@ func (l *Lexer) Tokenize(content string) {
 				)
 				return
 			}
-
 		}
 	}
 }
@@ -159,11 +158,7 @@ func (l *Lexer) pushHandler(idx int, params []string) error {
 	osPath, _ := os.Getwd()
 	path = filepath.Join(osPath, path)
 
-	_, err := checkPathExistence(path)
-
-	if err != nil {
-		return err
-	}
+	path = filepath.Clean(path)
 
 	key := createKey(PUSH, l.Line)
 	value := Instruction{
@@ -253,10 +248,6 @@ func (l *Lexer) exportHandler(idx int, params []string) error {
 
 	osPath, _ := os.Getwd()
 	path = filepath.Join(osPath, path)
-
-	if !fileIsVideo(path) {
-		return errors.New("ERROR: provided filepath is not a valid video type")
-	}
 
 	key := createKey(EXPORT, l.Line)
 	value := Instruction{
