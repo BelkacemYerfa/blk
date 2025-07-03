@@ -36,6 +36,39 @@ Merge a set of videos on the stack into one.
 
 ---
 
+### `thumbnail_from [frame=<number> | time=<hh:mm:ss>] <file.png>`
+
+Extract a thumbnail image at a given frame index.
+
+Example:
+
+```text
+thumbnail_from 123 out/cover.png
+```
+
+```text
+thumbnail_from 00:00:10 out/cover.png
+```
+
+---
+
+### `music <file.mp3> [volume=X] [duck] [loop]`
+
+Add background music to the top video.
+
+Options:
+
+- `volume=X` — Set music volume (e.g., `0.5`)
+- `duck` — Auto-lower music during speech
+- `loop` — Repeat track to match video length
+
+Examples:
+
+```text
+music assets/bg.mp3
+music assets/bg.mp3 0.3 duck loop
+```
+
 ## 🔜 Phase 2 — Templates & Styling
 
 ### `template <name>`
@@ -146,18 +179,6 @@ Auto-cut video based on speech/silence detection.
 ### `normalize_audio`
 
 Balance audio loudness across the video.
-
----
-
-### `thumbnail_from frame=<number>`
-
-Generate thumbnail image from a given frame.
-
----
-
-### `music <bgm.mp3> [ducking]`
-
-Add background music and enable ducking if needed.
 
 ---
 
