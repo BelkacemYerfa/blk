@@ -12,9 +12,9 @@ Push a video file onto the stack.
 
 ---
 
-### `trim <start> <end>`
+### `trim <start> <end> <video.mp4>`
 
-Trim the top video on the stack to a time range.
+Trim the top videos on the stack to a time range.
 
 Example:
 
@@ -22,23 +22,7 @@ Example:
 trim 00:00:05 00:00:30
 ```
 
----
-
-### `caption <file.vtt> [embed|vtt] [position]`
-
-Attach subtitles to the current top video.
-
-- `embed`: Burn into the video
-- `vtt`: Export sidecar `.vtt` file
-- `position`: `top`, `bottom`, or `x=Y y=Z`
-
-Example:
-
-```text
-caption subs/v1.vtt embed bottom
-```
-
----
+**Note:** if <video.mp4> is provided, it will be used as the source for trimming.
 
 ### `export <file.mp4>`
 
@@ -48,7 +32,7 @@ Write the current top of the stack to the given path.
 
 ### `concat`
 
-Merge the top two videos on the stack into one.
+Merge a set of videos on the stack into one.
 
 ---
 
@@ -82,6 +66,22 @@ Example:
 
 ```text
 burn bottom font=Roboto size=32 bg=true
+```
+
+---
+
+### `caption <file.vtt> [embed|vtt] [position]`
+
+Attach subtitles to the current top video.
+
+- `embed`: Burn into the video
+- `vtt`: Export sidecar `.vtt` file
+- `position`: `top`, `bottom`, or `x=Y y=Z`
+
+Example:
+
+```text
+caption subs/v1.vtt embed bottom
 ```
 
 ---
