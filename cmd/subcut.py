@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 import argparse
+from dotenv import load_dotenv
+load_dotenv()
+
 import gen
 
 def main():

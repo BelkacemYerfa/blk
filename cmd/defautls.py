@@ -4,10 +4,10 @@ import platform
 
 
 def default_nvidia_cudnn():
-  match platform.platform() :
-    case "windows": return "C:\\Program Files\\NVIDIA\\CUDNN\\v9.10\\bin\\12.9"
-    case "linux" : return "C:\\Program Files\\NVIDIA\\CUDNN\\v9.10\\bin\\12.9"
-    case _: return ""
+    match platform.platform() :
+        case "windows": return "C:\\Program Files\\NVIDIA\\CUDNN\\v9.10\\bin\\12.9"
+        case "linux" : return "C:\\Program Files\\NVIDIA\\CUDNN\\v9.10\\bin\\12.9"
+        case _: return ""
 
 # Cuda specif path to CUDNN
 NVIDIA_CUDNN = os.getenv("NVIDIA_CUDNN") or default_nvidia_cudnn()

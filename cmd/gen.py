@@ -1,10 +1,20 @@
 # std modules
-import os
 from argparse import ArgumentParser
-from typing import TextIO
+import os
+import warnings
+
+if os.getenv("WORK_ENV") == "PRODUCTION":
+    warnings.filterwarnings(
+        "ignore",
+        message="pkg_resources is deprecated as an API.*",
+        category=UserWarning,
+        module="ctranslate2.*"
+    )
+
 from faster_whisper import WhisperModel
 
 # dev modules
+from cli_utils import Logger
 import cuda_check
 import defautls
 
@@ -14,109 +24,106 @@ def format_srt_timestamp(seconds:float) -> str:
     ms = int((s % 1) * 1000)
     return f"{int(h):02d}:{int(m):02d}:{int(s):02d}.{ms:03d}"
 
-def char_parsing_correct_format(text:str) -> str:
-    words = text.split(" ")
-    new_words = []
-    for word in words:
-        chars = list(word)
-        for i, char in enumerate(chars):
-            new_char = char
-            match new_char:
-                case "&": new_char="&amp;"
-                case "<": new_char="&lt;"
-                case ">": new_char="&gt;"
-                case '"': new_char="&quot;"
-                case "'": new_char="&apos;"
-                case "–": new_char="&ndash;"
-                case "—": new_char="&mdash;"
-                case "©": new_char="&copy;"
-                case "®": new_char="&reg;"
-                case "™": new_char="&trade;"
-                case "≈": new_char="&asymp;"
-                case "£": new_char="&pound;"
-                case "€": new_char="&euro;"
-                case "°": new_char="&deg;"
-                case _: new_char = char
-            chars[i] = new_char
-        new_words.append("".join(chars))
-
-    return " ".join(new_words)
+def char_parsing_correct_format(text: str) -> str:
+    """Optimized HTML entity replacement using str.translate()"""
+    # Create translation table once (much faster than repeated replacements)
+    translation_table = str.maketrans({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&apos;',
+        '–': '&ndash;',
+        '—': '&mdash;',
+        '©': '&copy;',
+        '®': '&reg;',
+        '™': '&trade;',
+        '≈': '&asymp;',
+        '£': '&pound;',
+        '€': '&euro;',
+        '°': '&deg;'
+    })
+    return text.translate(translation_table)
 
 
-def static_content(f: TextIO) -> None:
-    content = (
+def gen_sub_command(global_parser: ArgumentParser) -> None:
+    gen_sub_command = global_parser.add_subparsers(dest="command")
+
+    gen_sub_parser = gen_sub_command.add_parser("gen",help="generates the vtt file of audio or video")
+
+    gen_sub_parser.add_argument('audio_file', help='Audio file to transcribe')
+    gen_sub_parser.add_argument('-m', '--model', default='base', help='Model size')
+    gen_sub_parser.add_argument('-l', '--language', default='en', help='Language code')
+    gen_sub_parser.add_argument('-o', '--output_file' , help='Output file with format (vtt/srt)')
+    gen_sub_parser.add_argument('--device', default='cuda', help='Device (cpu/cuda)')
+
+    args = global_parser.parse_args()
+    error = ""
+
+    args_config = {
+        "audio_file": args.audio_file,
+        "model" : args.model,
+        "language": args.language,
+        "output_file" : args.output_file,
+        "device" : args.device
+    }
+
+    logger = Logger()
+
+    cuda_available = cuda_check.check_cuda_available()
+
+    if cuda_available is None:
+            cuda_available = cuda_check.nvidia_msi_check()
+
+    if cuda_available is None:
+            cuda_available, error = cuda_check.has_cudart_dll()
+
+    if cuda_available and len(error) == 0:
+        args_config["device"] = "cuda"
+    else:
+
+        if len(error) > 0 :
+            return logger.Failure("ERROR:", [f"{error}"])
+
+        args.device = "cpu"
+        if defautls.HIGH_END_DEVICES_EN.count(args.model) > 0 or defautls.HIGH_END_DEVICES.count(args.model) > 0:
+            logger.Warning("WARNING:",["High-end models not recommended. May cause instability on lower-end hardware, use at your own risk"])
+            choice = input("Use base model for faster results? [y/n]: ").strip().lower()
+            if choice == "n":
+                args_config["model"] = "base"
+
+    model = WhisperModel(args_config["model"], device=args_config["device"])
+
+    print(f"Transcribing {args.audio_file}...")
+    segments, _ = model.transcribe(args_config["audio_file"], language=args_config["language"])
+
+    # Build content in memory first (much faster)
+    content_parts = [
         "WEBVTT\n\n"
         "NOTE\n"
         "This is created by subcut, you can modify as you want, but respect the structure\n"
         "For more ref, use: https://developer.mozilla.org/en-US/docs/Web/API/WebVTT_API/Web_Video_Text_Tracks_Format#cue_payload_text_tags\n\n"
-    )
-    f.write(content)
+    ]
 
-def gen_sub_command(global_parser: ArgumentParser) -> None:
-  gen_sub_command = global_parser.add_subparsers(dest="command")
+    # Process segments as they stream in
+    for index, segment in enumerate(segments, 1):
+        start_time = format_srt_timestamp(segment.start)
+        end_time = format_srt_timestamp(segment.end)
+        formatted_text = char_parsing_correct_format(segment.text.lstrip())
 
-  gen_sub_parser = gen_sub_command.add_parser("gen",help="generates the vtt file of audio or video")
+        # Add segment content
+        content_parts.append(f"{index}\n{start_time} --> {end_time}\n{formatted_text}")
 
-  gen_sub_parser.add_argument('audio_file', help='Audio file to transcribe')
-  gen_sub_parser.add_argument('-m', '--model', default='base', help='Model size')
-  gen_sub_parser.add_argument('-l', '--language', default='en', help='Language code')
-  gen_sub_parser.add_argument('-o', '--output_file' , help='Output file with format (vtt/srt)')
-  gen_sub_parser.add_argument('--device', default='cuda', help='Device (cpu/cuda)')
+        # Add separator (except for last segment)
+        if hasattr(segments, '__len__'):  # If we can peek ahead
+            content_parts.append("\n\n")
+        else:
+            # For streaming, always add separator (will trim at end if needed)
+            content_parts.append("\n\n")
 
-  args = global_parser.parse_args()
-  error = ""
+    # Write all content at once
+    with open(args_config["output_file"], "w", buffering=8192) as f:
+        f.write("".join(content_parts).rstrip("\n\n"))  # Remove trailing separators
 
-  args_config = {
-      "audio_file": args.audio_file,
-      "model" : args.model,
-      "language": args.language,
-      "output_file" : args.output_file,
-      "device" : args.device
-  }
-
-
-  # TODO: implement here a runtime issue to be thrown if the args aren't specified in the args_config
-
-  cuda_available = cuda_check.check_cuda_available()
-
-  if cuda_available is None:
-        cuda_available = cuda_check.nvidia_msi_check()
-
-  if cuda_available is None:
-        cuda_available, error = cuda_check.has_cudart_dll()
-
-  if cuda_available and len(error) == 0:
-      args_config["device"] = "cuda"
-  else:
-      if len(error) > 0 :
-          print(f"\033[1;31mERROR:\033[0m {error}")
-          os._exit(1)
-      args.device = "cpu"
-      if defautls.HIGH_END_DEVICES_EN.count(args.model) > 0 or defautls.HIGH_END_DEVICES.count(args.model) > 0:
-          print("\033[1;33mWARNING:\033[0m High-end models not recommended. May cause instability on lower-end hardware, use at your own risk")
-          choice = input("Use base model for faster results? [y/n]: ").strip().lower()
-          if choice == "n":
-              args_config["model"] = "base"
-
-  model = WhisperModel(args_config["model"], device=args_config["device"])
-
-  print(f"Transcribing {args.audio_file}...")
-  segments, _ = model.transcribe(args_config["audio_file"], language=args_config["language"])
-
-  f = open(f"{args_config["output_file"]}" , "w")
-  static_content(f)
-  index = 0
-  segments_list = list(segments)
-  for segment in segments_list:
-      index += 1
-      start_time = format_srt_timestamp(segment.start)
-      end_time = format_srt_timestamp(segment.end)
-      formatted_text = char_parsing_correct_format(segment.text)
-      block_break = "\n\n"
-      if index == len(segments_list) - 1:
-          block_break = ""
-      f.write(
-          f"{index}\n{start_time} --> {end_time}\n{formatted_text.removeprefix(' ')}{block_break}"
-      )
-  f.close()
-  return print(f"\033[1;32mDONE:\033[0m file generated at path {args_config['output_file']}")
+    print("--" * 50)
+    return logger.Success("DONE:", [f"file generated at path {args_config['output_file']}"])

@@ -6,3 +6,6 @@ test_samples/
 
 #.env
 .env
+
+# cache files
+__pycache__/
