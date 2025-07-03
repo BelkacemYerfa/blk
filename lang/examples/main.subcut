@@ -3,10 +3,6 @@ trim 00:00:00 00:00:10
 export out/clip1.mp4
 
 push lang/assets/smt.mp4
-caption subs/main.vtt vtt
-export out/clip2.mp4
-
 push lang/assets/smt.mp4
-push out/clip2.mp4
 concat
 export out/final.mp4
