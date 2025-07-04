@@ -2,6 +2,8 @@ push lang/assets/smt.mp4
 trim 00:00:00 00:00:10
 export out/clip1.mp4
 
+thumbnail_from 00:00:20 lang/assets/smt_thumb.jpeg
+
 push lang/assets/smt.mp4
 push lang/assets/smt.mp4
 concat
