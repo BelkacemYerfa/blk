@@ -52,9 +52,9 @@ thumbnail_from 00:00:10 out/cover.png
 
 ---
 
-### `music <file.mp3> [volume=X] [duck] [loop]`
+### `set_track <name> <file.mp3> [volume=X] [duck] [loop]`
 
-Add background music to the top video.
+Define a named audio track to be reused across videos.
 
 Options:
 
@@ -65,8 +65,19 @@ Options:
 Examples:
 
 ```text
-music assets/bg.mp3
-music assets/bg.mp3 0.3 duck loop
+set_track bg assets/beat.mp3
+set_track bg assets/beat.mp3 volume=0.3 duck loop fadein=2 fadeout=3
+```
+
+### `use_track <name> <video-path|last|first>`
+
+Attach a previously defined track to a specific video or all videos.
+
+Examples:
+
+```text
+use_track bg intro.mp4
+use_track bg all
 ```
 
 ## 🔜 Phase 2 — Templates & Styling
