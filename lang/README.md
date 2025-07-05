@@ -18,7 +18,7 @@ push "videos/intro.mp4"
 
 ---
 
-### `trim <start> <end> <video.mp4>`
+### `trim <start> <end> (video-path|all)`
 
 Trim the top videos on the stack to a time range.
 
@@ -91,8 +91,8 @@ Attach a previously defined track to a specific video or all videos.
 Examples:
 
 ```text
-use_track bg intro.mp4
-use_track bg first
+use_track bg "intro.mp4"
+use_track bg "first"
 ```
 
 ## 🔜 Phase 2 — Templates & Styling

@@ -5,6 +5,8 @@ set_track bg {
   loop: true
 }
 
+use_track bg "intro.mp4"
+
 push "lang/assets/smt.mp4"
 trim" 00:00:00" "00:00:10"
 export "out/clip1.mp4"

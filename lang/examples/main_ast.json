@@ -15,73 +15,81 @@
     "Order": 16
   },
   {
-    "Command": "push",
+    "Command": "use_track",
     "Params": [
-      { "Kind": "string", "Value": "lang/assets/smt.mp4", "Row": 8, "Col": 6 }
+      { "Kind": "identifier", "Value": "bg", "Row": 8, "Col": 11 },
+      { "Kind": "string", "Value": "intro.mp4", "Row": 8, "Col": 14 }
     ],
-    "Order": 18
+    "Order": 19
   },
   {
-    "Command": "trim",
+    "Command": "push",
     "Params": [
-      { "Kind": "time", "Value": "00:00:00", "Row": 9, "Col": 5 },
-      { "Kind": "string", "Value": "all", "Row": 9, "Col": 17 }
+      { "Kind": "string", "Value": "lang/assets/smt.mp4", "Row": 10, "Col": 6 }
     ],
     "Order": 21
   },
   {
-    "Command": "export",
+    "Command": "trim",
     "Params": [
-      { "Kind": "string", "Value": "out/clip1.mp4", "Row": 10, "Col": 8 }
+      { "Kind": "time", "Value": "00:00:00", "Row": 11, "Col": 5 },
+      { "Kind": "string", "Value": "all", "Row": 11, "Col": 17 }
     ],
-    "Order": 23
+    "Order": 24
   },
   {
-    "Command": "thumbnail_from",
+    "Command": "export",
     "Params": [
-      { "Kind": "time", "Value": "00:00:20", "Row": 12, "Col": 16 },
-      {
-        "Kind": "time",
-        "Value": "lang/assets/smt_thumb.jpeg",
-        "Row": 12,
-        "Col": 27
-      }
+      { "Kind": "string", "Value": "out/clip1.mp4", "Row": 12, "Col": 8 }
     ],
     "Order": 26
   },
   {
     "Command": "thumbnail_from",
     "Params": [
-      { "Kind": "number", "Value": 123, "Row": 13, "Col": 16 },
+      { "Kind": "time", "Value": "00:00:20", "Row": 14, "Col": 16 },
       {
         "Kind": "time",
         "Value": "lang/assets/smt_thumb.jpeg",
-        "Row": 13,
-        "Col": 20
+        "Row": 14,
+        "Col": 27
       }
     ],
     "Order": 29
   },
   {
-    "Command": "push",
+    "Command": "thumbnail_from",
     "Params": [
-      { "Kind": "string", "Value": "lang/assets/smt.mp4", "Row": 16, "Col": 6 }
+      { "Kind": "number", "Value": 123, "Row": 15, "Col": 16 },
+      {
+        "Kind": "time",
+        "Value": "lang/assets/smt_thumb.jpeg",
+        "Row": 15,
+        "Col": 20
+      }
     ],
-    "Order": 31
+    "Order": 32
   },
   {
     "Command": "push",
     "Params": [
-      { "Kind": "string", "Value": "lang/assets/smt.mp4", "Row": 17, "Col": 6 }
+      { "Kind": "string", "Value": "lang/assets/smt.mp4", "Row": 18, "Col": 6 }
     ],
-    "Order": 33
+    "Order": 34
   },
-  { "Command": "concat", "Params": [], "Order": 34 },
+  {
+    "Command": "push",
+    "Params": [
+      { "Kind": "string", "Value": "lang/assets/smt.mp4", "Row": 19, "Col": 6 }
+    ],
+    "Order": 36
+  },
+  { "Command": "concat", "Params": [], "Order": 37 },
   {
     "Command": "export",
     "Params": [
-      { "Kind": "string", "Value": "out/final.mp4", "Row": 19, "Col": 8 }
+      { "Kind": "string", "Value": "out/final.mp4", "Row": 21, "Col": 8 }
     ],
-    "Order": 36
+    "Order": 39
   }
 ]

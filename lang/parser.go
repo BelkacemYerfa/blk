@@ -414,7 +414,45 @@ func (p *Parser) setTrackHandler() (*ASTNode, error) {
 }
 
 func (p *Parser) useTrackHandler() (*ASTNode, error) {
-	return nil, nil
+	args := make([]Param, 0)
+	tok := p.next()
+
+	if tok.Kind != TokenIdentifier {
+		return nil, fmt.Errorf("ERROR: expect a %v, got %v", TokenIdentifier, tok.Kind)
+	}
+
+	args = append(args, Param{
+		Value: tok.Text,
+		Kind:  TokenIdentifier,
+		Row:   tok.Row,
+		Col:   tok.Col,
+	})
+
+	tok = p.next()
+
+	if tok.Kind != TokenString {
+		return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenString, tok.Kind)
+	}
+	// check the param format
+
+	path := tok.Text
+
+	if err := p.videoPathCheck(path); err != nil {
+		return nil, err
+	}
+
+	args = append(args, Param{
+		Value: tok.Text,
+		Kind:  TokenString,
+		Row:   tok.Row,
+		Col:   tok.Col,
+	})
+
+	return &ASTNode{
+		Command: USE_TRACK,
+		Params:  args,
+		Order:   p.Pos,
+	}, nil
 }
 
 func (p *Parser) exportHandler() (*ASTNode, error) {
