@@ -2,43 +2,47 @@
   {
     "Command": "set_track",
     "Params": [
-      { "Text": "path", "Kind": "identifier", "Row": 2, "Col": 3 },
-      { "Text": "assets/beat.mp3", "Kind": "string", "Row": 2, "Col": 9 },
-      { "Text": "volume", "Kind": "identifier", "Row": 3, "Col": 3 },
-      { "Text": "0.3", "Kind": "number", "Row": 3, "Col": 11 },
-      { "Text": "duck", "Kind": "identifier", "Row": 4, "Col": 3 },
-      { "Text": "false", "Kind": "bool", "Row": 4, "Col": 9 },
-      { "Text": "loop", "Kind": "identifier", "Row": 5, "Col": 3 },
-      { "Text": "true", "Kind": "bool", "Row": 5, "Col": 9 }
+      { "Kind": "identifier", "Value": "bg", "Row": 1, "Col": 10 },
+      { "Kind": "identifier", "Value": "path", "Row": 2, "Col": 3 },
+      { "Kind": "string", "Value": "assets/beat.mp3", "Row": 2, "Col": 9 },
+      { "Kind": "identifier", "Value": "volume", "Row": 3, "Col": 3 },
+      { "Kind": "number", "Value": 0.3, "Row": 3, "Col": 11 },
+      { "Kind": "identifier", "Value": "duck", "Row": 4, "Col": 3 },
+      { "Kind": "bool", "Value": false, "Row": 4, "Col": 9 },
+      { "Kind": "identifier", "Value": "loop", "Row": 5, "Col": 3 },
+      { "Kind": "bool", "Value": true, "Row": 5, "Col": 9 }
     ],
     "Order": 16
   },
   {
     "Command": "push",
     "Params": [
-      { "Text": "lang/assets/smt.mp4", "Kind": "string", "Row": 8, "Col": 6 }
+      { "Kind": "string", "Value": "lang/assets/smt.mp4", "Row": 8, "Col": 6 }
     ],
     "Order": 18
   },
   {
     "Command": "trim",
-    "Params": [{ "Text": "00:00:00", "Kind": "time", "Row": 9, "Col": 5 }],
+    "Params": [
+      { "Kind": "time", "Value": "00:00:00", "Row": 9, "Col": 5 },
+      { "Kind": "string", "Value": "all", "Row": 9, "Col": 17 }
+    ],
     "Order": 21
   },
   {
     "Command": "export",
     "Params": [
-      { "Text": "out/clip1.mp4", "Kind": "string", "Row": 10, "Col": 8 }
+      { "Kind": "string", "Value": "out/clip1.mp4", "Row": 10, "Col": 8 }
     ],
     "Order": 23
   },
   {
     "Command": "thumbnail_from",
     "Params": [
-      { "Text": "00:00:20", "Kind": "time", "Row": 12, "Col": 16 },
+      { "Kind": "time", "Value": "00:00:20", "Row": 12, "Col": 16 },
       {
-        "Text": "lang/assets/smt_thumb.jpeg",
-        "Kind": "string",
+        "Kind": "time",
+        "Value": "lang/assets/smt_thumb.jpeg",
         "Row": 12,
         "Col": 27
       }
@@ -48,10 +52,10 @@
   {
     "Command": "thumbnail_from",
     "Params": [
-      { "Text": "123", "Kind": "number", "Row": 13, "Col": 16 },
+      { "Kind": "number", "Value": 123, "Row": 13, "Col": 16 },
       {
-        "Text": "lang/assets/smt_thumb.jpeg",
-        "Kind": "string",
+        "Kind": "time",
+        "Value": "lang/assets/smt_thumb.jpeg",
         "Row": 13,
         "Col": 20
       }
@@ -61,14 +65,14 @@
   {
     "Command": "push",
     "Params": [
-      { "Text": "lang/assets/smt.mp4", "Kind": "string", "Row": 16, "Col": 6 }
+      { "Kind": "string", "Value": "lang/assets/smt.mp4", "Row": 16, "Col": 6 }
     ],
     "Order": 31
   },
   {
     "Command": "push",
     "Params": [
-      { "Text": "lang/assets/smt.mp4", "Kind": "string", "Row": 17, "Col": 6 }
+      { "Kind": "string", "Value": "lang/assets/smt.mp4", "Row": 17, "Col": 6 }
     ],
     "Order": 33
   },
@@ -76,7 +80,7 @@
   {
     "Command": "export",
     "Params": [
-      { "Text": "out/final.mp4", "Kind": "string", "Row": 19, "Col": 8 }
+      { "Kind": "string", "Value": "out/final.mp4", "Row": 19, "Col": 8 }
     ],
     "Order": 36
   }

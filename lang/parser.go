@@ -34,9 +34,16 @@ var (
 	}
 )
 
+type Param struct {
+	Kind  TokenKind
+	Value any
+	Row   int
+	Col   int
+}
+
 type ASTNode struct {
 	Command Command
-	Params  []Token
+	Params  []Param
 	Order   int
 }
 
@@ -121,7 +128,7 @@ func (p *Parser) parseCommand() (*ASTNode, error) {
 	case TokenSetTrack:
 		return p.setTrackHandler()
 	case TokenUseTrack:
-		return &ASTNode{}, nil
+		return p.useTrackHandler()
 	}
 
 	// All good, create AST node
@@ -167,7 +174,7 @@ func (p *Parser) imagePathCheck(path string) error {
 }
 
 func (p *Parser) pushHandler() (*ASTNode, error) {
-	args := make([]Token, 0)
+	args := make([]Param, 0)
 
 	tok := p.next()
 
@@ -183,7 +190,12 @@ func (p *Parser) pushHandler() (*ASTNode, error) {
 		return nil, err
 	}
 
-	args = append(args, tok)
+	args = append(args, Param{
+		Value: tok.Text,
+		Kind:  TokenString,
+		Row:   tok.Row,
+		Col:   tok.Col,
+	})
 
 	return &ASTNode{
 		Command: PUSH,
@@ -193,7 +205,7 @@ func (p *Parser) pushHandler() (*ASTNode, error) {
 }
 
 func (p *Parser) trimHandler() (*ASTNode, error) {
-	args := make([]Token, 0)
+	args := make([]Param, 0)
 
 	for range 1 {
 		tok := p.next()
@@ -201,7 +213,12 @@ func (p *Parser) trimHandler() (*ASTNode, error) {
 			return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenTime, tok.Kind)
 		}
 
-		args = append(args, tok)
+		args = append(args, Param{
+			Value: tok.Text,
+			Kind:  TokenTime,
+			Row:   tok.Row,
+			Col:   tok.Col,
+		})
 	}
 
 	// check the format of the path if it exists
@@ -216,6 +233,12 @@ func (p *Parser) trimHandler() (*ASTNode, error) {
 			return nil, err
 		}
 	}
+	args = append(args, Param{
+		Value: videoTarget,
+		Kind:  TokenString,
+		Row:   tok.Row,
+		Col:   tok.Col,
+	})
 
 	return &ASTNode{
 		Command: TRIM,
@@ -234,30 +257,43 @@ func (p *Parser) concatHandler() (*ASTNode, error) {
 	}
 	return &ASTNode{
 		Command: CONCAT,
-		Params:  []Token{},
+		Params:  []Param{},
 		Order:   p.Pos,
 	}, nil
 }
 
 func (p *Parser) thumbnailHandler() (*ASTNode, error) {
-	args := make([]Token, 0)
+	args := make([]Param, 0)
 
 	tok := p.next()
+
 	format := tok.Text
-	if tok.Kind == TokenTime {
+
+	switch tok.Kind {
+	case TokenTime:
 		timeFormat := `^\d{2}:\d{2}:\d{2}$`
 		format := tok.Text
 		if matched, _ := regexp.MatchString(timeFormat, format); matched {
 
-			args = append(args, tok)
+			args = append(args, Param{
+				Value: tok.Text,
+				Kind:  TokenTime,
+				Row:   tok.Row,
+				Col:   tok.Col,
+			})
 		}
-	} else if tok.Kind == TokenNumber {
-		_, err := strconv.Atoi(format)
+	case TokenNumber:
+		num, err := strconv.Atoi(format)
 		if err != nil {
 			return nil, fmt.Errorf("invalid number format, %v", err)
 		}
-		args = append(args, tok)
-	} else {
+		args = append(args, Param{
+			Value: num,
+			Kind:  TokenNumber,
+			Row:   tok.Row,
+			Col:   tok.Col,
+		})
+	default:
 		return nil, fmt.Errorf("ERROR: expected (%v, %v), got %v", TokenTime, TokenNumber, tok.Kind)
 	}
 
@@ -272,7 +308,12 @@ func (p *Parser) thumbnailHandler() (*ASTNode, error) {
 		return nil, err
 	}
 
-	args = append(args, tok)
+	args = append(args, Param{
+		Value: tok.Text,
+		Kind:  TokenTime,
+		Row:   tok.Row,
+		Col:   tok.Col,
+	})
 
 	return &ASTNode{
 		Command: THUMBNAIL_FROM,
@@ -282,12 +323,19 @@ func (p *Parser) thumbnailHandler() (*ASTNode, error) {
 }
 
 func (p *Parser) setTrackHandler() (*ASTNode, error) {
-	args := make([]Token, 0)
+	args := make([]Param, 0)
 	tok := p.next()
 
 	if tok.Kind != TokenIdentifier {
 		return nil, fmt.Errorf("ERROR: expect a %v, got %v", TokenIdentifier, tok.Kind)
 	}
+
+	args = append(args, Param{
+		Value: tok.Text,
+		Kind:  TokenIdentifier,
+		Row:   tok.Row,
+		Col:   tok.Col,
+	})
 
 	tok = p.next()
 
@@ -302,24 +350,54 @@ func (p *Parser) setTrackHandler() (*ASTNode, error) {
 			return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenIdentifier, key.Kind)
 		}
 
-		args = append(args, key)
+		args = append(args, Param{
+			Value: key.Text,
+			Kind:  TokenIdentifier,
+			Row:   key.Row,
+			Col:   key.Col,
+		})
 
 		colon := p.next()
+
 		if colon.Kind != TokenColon {
 			return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenColon, colon.Kind)
 		}
 
 		value := p.next()
 
+		var val Param
 		switch value.Kind {
 		case TokenString:
+			val = Param{
+				Value: value.Text,
+				Kind:  TokenString,
+				Row:   value.Row,
+				Col:   value.Col,
+			}
+
 		case TokenNumber:
+			num, err := strconv.ParseFloat(value.Text, 64)
+			if err != nil {
+				return nil, fmt.Errorf("invalid number format, %v", err)
+			}
+			val = Param{
+				Value: num,
+				Kind:  TokenNumber,
+				Row:   value.Row,
+				Col:   value.Col,
+			}
 		case TokenBool:
+			val = Param{
+				Value: value.Text == "true",
+				Kind:  TokenBool,
+				Row:   value.Row,
+				Col:   value.Col,
+			}
 		default:
 			return nil, fmt.Errorf("ERROR: unsupported type %v", value.Kind)
 		}
 
-		args = append(args, value)
+		args = append(args, val)
 	}
 
 	tok = p.next()
@@ -335,12 +413,12 @@ func (p *Parser) setTrackHandler() (*ASTNode, error) {
 	}, nil
 }
 
-func (p *Parser) useTrackHandler(idx int, params []string) (*ASTNode, error) {
+func (p *Parser) useTrackHandler() (*ASTNode, error) {
 	return nil, nil
 }
 
 func (p *Parser) exportHandler() (*ASTNode, error) {
-	args := make([]Token, 0)
+	args := make([]Param, 0)
 
 	tok := p.next()
 
@@ -355,7 +433,12 @@ func (p *Parser) exportHandler() (*ASTNode, error) {
 		return nil, err
 	}
 
-	args = append(args, tok)
+	args = append(args, Param{
+		Value: tok.Text,
+		Kind:  TokenString,
+		Row:   tok.Row,
+		Col:   tok.Col,
+	})
 
 	return &ASTNode{
 		Command: EXPORT,
