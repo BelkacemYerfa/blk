@@ -1,10 +1,19 @@
-push lang/assets/smt.mp4
-trim 00:00:00 00:00:10
-export out/clip1.mp4
+set_track bg {
+  path: "assets/beat.mp3"
+  volume: 0.3
+  duck: false
+  loop: true
+}
 
-thumbnail_from 00:00:20 lang/assets/smt_thumb.jpeg
+push "lang/assets/smt.mp4"
+trim" 00:00:00" "00:00:10"
+export "out/clip1.mp4"
 
-push lang/assets/smt.mp4
-push lang/assets/smt.mp4
+thumbnail_from "00:00:20" "lang/assets/smt_thumb.jpeg"
+thumbnail_from 123 "lang/assets/smt_thumb.jpeg"
+
+
+push "lang/assets/smt.mp4"
+push "lang/assets/smt.mp4"
 concat
-export out/final.mp4
+export "out/final.mp4"

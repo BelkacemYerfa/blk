@@ -25,11 +25,9 @@ func downloadYTDLP(
 	if err := cmd.Run(); err != nil {
 		os.Exit(1)
 	}
-
 }
 
 func main() {
-
 	machine_path, _ := os.Getwd()
 
 	tracks_src_file := machine_path + "/test_samples/net/tracks.txt"

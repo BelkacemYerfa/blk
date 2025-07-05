@@ -1,0 +1,83 @@
+[
+  {
+    "Command": "set_track",
+    "Params": [
+      { "Text": "path", "Kind": "identifier", "Row": 2, "Col": 3 },
+      { "Text": "assets/beat.mp3", "Kind": "string", "Row": 2, "Col": 9 },
+      { "Text": "volume", "Kind": "identifier", "Row": 3, "Col": 3 },
+      { "Text": "0.3", "Kind": "number", "Row": 3, "Col": 11 },
+      { "Text": "duck", "Kind": "identifier", "Row": 4, "Col": 3 },
+      { "Text": "false", "Kind": "bool", "Row": 4, "Col": 9 },
+      { "Text": "loop", "Kind": "identifier", "Row": 5, "Col": 3 },
+      { "Text": "true", "Kind": "bool", "Row": 5, "Col": 9 }
+    ],
+    "Order": 16
+  },
+  {
+    "Command": "push",
+    "Params": [
+      { "Text": "lang/assets/smt.mp4", "Kind": "string", "Row": 8, "Col": 6 }
+    ],
+    "Order": 18
+  },
+  {
+    "Command": "trim",
+    "Params": [{ "Text": "00:00:00", "Kind": "time", "Row": 9, "Col": 5 }],
+    "Order": 21
+  },
+  {
+    "Command": "export",
+    "Params": [
+      { "Text": "out/clip1.mp4", "Kind": "string", "Row": 10, "Col": 8 }
+    ],
+    "Order": 23
+  },
+  {
+    "Command": "thumbnail_from",
+    "Params": [
+      { "Text": "00:00:20", "Kind": "time", "Row": 12, "Col": 16 },
+      {
+        "Text": "lang/assets/smt_thumb.jpeg",
+        "Kind": "string",
+        "Row": 12,
+        "Col": 27
+      }
+    ],
+    "Order": 26
+  },
+  {
+    "Command": "thumbnail_from",
+    "Params": [
+      { "Text": "123", "Kind": "number", "Row": 13, "Col": 16 },
+      {
+        "Text": "lang/assets/smt_thumb.jpeg",
+        "Kind": "string",
+        "Row": 13,
+        "Col": 20
+      }
+    ],
+    "Order": 29
+  },
+  {
+    "Command": "push",
+    "Params": [
+      { "Text": "lang/assets/smt.mp4", "Kind": "string", "Row": 16, "Col": 6 }
+    ],
+    "Order": 31
+  },
+  {
+    "Command": "push",
+    "Params": [
+      { "Text": "lang/assets/smt.mp4", "Kind": "string", "Row": 17, "Col": 6 }
+    ],
+    "Order": 33
+  },
+  { "Command": "concat", "Params": [], "Order": 34 },
+  {
+    "Command": "export",
+    "Params": [
+      { "Text": "out/final.mp4", "Kind": "string", "Row": 19, "Col": 8 }
+    ],
+    "Order": 36
+  }
+]

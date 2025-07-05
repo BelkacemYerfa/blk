@@ -10,7 +10,6 @@ import (
 
 func checkPathExistence(path string) (bool, error) {
 	_, err := os.Stat(path)
-
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, errors.New("ERROR: provided file doesn't exist, please check your path")
@@ -30,7 +29,7 @@ func checkIfElementExist(slice []string, element string) bool {
 }
 
 func checkTimeTrimFormatValid(tm string) bool {
-	_, err := time.Parse("hh:mm:ss", tm)
+	_, err := time.Parse("15:04:05", tm)
 	if err != nil {
 		return false
 	}

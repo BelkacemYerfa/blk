@@ -10,6 +10,12 @@
 
 Push a video file onto the stack.
 
+Example:
+
+```text
+push "videos/intro.mp4"
+```
+
 ---
 
 ### `trim <start> <end> <video.mp4>`
@@ -19,7 +25,7 @@ Trim the top videos on the stack to a time range.
 Example:
 
 ```text
-trim 00:00:05 00:00:30
+trim "00:00:05" "00:00:30"
 ```
 
 **Note:** if <video.mp4> is provided, it will be used as the source for trimming.
@@ -27,6 +33,10 @@ trim 00:00:05 00:00:30
 ### `export <file.mp4>`
 
 Write the current top of the stack to the given path.
+
+```text
+export "out/video.mp4"
+```
 
 ---
 
@@ -43,21 +53,22 @@ Extract a thumbnail image at a given frame index.
 Example:
 
 ```text
-thumbnail_from 123 out/cover.png
+thumbnail_from 123 "out/cover.png"
 ```
 
 ```text
-thumbnail_from 00:00:10 out/cover.png
+thumbnail_from "00:00:10" "out/cover.png"
 ```
 
 ---
 
-### `set_track <name> <file.mp3> [volume=X] [duck] [loop]`
+### `set_track <name> { config }`
 
 Define a named audio track to be reused across videos.
 
 Options:
 
+- `path=<file.mp3>` — Path to the audio file
 - `volume=X` — Set music volume (e.g., `0.5`)
 - `duck` — Auto-lower music during speech
 - `loop` — Repeat track to match video length
@@ -65,8 +76,12 @@ Options:
 Examples:
 
 ```text
-set_track bg assets/beat.mp3
-set_track bg assets/beat.mp3 volume=0.3 duck loop fadein=2 fadeout=3
+set_track bg {
+  path: "assets/beat.mp3"
+  volume: 0.3
+  duck: false
+  loop: true
+}
 ```
 
 ### `use_track <name> <video-path|last|first>`
@@ -77,7 +92,7 @@ Examples:
 
 ```text
 use_track bg intro.mp4
-use_track bg all
+use_track bg first
 ```
 
 ## 🔜 Phase 2 — Templates & Styling
@@ -94,33 +109,21 @@ template tiktok
 
 ---
 
-### `burn [position] [style options]`
-
-Burn subtitles with visual styling.
-
-Style options (examples):
-
-- `font=Roboto-Bold`
-- `size=36`
-- `bg=true`
-- `color=white`
-- `outline=black`
-
-Example:
-
-```text
-burn bottom font=Roboto size=32 bg=true
-```
-
----
-
-### `caption <file.vtt> [embed|vtt] [position]`
+### `caption <file.vtt> [embed|vtt] [style options]`
 
 Attach subtitles to the current top video.
 
 - `embed`: Burn into the video
 - `vtt`: Export sidecar `.vtt` file
 - `position`: `top`, `bottom`, or `x=Y y=Z`
+
+**Style Options:**
+
+- `font=<font-name>` — Font family (e.g., `font=Roboto-Bold`, `font=Arial`)
+- `size=<number>` — Font size in pixels (e.g., `size=36`, `size=24`)
+- `bg=<true|false>` — Enable/disable background box behind text (e.g., `bg=true`)
+- `color=<color>` — Text color (e.g., `color=white`, `color=#FF0000`, `color=red`)
+- `outline=<color>` — Text outline/stroke color (e.g., `outline=black`, `outline=#000000`)
 
 Example:
 
@@ -132,17 +135,17 @@ caption subs/v1.vtt embed bottom
 
 ## 🧩 Phase 3 — Modular Logic & Batch
 
-### `block <name>` / `end`
+### `block <name>`
 
 Create an isolated scoped editing block.
 
 ```text
-block intro
+block {
   push videos/intro.mp4
   trim 00:00:00 00:00:10
   caption subs/intro.vtt embed
   export out/intro.mp4
-end
+}
 ```
 
 ---
@@ -165,16 +168,16 @@ split_into_clips duration=59 prefix=out/clip
 
 ---
 
-### `batch folder=<dir> output=<dir> template=<name>`
+### `batch <input-dir> <output-dir> <template>`
 
 Batch edit every video in a folder.
 
 ```text
-batch folder=videos/ output=out/ template=tiktok
-  trim 00:00:00 00:01:00
-  caption auto embed
-  export auto
-end
+batch "videos/" "out/" "tiktok" {
+ trim 00:00:00 00:01:00
+ caption auto embed
+ export auto
+}
 ```
 
 ---

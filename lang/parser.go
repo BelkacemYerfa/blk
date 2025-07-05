@@ -1,24 +1,26 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 )
 
-type TOKEN = string
+type Command = string
 
 const (
-	PUSH           TOKEN = "push"
-	TRIM           TOKEN = "trim"
-	EXPORT         TOKEN = "export"
-	CONCAT         TOKEN = "concat"
-	THUMBNAIL_FROM TOKEN = "thumbnail_from"
+	PUSH           Command = "push"
+	TRIM           Command = "trim"
+	EXPORT         Command = "export"
+	CONCAT         Command = "concat"
+	THUMBNAIL_FROM Command = "thumbnail_from"
+	SET_TRACK      Command = "set_track"
+	USE_TRACK      Command = "use_track"
 )
 
 var (
@@ -32,88 +34,104 @@ var (
 	}
 )
 
-type Instruction struct {
-	Command TOKEN
-	Params  []string
-	Order   uint
+type ASTNode struct {
+	Command Command
+	Params  []Token
+	Order   int
 }
+
+type AST = []ASTNode
 
 type Parser struct {
-	AST  []Instruction
-	Line uint
+	Tokens []Token
+	Pos    int
 }
 
-func NewParser() *Parser {
+func NewParser(tokens []Token) *Parser {
 	return &Parser{
-		AST:  make([]Instruction, 0),
-		Line: 0,
+		Tokens: tokens,
+		Pos:    0,
 	}
 }
 
-func (l *Parser) Tokenize(content string) {
-	chunks := strings.Split(content, "\n")
+func (p *Parser) next() Token {
+	if p.Pos >= len(p.Tokens) {
+		return Token{LiteralToken: LiteralToken{Kind: TokenEOF}}
+	}
+	tok := p.Tokens[p.Pos]
+	p.Pos++
+	return tok
+}
 
-	for idx, chunk := range chunks {
-		list := strings.Split(strings.TrimSpace(chunk), " ")
+// Returns the current token to process, if none, returns the EOF
+func (p *Parser) peek() Token {
+	if p.Pos >= len(p.Tokens) {
+		return Token{LiteralToken: LiteralToken{Kind: TokenEOF}}
+	}
+	return p.Tokens[p.Pos]
+}
 
-		operation := list[0]
-		params := list[1:]
+func (p *Parser) Parse(lexer *Lexer) *AST {
 
-		params = slices.DeleteFunc(params, func(param string) bool {
-			return len(param) <= 0
-		})
+	ast := make(AST, 0)
 
-		l.Line = uint(idx) + 1
+	for p.Pos <= len(p.Tokens) {
+		tok := p.peek()
 
-		switch strings.ToLower(operation) {
-		case PUSH:
-			if err := l.pushHandler(idx, params); err != nil {
-				fmt.Printf(
-					"%v\nLine: %v\nInstruction: %s", err, idx+1, chunk,
-				)
-				return
+		switch tok.Kind {
+		case TokenPush, TokenConcat, TokenTrim, TokenExport, TokenSetTrack, TokenUseTrack, TokenThumbnailFrom:
+			node, err := p.parseCommand()
+			if err != nil {
+				fmt.Println(err)
+				return nil
 			}
-		case TRIM:
-			if err := l.trimHandler(idx, params); err != nil {
-				fmt.Printf(
-					"%v\nLine: %v\nInstruction: %s", err, idx+1, chunk,
-				)
-				return
+			ast = append(ast, *node)
+
+		case TokenEOF:
+			return &ast
+
+		default:
+			if tok.Kind == TokenCurlyBraceClose || tok.Kind == TokenCurlyBraceOpen {
+				fmt.Printf("unexpected brace token outside of a command block at line %d\n", tok.Row)
+				return nil
 			}
-		case CONCAT:
-			if err := l.concatHandler(idx, params); err != nil {
-				fmt.Printf(
-					"%v\nLine: %v\nInstruction: %s", err, idx+1, chunk,
-				)
-				return
-			}
-		case EXPORT:
-			if err := l.exportHandler(idx, params); err != nil {
-				fmt.Printf(
-					"%v\nLine: %v\nInstruction: %s", err, idx+1, chunk,
-				)
-				return
-			}
-		case THUMBNAIL_FROM:
-			if err := l.thumbnailHandler(idx, params); err != nil {
-				fmt.Printf(
-					"%v\nLine: %v\nInstruction: %s", err, idx+1, chunk,
-				)
-				return
-			}
+			fmt.Printf("unexpected token %s at line %d row %v\n", tok.Text, tok.Row, tok.Row)
+			return nil
 		}
 	}
+
+	return &ast
 }
 
-func (l *Parser) addNode(value Instruction) {
-	l.AST = append(l.AST, value)
+func (p *Parser) parseCommand() (*ASTNode, error) {
+	cmdToken := p.next() // Consume command
+
+	// Validation step
+	switch cmdToken.Kind {
+	case TokenPush:
+		return p.pushHandler()
+	case TokenTrim:
+		return p.trimHandler()
+	case TokenConcat:
+		return p.concatHandler()
+	case TokenThumbnailFrom:
+		return p.thumbnailHandler()
+	case TokenExport:
+		return p.exportHandler()
+	case TokenSetTrack:
+		return p.setTrackHandler()
+	case TokenUseTrack:
+		return &ASTNode{}, nil
+	}
+
+	// All good, create AST node
+	return &ASTNode{}, fmt.Errorf("ERROR: unexpected token appeared, line %v row%v", cmdToken.Row, cmdToken.Col)
 }
 
-func (l *Parser) videoPathCheck(path string) error {
+func (p *Parser) videoPathCheck(path string) error {
 	path = strings.TrimSpace(path)
 
 	_, err := isValidPathFormat(path)
-
 	if err != nil {
 		return err
 	}
@@ -129,11 +147,10 @@ func (l *Parser) videoPathCheck(path string) error {
 	return nil
 }
 
-func (l *Parser) imagePathCheck(path string) error {
+func (p *Parser) imagePathCheck(path string) error {
 	path = strings.TrimSpace(path)
 
 	_, err := isValidPathFormat(path)
-
 	if err != nil {
 		return err
 	}
@@ -149,171 +166,211 @@ func (l *Parser) imagePathCheck(path string) error {
 	return nil
 }
 
-func (l *Parser) pushHandler(idx int, params []string) error {
-	if len(params) > 1 {
-		return errors.New("ERROR: push can't have more than one param")
+func (p *Parser) pushHandler() (*ASTNode, error) {
+	args := make([]Token, 0)
+
+	tok := p.next()
+
+	if tok.Kind != TokenString {
+		return nil, fmt.Errorf("ERROR: unexpected value at line %v, row %v\npush command takes only string param", tok.Row, tok.Col)
 	}
 
-	if len(params) < 1 {
-		return errors.New("ERROR: push can't have less than one param")
-	}
+	path := tok.Text
 
 	// check the param format
 	// the param format needs to be a valid path
-	path := params[0]
-
-	if err := l.videoPathCheck(path); err != nil {
-		return err
+	if err := p.videoPathCheck(path); err != nil {
+		return nil, err
 	}
 
-	value := Instruction{
+	args = append(args, tok)
+
+	return &ASTNode{
 		Command: PUSH,
-		Params:  []string{path},
-		Order:   uint(idx),
-	}
-	l.addNode(value)
-
-	return nil
+		Params:  args,
+		Order:   p.Pos,
+	}, nil
 }
 
-func (l *Parser) trimHandler(idx int, params []string) error {
-	if len(params) < 2 {
-		return errors.New("ERROR: trim can't have less than two params <start-time> <end-time>")
-	}
+func (p *Parser) trimHandler() (*ASTNode, error) {
+	args := make([]Token, 0)
 
-	if len(params) > 3 {
-		return errors.New("ERROR: trim can't have more than three params <start-time> <end-time> <video-target>?")
+	for range 1 {
+		tok := p.next()
+		if tok.Kind != TokenTime {
+			return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenTime, tok.Kind)
+		}
+
+		args = append(args, tok)
 	}
 
 	// check the format of the path if it exists
+	tok := p.next()
 	videoTarget := "all"
-	if len(params) == 3 {
-		videoTarget = params[2]
-		params = params[:2]
+	if tok.Kind == TokenString {
+		videoTarget = tok.Text
 	}
 
 	if videoTarget != "all" {
-		if err := l.videoPathCheck(videoTarget); err != nil {
-			return err
+		if err := p.videoPathCheck(videoTarget); err != nil {
+			return nil, err
 		}
 	}
 
-	// check the time format of both start and end
-
-	for _, param := range params {
-		if checkTimeTrimFormatValid(param) {
-			return fmt.Errorf("ERROR: %v isn't in valid format to be used as time", param)
-		}
-	}
-
-	trimParams := append([]string{}, params[:2]...)
-	trimParams = append(trimParams, videoTarget)
-	value := Instruction{
+	return &ASTNode{
 		Command: TRIM,
-		Params:  trimParams,
-		Order:   uint(idx),
-	}
-	l.addNode(value)
-	return nil
+		Params:  args,
+		Order:   p.Pos,
+	}, nil
 }
 
-func (l *Parser) concatHandler(idx int, params []string) error {
-	if len(params) > 0 {
-		return errors.New("ERROR: concat doesn't have params")
-	}
+func (p *Parser) concatHandler() (*ASTNode, error) {
+	tok := p.peek()
 
-	value := Instruction{
+	if tokenKey, isMatched := keywords[tok.Text]; isMatched {
+		if tokenKey == TokenBool {
+			return nil, fmt.Errorf("ERROR: expected nothing, got %v", TokenBool)
+		}
+	}
+	return &ASTNode{
 		Command: CONCAT,
-		Params:  []string{},
-		Order:   uint(idx),
-	}
-
-	l.addNode(value)
-
-	return nil
+		Params:  []Token{},
+		Order:   p.Pos,
+	}, nil
 }
 
-func (l *Parser) thumbnailHandler(idx int, params []string) error {
-	if len(params) > 2 {
-		return errors.New("ERROR: thumbnail_from can't have more than two params")
-	}
+func (p *Parser) thumbnailHandler() (*ASTNode, error) {
+	args := make([]Token, 0)
 
-	if len(params) < 2 {
-		return errors.New("ERROR: thumbnail_from can't have less than two params")
-	}
+	tok := p.next()
+	format := tok.Text
+	if tok.Kind == TokenTime {
+		timeFormat := `^\d{2}:\d{2}:\d{2}$`
+		format := tok.Text
+		if matched, _ := regexp.MatchString(timeFormat, format); matched {
 
-	format := params[0]
-
-	// check if it follows the time format
-	timeFormat := `^\d{2}:\d{2}:\d{2}$`
-	if matched, _ := regexp.MatchString(timeFormat, format); matched {
-		if checkTimeTrimFormatValid(format) {
-			return fmt.Errorf("ERROR: %v isn't in valid format to be used as time", format)
+			args = append(args, tok)
 		}
-	} else {
-		// check if it is a frame number
+	} else if tok.Kind == TokenNumber {
 		_, err := strconv.Atoi(format)
-
 		if err != nil {
-			return fmt.Errorf("invalid number format, %v", err)
+			return nil, fmt.Errorf("invalid number format, %v", err)
 		}
+		args = append(args, tok)
+	} else {
+		return nil, fmt.Errorf("ERROR: expected (%v, %v), got %v", TokenTime, TokenNumber, tok.Kind)
 	}
 
-	output := params[1]
+	tok = p.next()
+
+	if tok.Kind != TokenString {
+		return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenString, tok.Kind)
+	}
 
 	// this may return an error cause it forces to use a video format only
-	if err := l.imagePathCheck(output); err != nil {
-		return err
+	if err := p.imagePathCheck(tok.Text); err != nil {
+		return nil, err
 	}
 
-	value := Instruction{
+	args = append(args, tok)
+
+	return &ASTNode{
 		Command: THUMBNAIL_FROM,
-		Params:  []string{format, output},
-		Order:   uint(idx),
-	}
-
-	l.addNode(value)
-
-	return nil
+		Params:  args,
+		Order:   p.Pos,
+	}, nil
 }
 
-func (l *Parser) exportHandler(idx int, params []string) error {
-	if len(params) > 1 {
-		return errors.New("ERROR: export can't have more than one param")
+func (p *Parser) setTrackHandler() (*ASTNode, error) {
+	args := make([]Token, 0)
+	tok := p.next()
+
+	if tok.Kind != TokenIdentifier {
+		return nil, fmt.Errorf("ERROR: expect a %v, got %v", TokenIdentifier, tok.Kind)
 	}
 
-	if len(params) < 1 {
-		return errors.New("ERROR: export can't have less than one param")
+	tok = p.next()
+
+	if tok.Kind != TokenCurlyBraceOpen {
+		return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenCurlyBraceOpen, tok.Kind)
 	}
 
+	for p.peek().Kind != TokenCurlyBraceClose {
+		key := p.next()
+
+		if key.Kind != TokenIdentifier {
+			return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenIdentifier, key.Kind)
+		}
+
+		args = append(args, key)
+
+		colon := p.next()
+		if colon.Kind != TokenColon {
+			return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenColon, colon.Kind)
+		}
+
+		value := p.next()
+
+		switch value.Kind {
+		case TokenString:
+		case TokenNumber:
+		case TokenBool:
+		default:
+			return nil, fmt.Errorf("ERROR: unsupported type %v", value.Kind)
+		}
+
+		args = append(args, value)
+	}
+
+	tok = p.next()
+
+	if tok.Kind != TokenCurlyBraceClose {
+		return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenCurlyBraceClose, tok.Kind)
+	}
+
+	return &ASTNode{
+		Command: SET_TRACK,
+		Params:  args,
+		Order:   p.Pos,
+	}, nil
+}
+
+func (p *Parser) useTrackHandler(idx int, params []string) (*ASTNode, error) {
+	return nil, nil
+}
+
+func (p *Parser) exportHandler() (*ASTNode, error) {
+	args := make([]Token, 0)
+
+	tok := p.next()
+
+	if tok.Kind != TokenString {
+		return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenString, tok.Kind)
+	}
 	// check the param format
-	// the param format needs to be a valid path
-	path := params[0]
 
-	path = strings.TrimSpace(path)
-	path = filepath.Clean(path)
+	path := tok.Text
 
-	_, err := isValidPathFormat(path)
-
-	if err != nil {
-		return err
+	if err := p.videoPathCheck(path); err != nil {
+		return nil, err
 	}
 
-	osPath, _ := os.Getwd()
-	path = filepath.Join(osPath, path)
+	args = append(args, tok)
 
-	if !checkFileIsOfTypeMode(path, VIDEO) {
-		return errors.New("ERROR: file extension needs to be a video")
-	}
-
-	value := Instruction{
+	return &ASTNode{
 		Command: EXPORT,
-		Params:  []string{path},
-		Order:   uint(idx),
-	}
-	l.addNode(value)
+		Params:  args,
+		Order:   p.Pos,
+	}, nil
+}
 
-	return nil
+func isCommandToken(kind TokenKind) bool {
+	switch kind {
+	case TokenPush, TokenTrim, TokenExport, TokenThumbnailFrom, TokenConcat, TokenSetTrack, TokenUseTrack:
+		return true
+	default:
+		return false
+	}
 }
 
 func isValidPathFormat(path string) (bool, error) {
@@ -375,7 +432,6 @@ func main() {
 	}
 
 	byteCtn, err := os.ReadFile(path)
-
 	if err != nil {
 		fmt.Printf("ERROR: %v\n", err)
 		return
@@ -383,11 +439,37 @@ func main() {
 
 	content := string(byteCtn)
 
-	Parser := NewParser()
+	lexer := NewLexer(path, content)
+	tokens := lexer.Tokenize()
 
-	Parser.Tokenize(content)
-
-	for _, v := range Parser.AST {
-		fmt.Println(v)
+	// Write tokens to file
+	// Write tokens to JSON file
+	tokensFile := filepath.Join(osPath, "lang/examples/main_tokens.json")
+	tokensJSON, err := json.Marshal(tokens)
+	if err != nil {
+		fmt.Printf("ERROR marshaling tokens to JSON: %v\n", err)
+		return
 	}
+	err = os.WriteFile(tokensFile, tokensJSON, 0644)
+	if err != nil {
+		fmt.Printf("ERROR writing tokens file: %v\n", err)
+		return
+	}
+
+	parser := NewParser(tokens)
+	ast := parser.Parse(lexer)
+
+	// Write AST to JSON file
+	astFile := filepath.Join(osPath, "lang/examples/main_ast.json")
+	astJSON, err := json.Marshal(ast)
+	if err != nil {
+		fmt.Printf("ERROR marshaling AST to JSON: %v\n", err)
+		return
+	}
+	err = os.WriteFile(astFile, astJSON, 0644)
+	if err != nil {
+		fmt.Printf("ERROR writing AST file: %v\n", err)
+		return
+	}
+
 }
