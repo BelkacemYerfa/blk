@@ -3,6 +3,7 @@
     {
       "Command": "trim",
       "Order": 3,
+      "Body": null,
       "Params": [
         {
           "Col": 6,
@@ -26,6 +27,7 @@
     },
     {
       "Command": "trim",
+      "Body": null,
       "Order": 7,
       "Params": [
         {

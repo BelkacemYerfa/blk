@@ -3,6 +3,7 @@
     {
       "Command": "thumbnail_from",
       "Order": 3,
+      "Body": null,
       "Params": [
         {
           "Col": 16,
@@ -12,7 +13,7 @@
         },
         {
           "Col": 27,
-          "Kind": "time",
+          "Kind": "string",
           "Row": 1,
           "Value": "lang/assets/smt_thumb.jpeg"
         }
@@ -20,6 +21,7 @@
     },
     {
       "Command": "thumbnail_from",
+      "Body": null,
       "Order": 6,
       "Params": [
         {
@@ -30,7 +32,7 @@
         },
         {
           "Col": 20,
-          "Kind": "time",
+          "Kind": "string",
           "Row": 3,
           "Value": "lang/assets/smt_thumb.jpeg"
         }
