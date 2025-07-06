@@ -1,68 +1,118 @@
 [
   {
-    "Command": "push",
+    "Command": "set_video",
     "Params": [
-      { "Kind": "string", "Value": "out/intro.mp4", "Row": 2, "Col": 6 }
+      { "Kind": "identifier", "Value": "video_name", "Row": 2, "Col": 11 },
+      { "Kind": "string", "Value": "example_video.mp4", "Row": 2, "Col": 22 }
     ],
-    "Order": 2
+    "Order": 3
   },
   {
     "Command": "push",
     "Params": [
-      { "Kind": "string", "Value": "out/main_content.mp4", "Row": 3, "Col": 6 }
+      { "Kind": "identifier", "Value": "video_name", "Row": 3, "Col": 6 }
     ],
-    "Order": 4
+    "Order": 5
   },
   {
     "Command": "push",
     "Params": [
-      { "Kind": "string", "Value": "out/outro.mp4", "Row": 4, "Col": 6 }
+      { "Kind": "string", "Value": "out/main_content.mp4", "Row": 4, "Col": 6 }
     ],
-    "Order": 6
+    "Order": 7
+  },
+  {
+    "Command": "push",
+    "Params": [
+      { "Kind": "string", "Value": "out/outro.mp4", "Row": 5, "Col": 6 }
+    ],
+    "Order": 9
   },
   {
     "Command": "trim",
     "Params": [
-      { "Kind": "time", "Value": "00:00:30", "Row": 6, "Col": 6 },
-      { "Kind": "time", "Value": "00:01:45", "Row": 6, "Col": 17 },
-      { "Kind": "string", "Value": "out/intro.mp4", "Row": 6, "Col": 28 }
+      { "Kind": "time", "Value": "00:00:30", "Row": 7, "Col": 6 },
+      { "Kind": "time", "Value": "00:01:45", "Row": 7, "Col": 17 },
+      { "Kind": "string", "Value": "video_name", "Row": 7, "Col": 28 }
     ],
-    "Order": 10
+    "Order": 13
   },
   {
     "Command": "trim",
     "Params": [
-      { "Kind": "time", "Value": "00:02:00", "Row": 7, "Col": 6 },
-      { "Kind": "time", "Value": "00:03:30", "Row": 7, "Col": 17 },
-      { "Kind": "string", "Value": "out/main_content.mp4", "Row": 7, "Col": 28 }
+      { "Kind": "time", "Value": "00:02:00", "Row": 8, "Col": 6 },
+      { "Kind": "time", "Value": "00:03:30", "Row": 8, "Col": 17 },
+      { "Kind": "string", "Value": "out/main_content.mp4", "Row": 8, "Col": 28 }
     ],
-    "Order": 14
+    "Order": 17
   },
   {
     "Command": "trim",
     "Params": [
-      { "Kind": "time", "Value": "00:04:15", "Row": 8, "Col": 6 },
-      { "Kind": "time", "Value": "00:04:30", "Row": 8, "Col": 17 },
-      { "Kind": "string", "Value": "out/outro.mp4", "Row": 8, "Col": 28 }
+      { "Kind": "time", "Value": "00:04:15", "Row": 9, "Col": 6 },
+      { "Kind": "time", "Value": "00:04:30", "Row": 9, "Col": 17 },
+      { "Kind": "string", "Value": "out/outro.mp4", "Row": 9, "Col": 28 }
     ],
-    "Order": 18
+    "Order": 21
   },
   {
     "Command": "set_track",
-    "Params": [{ "Kind": "identifier", "Value": "bg", "Row": 11, "Col": 11 }],
-    "Order": 22
+    "Params": [{ "Kind": "identifier", "Value": "bg", "Row": 12, "Col": 11 }],
+    "Order": 25
   },
   {
     "Command": "set_track",
-    "Params": [{ "Kind": "identifier", "Value": "hg", "Row": 12, "Col": 11 }],
-    "Order": 26
+    "Params": [{ "Kind": "identifier", "Value": "hg", "Row": 13, "Col": 11 }],
+    "Order": 29
   },
-  { "Command": "concat", "Params": [], "Order": 27 },
+  {
+    "Command": "thumbnail_from",
+    "Params": [
+      { "Kind": "time", "Value": "00:00:15", "Row": 15, "Col": 16 },
+      { "Kind": "identifier", "Value": "video_name", "Row": 15, "Col": 27 }
+    ],
+    "Order": 32
+  },
+  {
+    "Command": "thumbnail_from",
+    "Params": [
+      { "Kind": "time", "Value": "00:00:15", "Row": 16, "Col": 16 },
+      {
+        "Kind": "string",
+        "Value": "out/main_content.jpeg",
+        "Row": 16,
+        "Col": 27
+      }
+    ],
+    "Order": 35
+  },
+  {
+    "Command": "use_track",
+    "Params": [
+      { "Kind": "identifier", "Value": "bg", "Row": 18, "Col": 11 },
+      {
+        "Kind": "string",
+        "Value": "out/main_content.mp4",
+        "Row": 18,
+        "Col": 14
+      }
+    ],
+    "Order": 38
+  },
+  {
+    "Command": "use_track",
+    "Params": [
+      { "Kind": "identifier", "Value": "hg", "Row": 19, "Col": 11 },
+      { "Kind": "identifier", "Value": "video_name", "Row": 19, "Col": 14 }
+    ],
+    "Order": 41
+  },
+  { "Command": "concat", "Params": [], "Order": 42 },
   {
     "Command": "export",
     "Params": [
-      { "Kind": "string", "Value": "out/final_video.mp4", "Row": 17, "Col": 8 }
+      { "Kind": "string", "Value": "out/final_video.mp4", "Row": 22, "Col": 8 }
     ],
-    "Order": 29
+    "Order": 44
   }
 ]

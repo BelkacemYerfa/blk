@@ -16,6 +16,7 @@ const (
 	TokenExport        TokenKind = "export"
 	TokenThumbnailFrom TokenKind = "thumbnail_from"
 	TokenConcat        TokenKind = "concat"
+	TokenSetVideo      TokenKind = "set_video"
 	TokenSetTrack      TokenKind = "set_track"
 	TokenUseTrack      TokenKind = "use_track"
 
@@ -185,14 +186,12 @@ func isDigit(char rune) bool {
 
 func checkTimeTrimFormatValid(tm string) bool {
 	_, err := time.Parse("15:04:05", tm)
-	if err != nil {
-		return false
-	}
-	return true
+	return err == nil
 }
 
 var keywords = map[string]TokenKind{
 	"set_track":      TokenSetTrack,
+	"set_video":      TokenSetVideo,
 	"push":           TokenPush,
 	"use_track":      TokenUseTrack,
 	"export":         TokenExport,
@@ -257,7 +256,6 @@ func (l *Lexer) readString() Token {
 	l.readChar() // consume the closing quote
 
 	text := strings.TrimSpace(string(l.Content[start:end]))
-
 	// check the format if it is time format, that we support return a time token
 	if checkTimeTrimFormatValid(text) {
 		return Token{

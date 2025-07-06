@@ -18,6 +18,9 @@ from cli_utils import Logger
 import cuda_check
 import defautls
 
+# TODO : feature, cut "as" and "a"
+# TODO : combine different 
+
 def format_srt_timestamp(seconds:float) -> str:
     h, remainder = divmod(seconds, 3600)
     m, s = divmod(remainder, 60)

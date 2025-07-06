@@ -19,6 +19,7 @@ const (
 	EXPORT         Command = "export"
 	CONCAT         Command = "concat"
 	THUMBNAIL_FROM Command = "thumbnail_from"
+	SET_VIDEO      Command = "set_video"
 	SET_TRACK      Command = "set_track"
 	USE_TRACK      Command = "use_track"
 )
@@ -86,7 +87,7 @@ func (p *Parser) Parse() *AST {
 		tok := p.peek()
 
 		switch tok.Kind {
-		case TokenPush, TokenConcat, TokenTrim, TokenExport, TokenSetTrack, TokenUseTrack, TokenThumbnailFrom:
+		case TokenPush, TokenConcat, TokenTrim, TokenExport, TokenSetTrack, TokenUseTrack, TokenThumbnailFrom, TokenSetVideo:
 			node, err := p.parseCommand()
 			if err != nil {
 				fmt.Println(err)
@@ -129,6 +130,8 @@ func (p *Parser) parseCommand() (*ASTNode, error) {
 		return p.setTrackHandler()
 	case TokenUseTrack:
 		return p.useTrackHandler()
+	case TokenSetVideo:
+		return p.setVideoHandler()
 	}
 
 	// All good, create AST node
@@ -167,7 +170,7 @@ func (p *Parser) imagePathCheck(path string) error {
 	path = filepath.Clean(path)
 
 	if !checkFileIsOfTypeMode(path, IMAGE) {
-		return errors.New("ERROR: file extension needs to be a video")
+		return errors.New("ERROR: file extension needs to be a image")
 	}
 
 	return nil
@@ -178,21 +181,22 @@ func (p *Parser) pushHandler() (*ASTNode, error) {
 
 	tok := p.next()
 
-	if tok.Kind != TokenString {
+	if tok.Kind != TokenString && tok.Kind != TokenIdentifier {
 		return nil, fmt.Errorf("ERROR: unexpected value at line %v, row %v\npush command takes only string param", tok.Row, tok.Col)
 	}
 
-	path := tok.Text
-
-	// check the param format
-	// the param format needs to be a valid path
-	if err := p.videoPathCheck(path); err != nil {
-		return nil, err
+	if tok.Kind == TokenString {
+		path := tok.Text
+		// check the param format
+		// the param format needs to be a valid path
+		if err := p.videoPathCheck(path); err != nil {
+			return nil, err
+		}
 	}
 
 	args = append(args, Param{
 		Value: tok.Text,
-		Kind:  TokenString,
+		Kind:  tok.Kind,
 		Row:   tok.Row,
 		Col:   tok.Col,
 	})
@@ -225,14 +229,16 @@ func (p *Parser) trimHandler() (*ASTNode, error) {
 	tok := p.next()
 
 	videoTarget := "all"
-	if tok.Kind == TokenString {
+
+	switch tok.Kind {
+	case TokenString:
 		if err := p.videoPathCheck(tok.Text); err != nil {
 			return nil, err
 		}
 
 		videoTarget = tok.Text
-	} else {
-		p.Pos--
+	case TokenIdentifier:
+		videoTarget = tok.Text
 	}
 
 	args = append(args, Param{
@@ -301,24 +307,69 @@ func (p *Parser) thumbnailHandler() (*ASTNode, error) {
 
 	tok = p.next()
 
-	if tok.Kind != TokenString {
+	if tok.Kind != TokenString && tok.Kind != TokenIdentifier {
 		return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenString, tok.Kind)
 	}
 
 	// this may return an error cause it forces to use a video format only
-	if err := p.imagePathCheck(tok.Text); err != nil {
-		return nil, err
+	if tok.Kind == TokenString {
+		if err := p.imagePathCheck(tok.Text); err != nil {
+			return nil, err
+		}
 	}
 
 	args = append(args, Param{
 		Value: tok.Text,
-		Kind:  TokenTime,
+		Kind:  tok.Kind,
 		Row:   tok.Row,
 		Col:   tok.Col,
 	})
 
 	return &ASTNode{
 		Command: THUMBNAIL_FROM,
+		Params:  args,
+		Order:   p.Pos,
+	}, nil
+}
+
+func (p *Parser) setVideoHandler() (*ASTNode, error) {
+	args := make([]Param, 0)
+	tok := p.next()
+
+	if tok.Kind != TokenIdentifier {
+		return nil, fmt.Errorf("ERROR: expect a %v, got %v", TokenIdentifier, tok.Kind)
+	}
+
+	args = append(args, Param{
+		Value: tok.Text,
+		Kind:  TokenIdentifier,
+		Row:   tok.Row,
+		Col:   tok.Col,
+	})
+
+	tok = p.next()
+
+	if tok.Kind != TokenString {
+		return nil, fmt.Errorf("ERROR: unexpected value at line %v, row %v\nvalue needs to be string", tok.Row, tok.Col)
+	}
+
+	path := tok.Text
+
+	// check the param format
+	// the param format needs to be a valid path
+	if err := p.videoPathCheck(path); err != nil {
+		return nil, err
+	}
+
+	args = append(args, Param{
+		Value: tok.Text,
+		Kind:  TokenString,
+		Row:   tok.Row,
+		Col:   tok.Col,
+	})
+
+	return &ASTNode{
+		Command: SET_VIDEO,
 		Params:  args,
 		Order:   p.Pos,
 	}, nil
@@ -432,20 +483,22 @@ func (p *Parser) useTrackHandler() (*ASTNode, error) {
 
 	tok = p.next()
 
-	if tok.Kind != TokenString {
+	if tok.Kind != TokenString && tok.Kind != TokenIdentifier {
 		return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenString, tok.Kind)
 	}
 	// check the param format
 
-	path := tok.Text
+	if tok.Kind == TokenString {
+		path := tok.Text
 
-	if err := p.videoPathCheck(path); err != nil {
-		return nil, err
+		if err := p.videoPathCheck(path); err != nil {
+			return nil, err
+		}
 	}
 
 	args = append(args, Param{
 		Value: tok.Text,
-		Kind:  TokenString,
+		Kind:  tok.Kind,
 		Row:   tok.Row,
 		Col:   tok.Col,
 	})
@@ -462,20 +515,21 @@ func (p *Parser) exportHandler() (*ASTNode, error) {
 
 	tok := p.next()
 
-	if tok.Kind != TokenString {
+	if tok.Kind != TokenString && tok.Kind != TokenIdentifier {
 		return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenString, tok.Kind)
 	}
 	// check the param format
+	if tok.Kind == TokenString {
+		path := tok.Text
 
-	path := tok.Text
-
-	if err := p.videoPathCheck(path); err != nil {
-		return nil, err
+		if err := p.videoPathCheck(path); err != nil {
+			return nil, err
+		}
 	}
 
 	args = append(args, Param{
 		Value: tok.Text,
-		Kind:  TokenString,
+		Kind:  tok.Kind,
 		Row:   tok.Row,
 		Col:   tok.Col,
 	})
@@ -485,15 +539,6 @@ func (p *Parser) exportHandler() (*ASTNode, error) {
 		Params:  args,
 		Order:   p.Pos,
 	}, nil
-}
-
-func isCommandToken(kind TokenKind) bool {
-	switch kind {
-	case TokenPush, TokenTrim, TokenExport, TokenThumbnailFrom, TokenConcat, TokenSetTrack, TokenUseTrack:
-		return true
-	default:
-		return false
-	}
 }
 
 func isValidPathFormat(path string) (bool, error) {

@@ -6,6 +6,19 @@
 
 ## ✅ Core Stack Instructions (MVP)
 
+### `set_video <name> <video-path>`
+
+Define a named video to be used later.
+
+Examples:
+
+```text
+set_track stream "videos/stream.mp4"
+set_track intro "videos/intro.mp4"
+```
+
+---
+
 ### `push <video.mp4>`
 
 Push a video file onto the stack.

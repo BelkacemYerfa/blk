@@ -1,9 +1,10 @@
 # Complex video editing workflow
-push "out/intro.mp4"
+set_video video_name "example_video.mp4"
+push video_name
 push "out/main_content.mp4"
 push "out/outro.mp4"
 
-trim "00:00:30" "00:01:45" "out/intro.mp4"
+trim "00:00:30" "00:01:45" video_name
 trim "00:02:00" "00:03:30" "out/main_content.mp4"
 trim "00:04:15" "00:04:30" "out/outro.mp4"
 
@@ -11,7 +12,11 @@ trim "00:04:15" "00:04:30" "out/outro.mp4"
 set_track bg { }
 set_track hg { }
 
+thumbnail_from "00:00:15" video_name
+thumbnail_from "00:00:15" "out/main_content.jpeg"
 
-# Concatenate clips
+use_track bg "out/main_content.mp4"
+use_track hg video_name
+
 concat
 export "out/final_video.mp4"
