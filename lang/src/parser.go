@@ -22,6 +22,7 @@ const (
 	SET_VIDEO      Command = "set_video"
 	SET_TRACK      Command = "set_track"
 	USE_TRACK      Command = "use_track"
+	BLOCK          Command = "block"
 )
 
 var (
@@ -45,6 +46,7 @@ type Param struct {
 type ASTNode struct {
 	Command Command
 	Params  []Param
+	Body    AST
 	Order   int
 }
 
@@ -85,9 +87,9 @@ func (p *Parser) Parse() *AST {
 
 	for p.Pos <= len(p.Tokens) {
 		tok := p.peek()
-
+		fmt.Println(tok)
 		switch tok.Kind {
-		case TokenPush, TokenConcat, TokenTrim, TokenExport, TokenSetTrack, TokenUseTrack, TokenThumbnailFrom, TokenSetVideo:
+		case TokenPush, TokenConcat, TokenTrim, TokenExport, TokenSetTrack, TokenUseTrack, TokenThumbnailFrom, TokenSetVideo, TokenBlock:
 			node, err := p.parseCommand()
 			if err != nil {
 				fmt.Println(err)
@@ -132,6 +134,8 @@ func (p *Parser) parseCommand() (*ASTNode, error) {
 		return p.useTrackHandler()
 	case TokenSetVideo:
 		return p.setVideoHandler()
+	case TokenBlock:
+		return p.blockHandler()
 	}
 
 	// All good, create AST node
@@ -239,6 +243,8 @@ func (p *Parser) trimHandler() (*ASTNode, error) {
 		videoTarget = tok.Text
 	case TokenIdentifier:
 		videoTarget = tok.Text
+	default:
+		p.Pos--
 	}
 
 	args = append(args, Param{
@@ -328,6 +334,51 @@ func (p *Parser) thumbnailHandler() (*ASTNode, error) {
 	return &ASTNode{
 		Command: THUMBNAIL_FROM,
 		Params:  args,
+		Order:   p.Pos,
+	}, nil
+}
+
+func (p *Parser) blockHandler() (*ASTNode, error) {
+	args := make([]Param, 0)
+	tok := p.next()
+
+	if tok.Kind != TokenIdentifier {
+		return nil, fmt.Errorf("ERROR: expect a %v, got %v", TokenIdentifier, tok.Kind)
+	}
+
+	args = append(args, Param{
+		Value: tok.Text,
+		Kind:  TokenIdentifier,
+		Row:   tok.Row,
+		Col:   tok.Col,
+	})
+
+	tok = p.next()
+
+	if tok.Kind != TokenCurlyBraceOpen {
+		return nil, fmt.Errorf("ERROR: expect a %v, got %v", TokenCurlyBraceOpen, tok.Kind)
+	}
+
+	body := make(AST, 0)
+
+	for p.peek().Kind != TokenCurlyBraceClose {
+		ast, err := p.parseCommand()
+		if err != nil {
+			return nil, err
+		}
+		body = append(body, *ast)
+	}
+
+	tok = p.next()
+
+	if tok.Kind != TokenCurlyBraceClose {
+		return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenCurlyBraceClose, tok.Kind)
+	}
+
+	return &ASTNode{
+		Command: BLOCK,
+		Params:  args,
+		Body:    body,
 		Order:   p.Pos,
 	}, nil
 }

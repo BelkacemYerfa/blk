@@ -97,6 +97,8 @@ set_track bg {
 }
 ```
 
+---
+
 ### `use_track <name> <video-path|last|first>`
 
 Attach a previously defined track to a specific video or all videos.
@@ -106,6 +108,20 @@ Examples:
 ```text
 use_track bg "intro.mp4"
 use_track bg "first"
+```
+
+---
+
+### `block <name> { <subcut-code> }`
+
+Create an isolated scoped editing block.
+
+```text
+block {
+  push "videos/intro.mp4"
+  trim "00:00:00" "00:00:10"
+  export "out/intro.mp4"
+}
 ```
 
 ## 🔜 Phase 2 — Templates & Styling
@@ -148,35 +164,20 @@ caption subs/v1.vtt embed bottom
 
 ## 🧩 Phase 3 — Modular Logic & Batch
 
-### `block <name>`
-
-Create an isolated scoped editing block.
-
-```text
-block {
-  push videos/intro.mp4
-  trim 00:00:00 00:00:10
-  caption subs/intro.vtt embed
-  export out/intro.mp4
-}
-```
-
----
-
 ### `use_stack <name>`
 
 (Planned) Restore a previously defined block or stack.
 
 ---
 
-### `split_into_clips duration=<seconds> prefix=<name>`
+### `split_into_clips <seconds> <output-dir-path>`
 
 Slice the current video into multiple short clips.
 
 Example:
 
 ```text
-split_into_clips duration=59 prefix=out/clip
+split_into_clips 10 "out/clips/"
 ```
 
 ---

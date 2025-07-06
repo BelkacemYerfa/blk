@@ -19,6 +19,7 @@ const (
 	TokenSetVideo      TokenKind = "set_video"
 	TokenSetTrack      TokenKind = "set_track"
 	TokenUseTrack      TokenKind = "use_track"
+	TokenBlock         TokenKind = "block"
 
 	// Block Units
 	TokenCurlyBraceOpen  TokenKind = "{"
@@ -198,6 +199,7 @@ var keywords = map[string]TokenKind{
 	"trim":           TokenTrim,
 	"thumbnail_from": TokenThumbnailFrom,
 	"concat":         TokenConcat,
+	"block":          TokenBlock,
 	"true":           TokenBool,
 	"false":          TokenBool,
 }
