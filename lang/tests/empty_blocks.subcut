@@ -1,0 +1,7 @@
+# add comment support
+set_track bg { }
+
+set_track hg {
+  # empty
+}
+

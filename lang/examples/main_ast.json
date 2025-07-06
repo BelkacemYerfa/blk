@@ -1,1 +1,68 @@
-[{"Command":"trim","Params":[{"Kind":"time","Value":"00:00:00","Row":1,"Col":6},{"Kind":"time","Value":"00:00:10","Row":1,"Col":17},{"Kind":"string","Value":"all","Row":3,"Col":1}],"Order":3},{"Command":"trim","Params":[{"Kind":"time","Value":"00:00:00","Row":3,"Col":6},{"Kind":"time","Value":"00:00:10","Row":3,"Col":17},{"Kind":"string","Value":"out/clip1.mp4","Row":3,"Col":28}],"Order":7}]
+[
+  {
+    "Command": "push",
+    "Params": [
+      { "Kind": "string", "Value": "out/intro.mp4", "Row": 2, "Col": 6 }
+    ],
+    "Order": 2
+  },
+  {
+    "Command": "push",
+    "Params": [
+      { "Kind": "string", "Value": "out/main_content.mp4", "Row": 3, "Col": 6 }
+    ],
+    "Order": 4
+  },
+  {
+    "Command": "push",
+    "Params": [
+      { "Kind": "string", "Value": "out/outro.mp4", "Row": 4, "Col": 6 }
+    ],
+    "Order": 6
+  },
+  {
+    "Command": "trim",
+    "Params": [
+      { "Kind": "time", "Value": "00:00:30", "Row": 6, "Col": 6 },
+      { "Kind": "time", "Value": "00:01:45", "Row": 6, "Col": 17 },
+      { "Kind": "string", "Value": "out/intro.mp4", "Row": 6, "Col": 28 }
+    ],
+    "Order": 10
+  },
+  {
+    "Command": "trim",
+    "Params": [
+      { "Kind": "time", "Value": "00:02:00", "Row": 7, "Col": 6 },
+      { "Kind": "time", "Value": "00:03:30", "Row": 7, "Col": 17 },
+      { "Kind": "string", "Value": "out/main_content.mp4", "Row": 7, "Col": 28 }
+    ],
+    "Order": 14
+  },
+  {
+    "Command": "trim",
+    "Params": [
+      { "Kind": "time", "Value": "00:04:15", "Row": 8, "Col": 6 },
+      { "Kind": "time", "Value": "00:04:30", "Row": 8, "Col": 17 },
+      { "Kind": "string", "Value": "out/outro.mp4", "Row": 8, "Col": 28 }
+    ],
+    "Order": 18
+  },
+  {
+    "Command": "set_track",
+    "Params": [{ "Kind": "identifier", "Value": "bg", "Row": 11, "Col": 11 }],
+    "Order": 22
+  },
+  {
+    "Command": "set_track",
+    "Params": [{ "Kind": "identifier", "Value": "hg", "Row": 12, "Col": 11 }],
+    "Order": 26
+  },
+  { "Command": "concat", "Params": [], "Order": 27 },
+  {
+    "Command": "export",
+    "Params": [
+      { "Kind": "string", "Value": "out/final_video.mp4", "Row": 17, "Col": 8 }
+    ],
+    "Order": 29
+  }
+]

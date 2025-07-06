@@ -1,0 +1,84 @@
+{
+  "ast": [
+    {
+      "Command": "set_track",
+      "Order": 4,
+      "Params": [
+        {
+          "Col": 11,
+          "Kind": "identifier",
+          "Row": 2,
+          "Value": "bg"
+        }
+      ]
+    },
+    {
+      "Command": "set_track",
+      "Order": 8,
+      "Params": [
+        {
+          "Col": 11,
+          "Kind": "identifier",
+          "Row": 4,
+          "Value": "hg"
+        }
+      ]
+    }
+  ],
+  "tokens": [
+    {
+      "Col": 1,
+      "Kind": "set_track",
+      "Row": 2,
+      "Text": "set_track"
+    },
+    {
+      "Col": 11,
+      "Kind": "identifier",
+      "Row": 2,
+      "Text": "bg"
+    },
+    {
+      "Col": 14,
+      "Kind": "{",
+      "Row": 2,
+      "Text": "{"
+    },
+    {
+      "Col": 16,
+      "Kind": "}",
+      "Row": 2,
+      "Text": "}"
+    },
+    {
+      "Col": 1,
+      "Kind": "set_track",
+      "Row": 4,
+      "Text": "set_track"
+    },
+    {
+      "Col": 11,
+      "Kind": "identifier",
+      "Row": 4,
+      "Text": "hg"
+    },
+    {
+      "Col": 14,
+      "Kind": "{",
+      "Row": 4,
+      "Text": "{"
+    },
+    {
+      "Col": 1,
+      "Kind": "}",
+      "Row": 6,
+      "Text": "}"
+    },
+    {
+      "Col": 1,
+      "Kind": "end of file",
+      "Row": 8,
+      "Text": ""
+    }
+  ]
+}

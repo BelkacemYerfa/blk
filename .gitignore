@@ -9,3 +9,6 @@ test_samples/
 
 # cache files
 __pycache__/
+
+# generated test repo
+test_report.html

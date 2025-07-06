@@ -1,0 +1,10 @@
+# add comment support
+set_track bg {
+  # beat file path
+  path: "assets/beat.mp3"
+  # custom volume
+  volume: 0.3
+  duck: false
+  loop: true
+  # we need to loop
+}

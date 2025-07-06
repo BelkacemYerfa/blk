@@ -1,0 +1,3 @@
+thumbnail_from "00:00:20" "lang/assets/smt_thumb.jpeg"
+
+thumbnail_from 123 "lang/assets/smt_thumb.jpeg"

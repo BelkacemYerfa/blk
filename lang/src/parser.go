@@ -102,7 +102,7 @@ func (p *Parser) Parse() *AST {
 				fmt.Printf("unexpected brace token outside of a command block at line %d\n", tok.Row)
 				return nil
 			}
-			fmt.Printf("unexpected token %s at line %d col %v\n", tok, tok.Row, tok.Col)
+			fmt.Printf("unexpected token %s at line %d col %v\n", tok.Text, tok.Row, tok.Col)
 			return nil
 		}
 	}

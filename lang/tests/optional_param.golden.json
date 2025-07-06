@@ -1,0 +1,28 @@
+{
+  "tokens": [
+    {
+      "type": "comment",
+      "value": ""
+    },
+    {
+      "type": "comment",
+      "value": ""
+    }
+  ],
+  "ast": [
+    {
+      "type": "package",
+      "name": "tests"
+    },
+    {
+      "type": "import",
+      "path": "testing"
+    },
+    {
+      "type": "function",
+      "name": "TestPushCommand",
+      "params": [],
+      "body": []
+    }
+  ]
+}
