@@ -24,6 +24,9 @@ const (
 	TokenQuote           TokenKind = `"`
 	TokenColon           TokenKind = ":"
 
+	// Comment
+	TokenComment TokenKind = "#"
+
 	// Var Naming
 	TokenIdentifier TokenKind = "identifier"
 
@@ -60,7 +63,7 @@ func NewLexer(filePath string, content string) *Lexer {
 		FilePath: filePath,
 		Row:      1,
 		Col:      1,
-		Cur:      1,
+		Cur:      0,
 	}
 	return &lexer
 }
@@ -94,6 +97,7 @@ type Token struct {
 
 func (l *Lexer) NextToken() Token {
 	l.skipWhiteSpace()
+	l.skipComment()
 
 	token := Token{
 		Row: l.Row,
@@ -124,16 +128,14 @@ func (l *Lexer) NextToken() Token {
 			Text: "}",
 		}
 	case TokenColon:
-		if char == ':' {
-			l.readChar()
-			return Token{
-				LiteralToken: LiteralToken{
-					Kind: TokenColon,
-					Text: ":",
-				},
-				Row: l.Row,
-				Col: l.Col,
-			}
+		l.readChar()
+		return Token{
+			LiteralToken: LiteralToken{
+				Kind: TokenColon,
+				Text: ":",
+			},
+			Row: l.Row,
+			Col: l.Col,
 		}
 	case TokenQuote:
 		return l.readString()
@@ -297,6 +299,18 @@ func (l *Lexer) readNumber() Token {
 		},
 		Row: row,
 		Col: col,
+	}
+}
+
+func (l *Lexer) skipComment() {
+	for l.Cur < len(l.Content) && l.Content[l.Cur] == '#' {
+		for l.Cur < len(l.Content) && l.Content[l.Cur] != '\n' {
+			l.readChar()
+		}
+		if l.Cur < len(l.Content) && l.Content[l.Cur] == '\n' {
+			l.readChar()
+		}
+		l.skipWhiteSpace()
 	}
 }
 

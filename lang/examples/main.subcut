@@ -1,3 +1,4 @@
+# add comment support
 set_track bg {
   path: "assets/beat.mp3"
   volume: 0.3
