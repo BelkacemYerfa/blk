@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
-	"time"
+
+	"subcut/src"
+	"subcut/tests"
 )
 
 func checkPathExistence(path string) (bool, error) {
@@ -24,24 +25,10 @@ func checkPathExistence(path string) (bool, error) {
 	return true, nil
 }
 
-func checkIfElementExist(slice []string, element string) bool {
-	sort.Strings(slice)
-	idx := sort.SearchStrings(slice, element)
-	return idx < len(slice) && slice[idx] == element
-}
-
-func checkTimeTrimFormatValid(tm string) bool {
-	_, err := time.Parse("15:04:05", tm)
-	if err != nil {
-		return false
-	}
-	return true
-}
-
-func main() {
+func dev() {
 	osPath, _ := os.Getwd()
 
-	path := filepath.Join(osPath, "lang/examples/main.subcut")
+	path := filepath.Join(osPath, "./examples/main.subcut")
 
 	valid, err := checkPathExistence(path)
 
@@ -65,12 +52,12 @@ func main() {
 
 	content := string(byteCtn)
 
-	lexer := NewLexer(path, content)
+	lexer := src.NewLexer(path, content)
 	tokens := lexer.Tokenize()
 
 	// Write tokens to file
 	// Write tokens to JSON file
-	tokensFile := filepath.Join(osPath, "lang/examples/main_tokens.json")
+	tokensFile := filepath.Join(osPath, "./examples/main_tokens.json")
 	tokensJSON, err := json.Marshal(tokens)
 	if err != nil {
 		fmt.Printf("ERROR marshaling tokens to JSON: %v\n", err)
@@ -82,11 +69,11 @@ func main() {
 		return
 	}
 
-	parser := NewParser(tokens)
-	ast := parser.Parse(lexer)
+	parser := src.NewParser(tokens)
+	ast := parser.Parse()
 
 	// Write AST to JSON file
-	astFile := filepath.Join(osPath, "lang/examples/main_ast.json")
+	astFile := filepath.Join(osPath, "./examples/main_ast.json")
 	astJSON, err := json.Marshal(ast)
 	if err != nil {
 		fmt.Printf("ERROR marshaling AST to JSON: %v\n", err)
@@ -96,5 +83,22 @@ func main() {
 	if err != nil {
 		fmt.Printf("ERROR writing AST file: %v\n", err)
 		return
+	}
+}
+
+func main() {
+
+	arg := ""
+
+	if len(os.Args) < 1 {
+		arg = "dev"
+	} else {
+		arg = os.Args[1]
+	}
+
+	if arg == "dev" {
+		dev()
+	} else {
+		tests.TestRunner()
 	}
 }

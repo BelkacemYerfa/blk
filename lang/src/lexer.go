@@ -1,7 +1,8 @@
-package main
+package src
 
 import (
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -180,6 +181,14 @@ func isLetter(char rune) bool {
 
 func isDigit(char rune) bool {
 	return unicode.IsDigit(char)
+}
+
+func checkTimeTrimFormatValid(tm string) bool {
+	_, err := time.Parse("15:04:05", tm)
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 var keywords = map[string]TokenKind{

@@ -1,4 +1,4 @@
-package main
+package src
 
 import (
 	"errors"
@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -77,7 +78,7 @@ func (p *Parser) peek() Token {
 	return p.Tokens[p.Pos]
 }
 
-func (p *Parser) Parse(lexer *Lexer) *AST {
+func (p *Parser) Parse() *AST {
 
 	ast := make(AST, 0)
 
@@ -101,7 +102,7 @@ func (p *Parser) Parse(lexer *Lexer) *AST {
 				fmt.Printf("unexpected brace token outside of a command block at line %d\n", tok.Row)
 				return nil
 			}
-			fmt.Printf("unexpected token %s at line %d row %v\n", tok.Text, tok.Row, tok.Row)
+			fmt.Printf("unexpected token %s at line %d col %v\n", tok, tok.Row, tok.Col)
 			return nil
 		}
 	}
@@ -206,7 +207,7 @@ func (p *Parser) pushHandler() (*ASTNode, error) {
 func (p *Parser) trimHandler() (*ASTNode, error) {
 	args := make([]Param, 0)
 
-	for range 1 {
+	for range 2 {
 		tok := p.next()
 		if tok.Kind != TokenTime {
 			return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenTime, tok.Kind)
@@ -222,16 +223,18 @@ func (p *Parser) trimHandler() (*ASTNode, error) {
 
 	// check the format of the path if it exists
 	tok := p.next()
+
 	videoTarget := "all"
 	if tok.Kind == TokenString {
-		videoTarget = tok.Text
-	}
-
-	if videoTarget != "all" {
-		if err := p.videoPathCheck(videoTarget); err != nil {
+		if err := p.videoPathCheck(tok.Text); err != nil {
 			return nil, err
 		}
+
+		videoTarget = tok.Text
+	} else {
+		p.Pos--
 	}
+
 	args = append(args, Param{
 		Value: videoTarget,
 		Kind:  TokenString,
@@ -517,6 +520,12 @@ const (
 	VIDEO Mode = "video"
 	IMAGE Mode = "image"
 )
+
+func checkIfElementExist(slice []string, element string) bool {
+	sort.Strings(slice)
+	idx := sort.SearchStrings(slice, element)
+	return idx < len(slice) && slice[idx] == element
+}
 
 func checkFileIsOfTypeMode(path string, mode Mode) bool {
 	ext := filepath.Ext(path)
