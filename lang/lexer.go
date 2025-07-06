@@ -195,7 +195,7 @@ var keywords = map[string]TokenKind{
 }
 
 func (l *Lexer) readIdentifier() Token {
-	startPos := l.Cur - 1
+	startPos := l.Cur
 
 	// save them to return
 	row := l.Row

@@ -18,7 +18,7 @@ push "videos/intro.mp4"
 
 ---
 
-### `trim <start> <end> (video-path|all)`
+### `trim <start> <end> (video-path?)`
 
 Trim the top videos on the stack to a time range.
 
