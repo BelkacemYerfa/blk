@@ -32,30 +32,30 @@ type (
 
 const (
 	// Statements
-	PushStatement      Statement = "push"
-	TrimStatement      Statement = "trim"
-	ExportStatement    Statement = "export"
-	ConcatStatement    Statement = "concat"
-	ThumbnailStatement Statement = "thumbnail_from"
-	SetStatement       Statement = "set"
-	UseStatement       Statement = "use"
-	BlockStatement     Statement = "block"
+	PushStatement      Statement = "PushStatement"
+	TrimStatement      Statement = "TrimStatement"
+	ExportStatement    Statement = "ExportStatement"
+	ConcatStatement    Statement = "ConcatStatement"
+	ThumbnailStatement Statement = "ThumbnailStatement"
+	SetStatement       Statement = "SetStatement"
+	UseStatement       Statement = "UseStatement"
+	BlockStatement     Statement = "BlockStatement"
 
-	// Expression
-	LiteralExpression    Expression = "literal_expression"
-	IdentifierExpression Expression = "identifier_expression"
-	ObjectExpression     Expression = "object_expression"
+	// Expressions
+	LiteralExpression    Expression = "LiteralExpression"
+	IdentifierExpression Expression = "IdentifierExpression"
+	ObjectExpression     Expression = "ObjectExpression"
 
 	// Types
 	// Primitives
-	NumberType  Type = "number"
-	BooleanType Type = "bool"
-	StringType  Type = "filepath"
+	NumberType   Type = "NumberType"
+	BooleanType  Type = "BooleanType"
+	FilepathType Type = "FilepathType"
 	// Custom
-	IdentifierType Type = "identifier"
-	TimeType       Type = "time"
+	IdentifierType Type = "IdentifierType"
+	TimeType       Type = "TimeType"
 	// Complex
-	ObjectType Type = "object"
+	ObjectType Type = "ObjectType"
 )
 
 var (
@@ -243,7 +243,7 @@ func (p *Parser) pushHandler(pos Position) (*StatementNode, error) {
 		}
 		args = append(args, ExpressionNode{
 			Type:     LiteralExpression,
-			ExprType: StringType,
+			ExprType: FilepathType,
 			Value:    tok.Text,
 			Position: Position{
 				Col: tok.Col,
@@ -304,7 +304,7 @@ func (p *Parser) trimHandler(pos Position) (*StatementNode, error) {
 
 		args = append(args, ExpressionNode{
 			Type:     LiteralExpression,
-			ExprType: StringType,
+			ExprType: FilepathType,
 			Value:    tok.Text,
 			Position: Position{
 				Row: tok.Row,
@@ -315,7 +315,7 @@ func (p *Parser) trimHandler(pos Position) (*StatementNode, error) {
 	case TokenIdentifier:
 		args = append(args, ExpressionNode{
 			Type:     LiteralExpression,
-			ExprType: StringType,
+			ExprType: FilepathType,
 			Value:    tok.Text,
 			Position: Position{
 				Row: tok.Row,
@@ -326,7 +326,7 @@ func (p *Parser) trimHandler(pos Position) (*StatementNode, error) {
 		p.Pos--
 		args = append(args, ExpressionNode{
 			Type:     LiteralExpression,
-			ExprType: StringType,
+			ExprType: FilepathType,
 			Value:    "last", // indicates that this will get applied at the last element in the stack
 			Position: Position{
 				Row: tok.Row,
@@ -415,7 +415,7 @@ func (p *Parser) thumbnailHandler(pos Position) (*StatementNode, error) {
 		args = append(args, ExpressionNode{
 			Type:     LiteralExpression,
 			Value:    tok.Text,
-			ExprType: StringType,
+			ExprType: FilepathType,
 			Position: Position{
 				Row: tok.Row,
 				Col: tok.Col,
@@ -534,7 +534,7 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 		args = append(args, ExpressionNode{
 			Type:     LiteralExpression,
 			Value:    tok.Text,
-			ExprType: StringType,
+			ExprType: FilepathType,
 			Position: Position{
 				Row: tok.Row,
 				Col: tok.Col,
@@ -582,7 +582,7 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 				val = ExpressionNode{
 					Type:     LiteralExpression,
 					Value:    value.Text,
-					ExprType: StringType,
+					ExprType: FilepathType,
 					Position: Position{
 						Row: key.Row,
 						Col: key.Col,
@@ -681,7 +681,7 @@ func (p *Parser) useHandler(pos Position) (*StatementNode, error) {
 			args = append(args, ExpressionNode{
 				Type:     LiteralExpression,
 				Value:    tok.Text,
-				ExprType: StringType,
+				ExprType: FilepathType,
 				Position: Position{
 					Row: tok.Row,
 					Col: tok.Col,
@@ -731,7 +731,7 @@ func (p *Parser) exportHandler(pos Position) (*StatementNode, error) {
 		args = append(args, ExpressionNode{
 			Type:     LiteralExpression,
 			Value:    tok.Text,
-			ExprType: StringType,
+			ExprType: FilepathType,
 			Position: Position{
 				Row: tok.Row,
 				Col: tok.Col,
