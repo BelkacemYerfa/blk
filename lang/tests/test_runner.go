@@ -3,6 +3,7 @@ package tests
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -132,7 +133,7 @@ func TestRunner() {
 
 		results = append(results, result)
 	}
-	writeHTML(results, "test_report.html")
+	writeHTMLResult(results, "test_report.html")
 }
 
 func deepJsonCheck(expected, actual interface{}) error {
@@ -142,9 +143,9 @@ func deepJsonCheck(expected, actual interface{}) error {
 	return nil
 }
 
-func writeHTML(results []TestResult, filename string) {
-	html := `<!DOCTYPE html>
-<html>
+func writeHTMLResult(results []TestResult, filename string) {
+	htmlResult := `<!DOCTYPE htmlResult>
+<htmlResult>
 <head>
 	<title>Test Results</title>
 	<style>
@@ -190,7 +191,7 @@ func writeHTML(results []TestResult, filename string) {
 			class = "fail"
 		}
 
-		html += fmt.Sprintf(`
+		htmlResult += fmt.Sprintf(`
 	<div class="test-result %s">
 		<h3><span class="file-name">%s</span> - <span class="status">%s</span></h3>
 		<div class="section">
@@ -198,17 +199,17 @@ func writeHTML(results []TestResult, filename string) {
 			<div class="code">%s</div>
 		</div>
 `, class, result.File, status, result.Source)
-
 		if result.Error != "" {
-			html += fmt.Sprintf(`
+			htmlResult += fmt.Sprintf(`
 		<div class="error">
-			<div class="error-title">❌ Test Failure Details:</div>%s
+			<div class="error-title">❌ Test Failure Details:</div>
+			<div style="margin-top: 10px; line-height: 1.6;">%s</div>
 		</div>
-`, result.Error)
+`, html.EscapeString(result.Error))
 		}
 
 		if result.Tokens != "" {
-			html += fmt.Sprintf(`
+			htmlResult += fmt.Sprintf(`
 		<details>
 			<summary>🔍 View Tokens</summary>
 			<div class="code">%s</div>
@@ -217,7 +218,7 @@ func writeHTML(results []TestResult, filename string) {
 		}
 
 		if result.AST != "" {
-			html += fmt.Sprintf(`
+			htmlResult += fmt.Sprintf(`
 		<details>
 			<summary>🌳 View AST</summary>
 			<div class="code">%s</div>
@@ -225,16 +226,16 @@ func writeHTML(results []TestResult, filename string) {
 `, result.AST)
 		}
 
-		html += "    </div>\n"
+		htmlResult += "    </div>\n"
 	}
 
-	html += `
+	htmlResult += `
 </body>
-</html>`
+</htmlResult>`
 
-	err := os.WriteFile(filename, []byte(html), 0644)
+	err := os.WriteFile(filename, []byte(htmlResult), 0644)
 	if err != nil {
-		fmt.Printf("Error writing HTML file: %v\n", err)
+		fmt.Printf("Error writing HTMLResult file: %v\n", err)
 		return
 	}
 

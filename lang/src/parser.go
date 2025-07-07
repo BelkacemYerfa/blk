@@ -19,9 +19,8 @@ const (
 	EXPORT         Command = "export"
 	CONCAT         Command = "concat"
 	THUMBNAIL_FROM Command = "thumbnail_from"
-	SET_VIDEO      Command = "set_video"
-	SET_TRACK      Command = "set_track"
-	USE_TRACK      Command = "use_track"
+	SET            Command = "set"
+	USE            Command = "use"
 	BLOCK          Command = "block"
 )
 
@@ -87,9 +86,9 @@ func (p *Parser) Parse() *AST {
 
 	for p.Pos <= len(p.Tokens) {
 		tok := p.peek()
-		fmt.Println(tok)
+
 		switch tok.Kind {
-		case TokenPush, TokenConcat, TokenTrim, TokenExport, TokenSetTrack, TokenUseTrack, TokenThumbnailFrom, TokenSetVideo, TokenBlock:
+		case TokenPush, TokenConcat, TokenTrim, TokenExport, TokenSet, TokenThumbnailFrom, TokenUse, TokenBlock:
 			node, err := p.parseCommand()
 			if err != nil {
 				fmt.Println(err)
@@ -128,12 +127,10 @@ func (p *Parser) parseCommand() (*ASTNode, error) {
 		return p.thumbnailHandler()
 	case TokenExport:
 		return p.exportHandler()
-	case TokenSetTrack:
-		return p.setTrackHandler()
-	case TokenUseTrack:
-		return p.useTrackHandler()
-	case TokenSetVideo:
-		return p.setVideoHandler()
+	case TokenSet:
+		return p.setHandler()
+	case TokenUse:
+		return p.useHandler()
 	case TokenBlock:
 		return p.blockHandler()
 	}
@@ -363,6 +360,7 @@ func (p *Parser) blockHandler() (*ASTNode, error) {
 
 	for p.peek().Kind != TokenCurlyBraceClose {
 		ast, err := p.parseCommand()
+
 		if err != nil {
 			return nil, err
 		}
@@ -390,7 +388,7 @@ func (p *Parser) blockHandler() (*ASTNode, error) {
 	}, nil
 }
 
-func (p *Parser) setVideoHandler() (*ASTNode, error) {
+func (p *Parser) setHandler() (*ASTNode, error) {
 	args := make([]Param, 0)
 	tok := p.next()
 
@@ -406,163 +404,157 @@ func (p *Parser) setVideoHandler() (*ASTNode, error) {
 	})
 
 	tok = p.next()
-
-	if tok.Kind != TokenString {
-		return nil, fmt.Errorf("ERROR: unexpected value at line %v, row %v\nvalue needs to be string", tok.Row, tok.Col)
-	}
-
-	path := tok.Text
-
-	// check the param format
-	// the param format needs to be a valid path
-	if err := p.videoPathCheck(path); err != nil {
-		return nil, err
-	}
-
-	args = append(args, Param{
-		Value: tok.Text,
-		Kind:  TokenString,
-		Row:   tok.Row,
-		Col:   tok.Col,
-	})
-
-	return &ASTNode{
-		Command: SET_VIDEO,
-		Params:  args,
-		Order:   p.Pos,
-	}, nil
-}
-
-func (p *Parser) setTrackHandler() (*ASTNode, error) {
-	args := make([]Param, 0)
-	tok := p.next()
-
-	if tok.Kind != TokenIdentifier {
-		return nil, fmt.Errorf("ERROR: expect a %v, got %v", TokenIdentifier, tok.Kind)
-	}
-
-	args = append(args, Param{
-		Value: tok.Text,
-		Kind:  TokenIdentifier,
-		Row:   tok.Row,
-		Col:   tok.Col,
-	})
-
-	tok = p.next()
-
-	if tok.Kind != TokenCurlyBraceOpen {
-		return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenCurlyBraceOpen, tok.Kind)
-	}
-
-	for p.peek().Kind != TokenCurlyBraceClose {
-		key := p.next()
-
-		if key.Kind != TokenIdentifier {
-			return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenIdentifier, key.Kind)
-		}
-
-		args = append(args, Param{
-			Value: key.Text,
-			Kind:  TokenIdentifier,
-			Row:   key.Row,
-			Col:   key.Col,
-		})
-
-		colon := p.next()
-
-		if colon.Kind != TokenColon {
-			return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenColon, colon.Kind)
-		}
-
-		value := p.next()
-
-		var val Param
-		switch value.Kind {
-		case TokenString:
-			val = Param{
-				Value: value.Text,
-				Kind:  TokenString,
-				Row:   value.Row,
-				Col:   value.Col,
-			}
-
-		case TokenNumber:
-			num, err := strconv.ParseFloat(value.Text, 64)
-			if err != nil {
-				return nil, fmt.Errorf("invalid number format, %v", err)
-			}
-			val = Param{
-				Value: num,
-				Kind:  TokenNumber,
-				Row:   value.Row,
-				Col:   value.Col,
-			}
-		case TokenBool:
-			val = Param{
-				Value: value.Text == "true",
-				Kind:  TokenBool,
-				Row:   value.Row,
-				Col:   value.Col,
-			}
-		default:
-			return nil, fmt.Errorf("ERROR: unsupported type %v", value.Kind)
-		}
-
-		args = append(args, val)
-	}
-
-	tok = p.next()
-
-	if tok.Kind != TokenCurlyBraceClose {
-		return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenCurlyBraceClose, tok.Kind)
-	}
-
-	return &ASTNode{
-		Command: SET_TRACK,
-		Params:  args,
-		Order:   p.Pos,
-	}, nil
-}
-
-func (p *Parser) useTrackHandler() (*ASTNode, error) {
-	args := make([]Param, 0)
-	tok := p.next()
-
-	if tok.Kind != TokenIdentifier {
-		return nil, fmt.Errorf("ERROR: expect a %v, got %v", TokenIdentifier, tok.Kind)
-	}
-
-	args = append(args, Param{
-		Value: tok.Text,
-		Kind:  TokenIdentifier,
-		Row:   tok.Row,
-		Col:   tok.Col,
-	})
-
-	tok = p.next()
-
-	if tok.Kind != TokenString && tok.Kind != TokenIdentifier {
-		return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenString, tok.Kind)
-	}
-	// check the param format
-
-	if tok.Kind == TokenString {
+	// different types of token kind
+	switch tok.Kind {
+	case TokenString:
 		path := tok.Text
-
+		// check the param format
+		// the param format needs to be a valid path
 		if err := p.videoPathCheck(path); err != nil {
 			return nil, err
 		}
+		args = append(args, Param{
+			Value: tok.Text,
+			Kind:  TokenString,
+			Row:   tok.Row,
+			Col:   tok.Col,
+		})
+
+	case TokenIdentifier:
+		args = append(args, Param{
+			Value: tok.Text,
+			Kind:  TokenIdentifier,
+			Row:   tok.Row,
+			Col:   tok.Col,
+		})
+
+	case TokenCurlyBraceOpen:
+
+		for p.peek().Kind != TokenCurlyBraceClose {
+			key := p.next()
+
+			if key.Kind != TokenIdentifier {
+				return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenIdentifier, key.Kind)
+			}
+
+			args = append(args, Param{
+				Value: key.Text,
+				Kind:  TokenIdentifier,
+				Row:   key.Row,
+				Col:   key.Col,
+			})
+
+			colon := p.next()
+
+			if colon.Kind != TokenColon {
+				return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenColon, colon.Kind)
+			}
+
+			value := p.next()
+
+			var val Param
+			switch value.Kind {
+			case TokenString:
+				val = Param{
+					Value: value.Text,
+					Kind:  TokenString,
+					Row:   value.Row,
+					Col:   value.Col,
+				}
+
+			case TokenNumber:
+				num, err := strconv.ParseFloat(value.Text, 64)
+				if err != nil {
+					return nil, fmt.Errorf("invalid number format, %v", err)
+				}
+				val = Param{
+					Value: num,
+					Kind:  TokenNumber,
+					Row:   value.Row,
+					Col:   value.Col,
+				}
+			case TokenBool:
+				val = Param{
+					Value: value.Text == "true",
+					Kind:  TokenBool,
+					Row:   value.Row,
+					Col:   value.Col,
+				}
+			default:
+				return nil, fmt.Errorf("ERROR: unsupported type %v", value.Kind)
+			}
+
+			args = append(args, val)
+		}
+
+		tok = p.next()
+
+		if tok.Kind != TokenCurlyBraceClose {
+			return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenCurlyBraceClose, tok.Kind)
+		}
+
+	default:
+		return nil, fmt.Errorf("ERROR, %v isn't supportd, use (%v,%v,%v)", tok.Kind, TokenString, TokenIdentifier, TokenCurlyBraceOpen)
+	}
+
+	return &ASTNode{
+		Command: SET,
+		Params:  args,
+		Order:   p.Pos,
+	}, nil
+}
+
+func (p *Parser) useHandler() (*ASTNode, error) {
+	args := make([]Param, 0)
+	tok := p.next()
+
+	if tok.Kind != TokenIdentifier {
+		return nil, fmt.Errorf("ERROR: expect a %v, got %v", TokenIdentifier, tok.Kind)
 	}
 
 	args = append(args, Param{
 		Value: tok.Text,
+		Kind:  TokenIdentifier,
+		Row:   tok.Row,
+		Col:   tok.Col,
+	})
+
+	tok = p.next()
+
+	videoTarget := "last"
+
+	switch tok.Kind {
+	case TokenOn:
+		tok = p.next()
+
+		if tok.Kind != TokenString && tok.Kind != TokenIdentifier {
+			p.Pos--
+			return nil, fmt.Errorf("ERROR: expect a (%v | %v), got %v", TokenString, TokenIdentifier, tok.Kind)
+		}
+
+		if tok.Kind == TokenString {
+			if err := p.videoPathCheck(tok.Text); err != nil {
+				return nil, err
+			}
+
+			videoTarget = tok.Text
+		} else {
+			videoTarget = tok.Text
+		}
+
+	default:
+		p.Pos--
+	}
+
+	args = append(args, Param{
+		Value: videoTarget,
 		Kind:  tok.Kind,
 		Row:   tok.Row,
 		Col:   tok.Col,
 	})
 
 	return &ASTNode{
-		Command: USE_TRACK,
+		Command: USE,
 		Params:  args,
 		Order:   p.Pos,
 	}, nil

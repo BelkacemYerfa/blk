@@ -16,9 +16,9 @@ const (
 	TokenExport        TokenKind = "export"
 	TokenThumbnailFrom TokenKind = "thumbnail_from"
 	TokenConcat        TokenKind = "concat"
-	TokenSetVideo      TokenKind = "set_video"
-	TokenSetTrack      TokenKind = "set_track"
-	TokenUseTrack      TokenKind = "use_track"
+	TokenSet           TokenKind = "set"
+	TokenUse           TokenKind = "use"
+	TokenOn            TokenKind = "on"
 	TokenBlock         TokenKind = "block"
 
 	// Block Units
@@ -191,10 +191,10 @@ func checkTimeTrimFormatValid(tm string) bool {
 }
 
 var keywords = map[string]TokenKind{
-	"set_track":      TokenSetTrack,
-	"set_video":      TokenSetVideo,
+	"set":            TokenSet,
 	"push":           TokenPush,
-	"use_track":      TokenUseTrack,
+	"use":            TokenUse,
+	"on":             TokenOn,
 	"export":         TokenExport,
 	"trim":           TokenTrim,
 	"thumbnail_from": TokenThumbnailFrom,
