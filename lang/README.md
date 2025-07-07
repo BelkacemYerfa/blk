@@ -6,15 +6,28 @@
 
 ## ✅ Core Stack Instructions (MVP)
 
-### `set_video <name> <video-path>`
+### `set <name> (<video-path> | <name> | { config })`
 
 Define a named video to be used later.
 
 Examples:
 
+- for a video file or another named video:
+
 ```text
-set_track stream "videos/stream.mp4"
-set_track intro "videos/intro.mp4"
+set intro "out/intro.mp4"
+set outro intro
+```
+
+- for a configuration block:
+
+```text
+set bg_track {
+  path: "assets/beat.mp3"
+  volume: 0.3
+  duck: false
+  loop: true
+}
 ```
 
 ---
@@ -75,39 +88,23 @@ thumbnail_from "00:00:10" "out/cover.png"
 
 ---
 
-### `set_track <name> { config }`
-
-Define a named audio track to be reused across videos.
-
-Options:
-
-- `path=<file.mp3>` — Path to the audio file
-- `volume=X` — Set music volume (e.g., `0.5`)
-- `duck` — Auto-lower music during speech
-- `loop` — Repeat track to match video length
-
-Examples:
-
-```text
-set_track bg {
-  path: "assets/beat.mp3"
-  volume: 0.3
-  duck: false
-  loop: true
-}
-```
-
----
-
-### `use_track <name> <video-path|last|first>`
+### `use <name> on <video-path|last|first>`
 
 Attach a previously defined track to a specific video or all videos.
 
 Examples:
 
+- for a specific video:
+
 ```text
-use_track bg "intro.mp4"
-use_track bg "first"
+use bg on "intro.mp4"
+use bg on "first"
+```
+
+- for the last video on the stack:
+
+```text
+use bg
 ```
 
 ---
@@ -123,6 +120,8 @@ block {
   export "out/intro.mp4"
 }
 ```
+
+**Note:** You can't have another block inside a block.
 
 ## 🔜 Phase 2 — Templates & Styling
 
