@@ -12,3 +12,6 @@ __pycache__/
 
 # generated test repo
 test_report.html
+
+# custom testing example
+examples/*.json

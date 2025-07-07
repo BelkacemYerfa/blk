@@ -366,7 +366,14 @@ func (p *Parser) blockHandler() (*ASTNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		body = append(body, *ast)
+
+		// this part, doesn't allow for nested blocks
+		if ast.Command != BLOCK {
+			body = append(body, *ast)
+		} else {
+			return nil, fmt.Errorf("ERROR: block isn't allowed inside of another block")
+		}
+
 	}
 
 	tok = p.next()

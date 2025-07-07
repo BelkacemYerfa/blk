@@ -10,7 +10,7 @@ type TokenKind = string
 
 const (
 
-	// Commands
+	// Commands (Reserved Keywords)
 	TokenPush          TokenKind = "push"
 	TokenTrim          TokenKind = "trim"
 	TokenExport        TokenKind = "export"

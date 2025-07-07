@@ -24,10 +24,4 @@ block first_process {
   concat
   export "out/final_video.mp4"
 
-  block first_child_process {
-    push "videos/intro.mp4"
-    trim "00:00:00" "00:00:10"
-    export "out/intro.mp4"
-  }
-
 }
