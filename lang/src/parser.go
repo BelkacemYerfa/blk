@@ -24,6 +24,40 @@ const (
 	BLOCK          Command = "block"
 )
 
+type (
+	Statement  = string
+	Expression = string
+	Type       = string
+)
+
+const (
+	// Statements
+	PushStatement      Statement = "push"
+	TrimStatement      Statement = "trim"
+	ExportStatement    Statement = "export"
+	ConcatStatement    Statement = "concat"
+	ThumbnailStatement Statement = "thumbnail_from"
+	SetStatement       Statement = "set"
+	UseStatement       Statement = "use"
+	BlockStatement     Statement = "block"
+
+	// Expression
+	LiteralExpression    Expression = "literal_expression"
+	IdentifierExpression Expression = "identifier_expression"
+	ObjectExpression     Expression = "object_expression"
+
+	// Types
+	// Primitives
+	NumberType  Type = "number"
+	BooleanType Type = "bool"
+	StringType  Type = "filepath"
+	// Custom
+	IdentifierType Type = "identifier"
+	TimeType       Type = "time"
+	// Complex
+	ObjectType Type = "object"
+)
+
 var (
 	videoExts = []string{
 		".mp4", ".mov", ".avi", ".mkv",
@@ -35,21 +69,30 @@ var (
 	}
 )
 
-type Param struct {
-	Kind  TokenKind
-	Value any
-	Row   int
-	Col   int
+type Position struct {
+	Row int
+	Col int
 }
 
-type ASTNode struct {
-	Command Command
-	Params  []Param
-	Body    AST
-	Order   int
+type ExpressionNode struct {
+	Type     Expression // "literal_expression", "identifier_expression", etc.
+	Value    any        // string, float64, bool, or even ObjectLiteral
+	ExprType Type       // For type-checking: "number", "bool", etc.
+	Position Position
 }
 
-type AST = []ASTNode
+type StatementNode struct {
+	Type     Statement // e.g., "push", "set", etc.
+	Params   []ExpressionNode
+	Body     []StatementNode // Only for block/batch/etc.
+	Position Position
+	Order    int
+}
+
+// we use this when an expression is an object expression
+type ObjectLiteral map[string]ExpressionNode
+
+type AST = []StatementNode
 
 type Parser struct {
 	Tokens []Token
@@ -112,31 +155,36 @@ func (p *Parser) Parse() *AST {
 	return &ast
 }
 
-func (p *Parser) parseCommand() (*ASTNode, error) {
+func (p *Parser) parseCommand() (*StatementNode, error) {
 	cmdToken := p.next() // Consume command
+
+	position := Position{
+		Col: cmdToken.Col,
+		Row: cmdToken.Row,
+	}
 
 	// Validation step
 	switch cmdToken.Kind {
 	case TokenPush:
-		return p.pushHandler()
+		return p.pushHandler(position)
 	case TokenTrim:
-		return p.trimHandler()
+		return p.trimHandler(position)
 	case TokenConcat:
-		return p.concatHandler()
+		return p.concatHandler(position)
 	case TokenThumbnailFrom:
-		return p.thumbnailHandler()
+		return p.thumbnailHandler(position)
 	case TokenExport:
-		return p.exportHandler()
+		return p.exportHandler(position)
 	case TokenSet:
-		return p.setHandler()
+		return p.setHandler(position)
 	case TokenUse:
-		return p.useHandler()
+		return p.useHandler(position)
 	case TokenBlock:
-		return p.blockHandler()
+		return p.blockHandler(position)
 	}
 
 	// All good, create AST node
-	return &ASTNode{}, fmt.Errorf("ERROR: unexpected token appeared, line %v row%v", cmdToken.Row, cmdToken.Col)
+	return &StatementNode{}, fmt.Errorf("ERROR: unexpected token appeared, line %v row%v", cmdToken.Row, cmdToken.Col)
 }
 
 func (p *Parser) videoPathCheck(path string) error {
@@ -177,8 +225,8 @@ func (p *Parser) imagePathCheck(path string) error {
 	return nil
 }
 
-func (p *Parser) pushHandler() (*ASTNode, error) {
-	args := make([]Param, 0)
+func (p *Parser) pushHandler(pos Position) (*StatementNode, error) {
+	args := make([]ExpressionNode, 0)
 
 	tok := p.next()
 
@@ -193,24 +241,40 @@ func (p *Parser) pushHandler() (*ASTNode, error) {
 		if err := p.videoPathCheck(path); err != nil {
 			return nil, err
 		}
+		args = append(args, ExpressionNode{
+			Type:     LiteralExpression,
+			ExprType: StringType,
+			Value:    tok.Text,
+			Position: Position{
+				Col: tok.Col,
+				Row: tok.Row,
+			},
+		})
+
 	}
 
-	args = append(args, Param{
-		Value: tok.Text,
-		Kind:  tok.Kind,
-		Row:   tok.Row,
-		Col:   tok.Col,
-	})
+	if tok.Kind == TokenIdentifier {
+		args = append(args, ExpressionNode{
+			Type:     IdentifierExpression,
+			Value:    tok.Text,
+			ExprType: IdentifierType,
+			Position: Position{
+				Col: tok.Col,
+				Row: tok.Row,
+			},
+		})
+	}
 
-	return &ASTNode{
-		Command: PUSH,
-		Params:  args,
-		Order:   p.Pos,
+	return &StatementNode{
+		Type:     PushStatement,
+		Params:   args,
+		Position: pos,
+		Order:    p.Pos,
 	}, nil
 }
 
-func (p *Parser) trimHandler() (*ASTNode, error) {
-	args := make([]Param, 0)
+func (p *Parser) trimHandler(pos Position) (*StatementNode, error) {
+	args := make([]ExpressionNode, 0)
 
 	for range 2 {
 		tok := p.next()
@@ -218,18 +282,19 @@ func (p *Parser) trimHandler() (*ASTNode, error) {
 			return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenTime, tok.Kind)
 		}
 
-		args = append(args, Param{
-			Value: tok.Text,
-			Kind:  TokenTime,
-			Row:   tok.Row,
-			Col:   tok.Col,
+		args = append(args, ExpressionNode{
+			Type:     LiteralExpression,
+			Value:    tok.Text,
+			ExprType: TimeType,
+			Position: Position{
+				Row: tok.Row,
+				Col: tok.Col,
+			},
 		})
 	}
 
 	// check the format of the path if it exists
 	tok := p.next()
-
-	videoTarget := "all"
 
 	switch tok.Kind {
 	case TokenString:
@@ -237,28 +302,48 @@ func (p *Parser) trimHandler() (*ASTNode, error) {
 			return nil, err
 		}
 
-		videoTarget = tok.Text
+		args = append(args, ExpressionNode{
+			Type:     LiteralExpression,
+			ExprType: StringType,
+			Value:    tok.Text,
+			Position: Position{
+				Row: tok.Row,
+				Col: tok.Col,
+			},
+		})
+
 	case TokenIdentifier:
-		videoTarget = tok.Text
+		args = append(args, ExpressionNode{
+			Type:     LiteralExpression,
+			ExprType: StringType,
+			Value:    tok.Text,
+			Position: Position{
+				Row: tok.Row,
+				Col: tok.Col,
+			},
+		})
 	default:
 		p.Pos--
+		args = append(args, ExpressionNode{
+			Type:     LiteralExpression,
+			ExprType: StringType,
+			Value:    "last", // indicates that this will get applied at the last element in the stack
+			Position: Position{
+				Row: tok.Row,
+				Col: tok.Col,
+			},
+		})
 	}
 
-	args = append(args, Param{
-		Value: videoTarget,
-		Kind:  TokenString,
-		Row:   tok.Row,
-		Col:   tok.Col,
-	})
-
-	return &ASTNode{
-		Command: TRIM,
-		Params:  args,
-		Order:   p.Pos,
+	return &StatementNode{
+		Type:     TrimStatement,
+		Params:   args,
+		Position: pos,
+		Order:    p.Pos,
 	}, nil
 }
 
-func (p *Parser) concatHandler() (*ASTNode, error) {
+func (p *Parser) concatHandler(pos Position) (*StatementNode, error) {
 	tok := p.peek()
 
 	if tokenKey, isMatched := keywords[tok.Text]; isMatched {
@@ -266,15 +351,16 @@ func (p *Parser) concatHandler() (*ASTNode, error) {
 			return nil, fmt.Errorf("ERROR: expected nothing, got %v", TokenBool)
 		}
 	}
-	return &ASTNode{
-		Command: CONCAT,
-		Params:  []Param{},
-		Order:   p.Pos,
+	return &StatementNode{
+		Type:     ConcatStatement,
+		Params:   []ExpressionNode{},
+		Position: pos,
+		Order:    p.Pos,
 	}, nil
 }
 
-func (p *Parser) thumbnailHandler() (*ASTNode, error) {
-	args := make([]Param, 0)
+func (p *Parser) thumbnailHandler(pos Position) (*StatementNode, error) {
+	args := make([]ExpressionNode, 0)
 
 	tok := p.next()
 
@@ -286,11 +372,14 @@ func (p *Parser) thumbnailHandler() (*ASTNode, error) {
 		format := tok.Text
 		if matched, _ := regexp.MatchString(timeFormat, format); matched {
 
-			args = append(args, Param{
-				Value: tok.Text,
-				Kind:  TokenTime,
-				Row:   tok.Row,
-				Col:   tok.Col,
+			args = append(args, ExpressionNode{
+				Type:     LiteralExpression,
+				Value:    tok.Text,
+				ExprType: TimeType,
+				Position: Position{
+					Row: tok.Row,
+					Col: tok.Col,
+				},
 			})
 		}
 	case TokenNumber:
@@ -298,11 +387,14 @@ func (p *Parser) thumbnailHandler() (*ASTNode, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid number format, %v", err)
 		}
-		args = append(args, Param{
-			Value: num,
-			Kind:  TokenNumber,
-			Row:   tok.Row,
-			Col:   tok.Col,
+		args = append(args, ExpressionNode{
+			Type:     LiteralExpression,
+			Value:    num,
+			ExprType: NumberType,
+			Position: Position{
+				Row: tok.Row,
+				Col: tok.Col,
+			},
 		})
 	default:
 		return nil, fmt.Errorf("ERROR: expected (%v, %v), got %v", TokenTime, TokenNumber, tok.Kind)
@@ -319,35 +411,54 @@ func (p *Parser) thumbnailHandler() (*ASTNode, error) {
 		if err := p.imagePathCheck(tok.Text); err != nil {
 			return nil, err
 		}
+
+		args = append(args, ExpressionNode{
+			Type:     LiteralExpression,
+			Value:    tok.Text,
+			ExprType: StringType,
+			Position: Position{
+				Row: tok.Row,
+				Col: tok.Col,
+			},
+		})
 	}
 
-	args = append(args, Param{
-		Value: tok.Text,
-		Kind:  tok.Kind,
-		Row:   tok.Row,
-		Col:   tok.Col,
-	})
+	if tok.Kind == TokenIdentifier {
+		args = append(args, ExpressionNode{
+			Type:     IdentifierExpression,
+			Value:    tok.Text,
+			ExprType: IdentifierType,
+			Position: Position{
+				Row: tok.Row,
+				Col: tok.Col,
+			},
+		})
+	}
 
-	return &ASTNode{
-		Command: THUMBNAIL_FROM,
-		Params:  args,
-		Order:   p.Pos,
+	return &StatementNode{
+		Type:     ThumbnailStatement,
+		Params:   args,
+		Position: pos,
+		Order:    p.Pos,
 	}, nil
 }
 
-func (p *Parser) blockHandler() (*ASTNode, error) {
-	args := make([]Param, 0)
+func (p *Parser) blockHandler(pos Position) (*StatementNode, error) {
+	args := make([]ExpressionNode, 0)
 	tok := p.next()
 
 	if tok.Kind != TokenIdentifier {
 		return nil, fmt.Errorf("ERROR: expect a %v, got %v", TokenIdentifier, tok.Kind)
 	}
 
-	args = append(args, Param{
-		Value: tok.Text,
-		Kind:  TokenIdentifier,
-		Row:   tok.Row,
-		Col:   tok.Col,
+	args = append(args, ExpressionNode{
+		Type:     IdentifierExpression,
+		Value:    tok.Text,
+		ExprType: IdentifierType,
+		Position: Position{
+			Row: tok.Row,
+			Col: tok.Col,
+		},
 	})
 
 	tok = p.next()
@@ -366,7 +477,7 @@ func (p *Parser) blockHandler() (*ASTNode, error) {
 		}
 
 		// this part, doesn't allow for nested blocks
-		if ast.Command != BLOCK {
+		if ast.Type != BlockStatement {
 			body = append(body, *ast)
 		} else {
 			return nil, fmt.Errorf("ERROR: block isn't allowed inside of another block")
@@ -380,31 +491,38 @@ func (p *Parser) blockHandler() (*ASTNode, error) {
 		return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenCurlyBraceClose, tok.Kind)
 	}
 
-	return &ASTNode{
-		Command: BLOCK,
-		Params:  args,
-		Body:    body,
-		Order:   p.Pos,
+	return &StatementNode{
+		Type:     BlockStatement,
+		Params:   args,
+		Body:     body,
+		Position: pos,
+		Order:    p.Pos,
 	}, nil
 }
 
-func (p *Parser) setHandler() (*ASTNode, error) {
-	args := make([]Param, 0)
+func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
+	args := make([]ExpressionNode, 0)
 	tok := p.next()
 
 	if tok.Kind != TokenIdentifier {
 		return nil, fmt.Errorf("ERROR: expect a %v, got %v", TokenIdentifier, tok.Kind)
 	}
 
-	args = append(args, Param{
-		Value: tok.Text,
-		Kind:  TokenIdentifier,
-		Row:   tok.Row,
-		Col:   tok.Col,
+	args = append(args, ExpressionNode{
+		Type:     IdentifierExpression,
+		Value:    tok.Text,
+		ExprType: IdentifierType,
+		Position: Position{
+			Row: tok.Row,
+			Col: tok.Col,
+		},
 	})
 
 	tok = p.next()
 	// different types of token kind
+
+	objPos := Position{}
+
 	switch tok.Kind {
 	case TokenString:
 		path := tok.Text
@@ -413,22 +531,33 @@ func (p *Parser) setHandler() (*ASTNode, error) {
 		if err := p.videoPathCheck(path); err != nil {
 			return nil, err
 		}
-		args = append(args, Param{
-			Value: tok.Text,
-			Kind:  TokenString,
-			Row:   tok.Row,
-			Col:   tok.Col,
+		args = append(args, ExpressionNode{
+			Type:     LiteralExpression,
+			Value:    tok.Text,
+			ExprType: StringType,
+			Position: Position{
+				Row: tok.Row,
+				Col: tok.Col,
+			},
 		})
 
 	case TokenIdentifier:
-		args = append(args, Param{
-			Value: tok.Text,
-			Kind:  TokenIdentifier,
-			Row:   tok.Row,
-			Col:   tok.Col,
+		args = append(args, ExpressionNode{
+			Type:     IdentifierExpression,
+			Value:    tok.Text,
+			ExprType: IdentifierType,
+			Position: Position{
+				Row: tok.Row,
+				Col: tok.Col,
+			},
 		})
 
 	case TokenCurlyBraceOpen:
+
+		objValue := make(ObjectLiteral)
+
+		objPos.Col = tok.Col
+		objPos.Row = tok.Row
 
 		for p.peek().Kind != TokenCurlyBraceClose {
 			key := p.next()
@@ -437,12 +566,7 @@ func (p *Parser) setHandler() (*ASTNode, error) {
 				return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenIdentifier, key.Kind)
 			}
 
-			args = append(args, Param{
-				Value: key.Text,
-				Kind:  TokenIdentifier,
-				Row:   key.Row,
-				Col:   key.Col,
-			})
+			objValue[key.Text] = ExpressionNode{}
 
 			colon := p.next()
 
@@ -452,14 +576,17 @@ func (p *Parser) setHandler() (*ASTNode, error) {
 
 			value := p.next()
 
-			var val Param
+			var val ExpressionNode
 			switch value.Kind {
 			case TokenString:
-				val = Param{
-					Value: value.Text,
-					Kind:  TokenString,
-					Row:   value.Row,
-					Col:   value.Col,
+				val = ExpressionNode{
+					Type:     LiteralExpression,
+					Value:    value.Text,
+					ExprType: StringType,
+					Position: Position{
+						Row: key.Row,
+						Col: key.Col,
+					},
 				}
 
 			case TokenNumber:
@@ -467,25 +594,38 @@ func (p *Parser) setHandler() (*ASTNode, error) {
 				if err != nil {
 					return nil, fmt.Errorf("invalid number format, %v", err)
 				}
-				val = Param{
-					Value: num,
-					Kind:  TokenNumber,
-					Row:   value.Row,
-					Col:   value.Col,
+				val = ExpressionNode{
+					Type:     LiteralExpression,
+					Value:    num,
+					ExprType: NumberType,
+					Position: Position{
+						Row: key.Row,
+						Col: key.Col,
+					},
 				}
 			case TokenBool:
-				val = Param{
-					Value: value.Text == "true",
-					Kind:  TokenBool,
-					Row:   value.Row,
-					Col:   value.Col,
+				val = ExpressionNode{
+					Type:     LiteralExpression,
+					Value:    value.Text == "true",
+					ExprType: BooleanType,
+					Position: Position{
+						Row: key.Row,
+						Col: key.Col,
+					},
 				}
 			default:
 				return nil, fmt.Errorf("ERROR: unsupported type %v", value.Kind)
 			}
 
-			args = append(args, val)
+			objValue[key.Text] = val
 		}
+
+		args = append(args, ExpressionNode{
+			Type:     ObjectExpression,
+			Value:    objValue,
+			ExprType: ObjectType,
+			Position: objPos,
+		})
 
 		tok = p.next()
 
@@ -497,38 +637,39 @@ func (p *Parser) setHandler() (*ASTNode, error) {
 		return nil, fmt.Errorf("ERROR, %v isn't supportd, use (%v,%v,%v)", tok.Kind, TokenString, TokenIdentifier, TokenCurlyBraceOpen)
 	}
 
-	return &ASTNode{
-		Command: SET,
-		Params:  args,
-		Order:   p.Pos,
+	return &StatementNode{
+		Type:     SetStatement,
+		Params:   args,
+		Position: pos,
+		Order:    p.Pos,
 	}, nil
 }
 
-func (p *Parser) useHandler() (*ASTNode, error) {
-	args := make([]Param, 0)
+func (p *Parser) useHandler(pos Position) (*StatementNode, error) {
+	args := make([]ExpressionNode, 0)
 	tok := p.next()
 
 	if tok.Kind != TokenIdentifier {
 		return nil, fmt.Errorf("ERROR: expect a %v, got %v", TokenIdentifier, tok.Kind)
 	}
 
-	args = append(args, Param{
-		Value: tok.Text,
-		Kind:  TokenIdentifier,
-		Row:   tok.Row,
-		Col:   tok.Col,
+	args = append(args, ExpressionNode{
+		Type:     IdentifierExpression,
+		Value:    tok.Text,
+		ExprType: IdentifierType,
+		Position: Position{
+			Row: tok.Row,
+			Col: tok.Col,
+		},
 	})
 
 	tok = p.next()
-
-	videoTarget := "last"
 
 	switch tok.Kind {
 	case TokenOn:
 		tok = p.next()
 
 		if tok.Kind != TokenString && tok.Kind != TokenIdentifier {
-			p.Pos--
 			return nil, fmt.Errorf("ERROR: expect a (%v | %v), got %v", TokenString, TokenIdentifier, tok.Kind)
 		}
 
@@ -537,31 +678,42 @@ func (p *Parser) useHandler() (*ASTNode, error) {
 				return nil, err
 			}
 
-			videoTarget = tok.Text
+			args = append(args, ExpressionNode{
+				Type:     LiteralExpression,
+				Value:    tok.Text,
+				ExprType: StringType,
+				Position: Position{
+					Row: tok.Row,
+					Col: tok.Col,
+				},
+			})
+
 		} else {
-			videoTarget = tok.Text
+			args = append(args, ExpressionNode{
+				Type:     IdentifierExpression,
+				Value:    tok.Text,
+				ExprType: IdentifierType,
+				Position: Position{
+					Row: tok.Row,
+					Col: tok.Col,
+				},
+			})
 		}
 
 	default:
 		p.Pos--
 	}
 
-	args = append(args, Param{
-		Value: videoTarget,
-		Kind:  tok.Kind,
-		Row:   tok.Row,
-		Col:   tok.Col,
-	})
-
-	return &ASTNode{
-		Command: USE,
-		Params:  args,
-		Order:   p.Pos,
+	return &StatementNode{
+		Type:     UseStatement,
+		Params:   args,
+		Position: pos,
+		Order:    p.Pos,
 	}, nil
 }
 
-func (p *Parser) exportHandler() (*ASTNode, error) {
-	args := make([]Param, 0)
+func (p *Parser) exportHandler(pos Position) (*StatementNode, error) {
+	args := make([]ExpressionNode, 0)
 
 	tok := p.next()
 
@@ -575,19 +727,35 @@ func (p *Parser) exportHandler() (*ASTNode, error) {
 		if err := p.videoPathCheck(path); err != nil {
 			return nil, err
 		}
+
+		args = append(args, ExpressionNode{
+			Type:     LiteralExpression,
+			Value:    tok.Text,
+			ExprType: StringType,
+			Position: Position{
+				Row: tok.Row,
+				Col: tok.Col,
+			},
+		})
 	}
 
-	args = append(args, Param{
-		Value: tok.Text,
-		Kind:  tok.Kind,
-		Row:   tok.Row,
-		Col:   tok.Col,
-	})
+	if tok.Kind == TokenIdentifier {
+		args = append(args, ExpressionNode{
+			Type:     IdentifierExpression,
+			Value:    tok.Text,
+			ExprType: IdentifierType,
+			Position: Position{
+				Row: tok.Row,
+				Col: tok.Col,
+			},
+		})
+	}
 
-	return &ASTNode{
-		Command: EXPORT,
-		Params:  args,
-		Order:   p.Pos,
+	return &StatementNode{
+		Type:     ExportStatement,
+		Params:   args,
+		Position: pos,
+		Order:    p.Pos,
 	}, nil
 }
 
