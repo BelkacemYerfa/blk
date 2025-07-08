@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"subcut/src"
+	"subcut/parser"
 	"subcut/tests"
 )
 
@@ -52,7 +52,7 @@ func dev() {
 
 	content := string(byteCtn)
 
-	lexer := src.NewLexer(path, content)
+	lexer := parser.NewLexer(path, content)
 	tokens := lexer.Tokenize()
 
 	// Write tokens to file
@@ -69,7 +69,7 @@ func dev() {
 		return
 	}
 
-	parser := src.NewParser(tokens)
+	parser := parser.NewParser(tokens)
 	ast := parser.Parse()
 
 	// Write AST to JSON file

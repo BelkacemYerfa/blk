@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"subcut/src"
+	"subcut/parser"
 )
 
 type TestResult struct {
@@ -79,7 +79,7 @@ func TestRunner() {
 			Pass:   true,
 		}
 
-		lexer := src.NewLexer(filePath, content)
+		lexer := parser.NewLexer(filePath, content)
 		tokens := lexer.Tokenize()
 
 		// marshal the tokens
@@ -106,7 +106,7 @@ func TestRunner() {
 		tokenBytes, _ := json.MarshalIndent(tokensInterface, "", "  ")
 		result.Tokens = string(tokenBytes)
 
-		parser := src.NewParser(tokens)
+		parser := parser.NewParser(tokens)
 		ast := parser.Parse()
 
 		if ast != nil {

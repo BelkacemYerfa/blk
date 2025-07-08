@@ -1,81 +1,10 @@
-package src
+package parser
 
 import (
 	"strings"
 	"time"
 	"unicode"
 )
-
-type TokenKind = string
-
-const (
-
-	// Commands (Reserved Keywords)
-	TokenPush          TokenKind = "push"
-	TokenTrim          TokenKind = "trim"
-	TokenExport        TokenKind = "export"
-	TokenThumbnailFrom TokenKind = "thumbnail_from"
-	TokenConcat        TokenKind = "concat"
-	TokenSet           TokenKind = "set"
-	TokenUse           TokenKind = "use"
-	TokenOn            TokenKind = "on"
-	TokenProcess       TokenKind = "process"
-
-	// Block Units
-	TokenCurlyBraceOpen  TokenKind = "{"
-	TokenCurlyBraceClose TokenKind = "}"
-	TokenQuote           TokenKind = `"`
-	TokenColon           TokenKind = ":"
-	TokenMinus           TokenKind = "-"
-
-	// Comment
-	TokenComment TokenKind = "#"
-
-	// Var Naming
-	TokenIdentifier TokenKind = "identifier"
-
-	// Var Types
-	TokenString TokenKind = "string"
-	TokenTime   TokenKind = "time"
-	TokenNumber TokenKind = "number"
-	TokenBool   TokenKind = "bool"
-
-	// Error
-	TokenError TokenKind = "error"
-
-	// EOF
-	TokenEOF TokenKind = "end of file"
-)
-
-var (
-	keywords = map[string]TokenKind{
-		"set":            TokenSet,
-		"push":           TokenPush,
-		"use":            TokenUse,
-		"on":             TokenOn,
-		"export":         TokenExport,
-		"trim":           TokenTrim,
-		"thumbnail_from": TokenThumbnailFrom,
-		"concat":         TokenConcat,
-		"process":        TokenProcess,
-		"true":           TokenBool,
-		"false":          TokenBool,
-	}
-)
-
-type LiteralToken struct {
-	Text string
-	Kind TokenKind
-}
-
-type Lexer struct {
-	Content []rune
-	// help mainly in error detection when having multi file execution
-	FilePath string
-	Row      int
-	Col      int
-	Cur      int
-}
 
 func NewLexer(filePath string, content string) *Lexer {
 	lexer := Lexer{
@@ -159,6 +88,13 @@ func (l *Lexer) NextToken() Token {
 		token.LiteralToken = LiteralToken{
 			Kind: TokenMinus,
 			Text: "-",
+		}
+		return token
+	case TokenPlus:
+		l.readChar()
+		token.LiteralToken = LiteralToken{
+			Kind: TokenPlus,
+			Text: "+",
 		}
 		return token
 	case TokenQuote:

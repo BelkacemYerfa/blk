@@ -1,4 +1,4 @@
-package src
+package parser
 
 import (
 	"errors"
@@ -6,99 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
+	"subcut/internals"
 )
-
-type Command = string
-
-const (
-	PUSH           Command = "push"
-	TRIM           Command = "trim"
-	EXPORT         Command = "export"
-	CONCAT         Command = "concat"
-	THUMBNAIL_FROM Command = "thumbnail_from"
-	SET            Command = "set"
-	USE            Command = "use"
-	process        Command = "process"
-)
-
-type (
-	Statement  = string
-	Expression = string
-	Type       = string
-)
-
-const (
-	// Statements
-	PushStatement      Statement = "PushStatement"
-	TrimStatement      Statement = "TrimStatement"
-	ExportStatement    Statement = "ExportStatement"
-	ConcatStatement    Statement = "ConcatStatement"
-	ThumbnailStatement Statement = "ThumbnailStatement"
-	SetStatement       Statement = "SetStatement"
-	UseStatement       Statement = "UseStatement"
-	ProcessStatement   Statement = "ProcessStatement"
-
-	// Expressions
-	LiteralExpression    Expression = "LiteralExpression"
-	IdentifierExpression Expression = "IdentifierExpression"
-	ObjectExpression     Expression = "ObjectExpression"
-
-	// Types
-	// Primitive
-	NumberType  Type = "NumberType"
-	BooleanType Type = "BooleanType"
-	// Custom
-	FilterType     Type = "FilterType"
-	FilepathType   Type = "FilepathType"
-	IdentifierType Type = "IdentifierType"
-	TimeType       Type = "TimeType"
-	// Complex
-	ObjectType Type = "ObjectType"
-)
-
-var (
-	videoExts = []string{
-		".mp4", ".mov", ".avi", ".mkv",
-		".webm", ".flv", ".wmv",
-	}
-	imageExts = []string{
-		".jpg", ".jpeg", ".png", ".gif",
-		".bmp", ".webp", ".tiff",
-	}
-)
-
-type Position struct {
-	Row int
-	Col int
-}
-
-type ExpressionNode struct {
-	Type     Expression // "literal_expression", "identifier_expression", etc.
-	Value    any        // string, float64, bool, or even ObjectLiteral
-	ExprType Type       // For type-checking: "number", "bool", etc.
-	Position Position
-}
-
-type StatementNode struct {
-	Type     Statement // e.g., "push", "set", etc.
-	Params   []ExpressionNode
-	Body     []StatementNode // Only for process/batch/etc.
-	Position Position
-	Order    int
-}
-
-// we use this when an expression is an object expression
-type ObjectLiteral map[string]ExpressionNode
-
-type AST = []StatementNode
-
-type Parser struct {
-	Tokens []Token
-	Pos    int
-}
 
 func NewParser(tokens []Token) *Parser {
 	return &Parser{
@@ -200,7 +111,7 @@ func (p *Parser) videoPathCheck(path string) error {
 	path = filepath.Join(osPath, path)
 	path = filepath.Clean(path)
 
-	if !checkFileIsOfTypeMode(path, VIDEO) {
+	if !checkFileIsOfTypeMode(path, internals.VIDEO) {
 		return errors.New("ERROR: file extension needs to be a video")
 	}
 
@@ -219,7 +130,7 @@ func (p *Parser) imagePathCheck(path string) error {
 	path = filepath.Join(osPath, path)
 	path = filepath.Clean(path)
 
-	if !checkFileIsOfTypeMode(path, IMAGE) {
+	if !checkFileIsOfTypeMode(path, internals.IMAGE) {
 		return errors.New("ERROR: file extension needs to be a image")
 	}
 
@@ -581,6 +492,23 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 				Col: tok.Col,
 			},
 		})
+	case TokenPlus:
+		tok = p.next()
+		// parse the value first then append it to the args array
+		num, err := strconv.ParseFloat(tok.Text, 64)
+		if err != nil {
+			return nil, err
+		}
+
+		args = append(args, ExpressionNode{
+			Type:     LiteralExpression,
+			Value:    num,
+			ExprType: NumberType,
+			Position: Position{
+				Row: tok.Row,
+				Col: tok.Col,
+			},
+		})
 
 	case TokenNumber:
 		num, err := strconv.ParseFloat(tok.Text, 64)
@@ -834,29 +762,16 @@ func isValidPathFormat(path string) (bool, error) {
 	return true, nil
 }
 
-type Mode = string
-
-const (
-	VIDEO Mode = "video"
-	IMAGE Mode = "image"
-)
-
-func checkIfElementExist(slice []string, element string) bool {
-	sort.Strings(slice)
-	idx := sort.SearchStrings(slice, element)
-	return idx < len(slice) && slice[idx] == element
-}
-
-func checkFileIsOfTypeMode(path string, mode Mode) bool {
+func checkFileIsOfTypeMode(path string, mode internals.Mode) bool {
 	ext := filepath.Ext(path)
 
 	modeOptions := make([]string, 0)
 	switch mode {
-	case VIDEO:
+	case internals.VIDEO:
 		modeOptions = videoExts
-	case IMAGE:
+	case internals.IMAGE:
 		modeOptions = imageExts
 	}
 
-	return checkIfElementExist(modeOptions, ext)
+	return internals.CheckIfElementExist(modeOptions, ext)
 }
