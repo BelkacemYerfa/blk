@@ -19,13 +19,14 @@ const (
 	TokenSet           TokenKind = "set"
 	TokenUse           TokenKind = "use"
 	TokenOn            TokenKind = "on"
-	TokenBlock         TokenKind = "block"
+	TokenProcess       TokenKind = "process"
 
 	// Block Units
 	TokenCurlyBraceOpen  TokenKind = "{"
 	TokenCurlyBraceClose TokenKind = "}"
 	TokenQuote           TokenKind = `"`
 	TokenColon           TokenKind = ":"
+	TokenMinus           TokenKind = "-"
 
 	// Comment
 	TokenComment TokenKind = "#"
@@ -44,6 +45,22 @@ const (
 
 	// EOF
 	TokenEOF TokenKind = "end of file"
+)
+
+var (
+	keywords = map[string]TokenKind{
+		"set":            TokenSet,
+		"push":           TokenPush,
+		"use":            TokenUse,
+		"on":             TokenOn,
+		"export":         TokenExport,
+		"trim":           TokenTrim,
+		"thumbnail_from": TokenThumbnailFrom,
+		"concat":         TokenConcat,
+		"process":        TokenProcess,
+		"true":           TokenBool,
+		"false":          TokenBool,
+	}
 )
 
 type LiteralToken struct {
@@ -132,14 +149,18 @@ func (l *Lexer) NextToken() Token {
 		}
 	case TokenColon:
 		l.readChar()
-		return Token{
-			LiteralToken: LiteralToken{
-				Kind: TokenColon,
-				Text: ":",
-			},
-			Row: l.Row,
-			Col: l.Col,
+		token.LiteralToken = LiteralToken{
+			Kind: TokenColon,
+			Text: ":",
 		}
+		return token
+	case TokenMinus:
+		l.readChar()
+		token.LiteralToken = LiteralToken{
+			Kind: TokenMinus,
+			Text: "-",
+		}
+		return token
 	case TokenQuote:
 		return l.readString()
 	case TokenEOF:
@@ -188,20 +209,6 @@ func isDigit(char rune) bool {
 func checkTimeTrimFormatValid(tm string) bool {
 	_, err := time.Parse("15:04:05", tm)
 	return err == nil
-}
-
-var keywords = map[string]TokenKind{
-	"set":            TokenSet,
-	"push":           TokenPush,
-	"use":            TokenUse,
-	"on":             TokenOn,
-	"export":         TokenExport,
-	"trim":           TokenTrim,
-	"thumbnail_from": TokenThumbnailFrom,
-	"concat":         TokenConcat,
-	"block":          TokenBlock,
-	"true":           TokenBool,
-	"false":          TokenBool,
 }
 
 func (l *Lexer) readIdentifier() Token {

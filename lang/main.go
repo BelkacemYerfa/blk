@@ -28,7 +28,7 @@ func checkPathExistence(path string) (bool, error) {
 func dev() {
 	osPath, _ := os.Getwd()
 
-	path := filepath.Join(osPath, "./examples/main.subcut")
+	path := filepath.Join(osPath, "./internal_examples/main.subcut")
 
 	valid, err := checkPathExistence(path)
 
@@ -57,7 +57,7 @@ func dev() {
 
 	// Write tokens to file
 	// Write tokens to JSON file
-	tokensFile := filepath.Join(osPath, "./examples/main_tokens.json")
+	tokensFile := filepath.Join(osPath, "./internal_examples/main_tokens.json")
 	tokensJSON, err := json.Marshal(tokens)
 	if err != nil {
 		fmt.Printf("ERROR marshaling tokens to JSON: %v\n", err)
@@ -73,7 +73,7 @@ func dev() {
 	ast := parser.Parse()
 
 	// Write AST to JSON file
-	astFile := filepath.Join(osPath, "./examples/main_ast.json")
+	astFile := filepath.Join(osPath, "./internal_examples/main_ast.json")
 	astJSON, err := json.Marshal(ast)
 	if err != nil {
 		fmt.Printf("ERROR marshaling AST to JSON: %v\n", err)

@@ -19,7 +19,7 @@ set intro "out/intro.mp4"
 set outro intro
 ```
 
-- for a configuration block:
+- for a configuration object:
 
 ```text
 set bg_track {
@@ -72,7 +72,7 @@ Merge a set of videos on the stack into one.
 
 ---
 
-### `thumbnail_from [frame=<number> | time=<hh:mm:ss>] <file.png>`
+### `thumbnail_from [<frame-number> | <hh:mm:ss>] <file.png>`
 
 Extract a thumbnail image at a given frame index.
 
@@ -109,19 +109,19 @@ use bg
 
 ---
 
-### `block <name> { <subcut-code> }`
+### `process <name> { <subcut-code> }`
 
-Create an isolated scoped editing block.
+Create an isolated scoped editing process.
 
 ```text
-block {
+process {
   push "videos/intro.mp4"
   trim "00:00:00" "00:00:10"
   export "out/intro.mp4"
 }
 ```
 
-**Note:** You can't have another block inside a block.
+**Note:** You can't have another process inside a process.
 
 ## 🔜 Phase 2 — Templates & Styling
 
@@ -165,7 +165,7 @@ caption subs/v1.vtt embed bottom
 
 ### `use_stack <name>`
 
-(Planned) Restore a previously defined block or stack.
+(Planned) Restore a previously defined process or stack.
 
 ---
 

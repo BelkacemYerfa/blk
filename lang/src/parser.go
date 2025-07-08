@@ -21,7 +21,7 @@ const (
 	THUMBNAIL_FROM Command = "thumbnail_from"
 	SET            Command = "set"
 	USE            Command = "use"
-	BLOCK          Command = "block"
+	process        Command = "process"
 )
 
 type (
@@ -39,7 +39,7 @@ const (
 	ThumbnailStatement Statement = "ThumbnailStatement"
 	SetStatement       Statement = "SetStatement"
 	UseStatement       Statement = "UseStatement"
-	BlockStatement     Statement = "BlockStatement"
+	ProcessStatement   Statement = "ProcessStatement"
 
 	// Expressions
 	LiteralExpression    Expression = "LiteralExpression"
@@ -47,11 +47,12 @@ const (
 	ObjectExpression     Expression = "ObjectExpression"
 
 	// Types
-	// Primitives
-	NumberType   Type = "NumberType"
-	BooleanType  Type = "BooleanType"
-	FilepathType Type = "FilepathType"
+	// Primitive
+	NumberType  Type = "NumberType"
+	BooleanType Type = "BooleanType"
 	// Custom
+	FilterType     Type = "FilterType"
+	FilepathType   Type = "FilepathType"
 	IdentifierType Type = "IdentifierType"
 	TimeType       Type = "TimeType"
 	// Complex
@@ -84,7 +85,7 @@ type ExpressionNode struct {
 type StatementNode struct {
 	Type     Statement // e.g., "push", "set", etc.
 	Params   []ExpressionNode
-	Body     []StatementNode // Only for block/batch/etc.
+	Body     []StatementNode // Only for process/batch/etc.
 	Position Position
 	Order    int
 }
@@ -129,9 +130,9 @@ func (p *Parser) Parse() *AST {
 
 	for p.Pos <= len(p.Tokens) {
 		tok := p.peek()
-
+		fmt.Println(tok)
 		switch tok.Kind {
-		case TokenPush, TokenConcat, TokenTrim, TokenExport, TokenSet, TokenThumbnailFrom, TokenUse, TokenBlock:
+		case TokenPush, TokenConcat, TokenTrim, TokenExport, TokenSet, TokenThumbnailFrom, TokenUse, TokenProcess:
 			node, err := p.parseCommand()
 			if err != nil {
 				fmt.Println(err)
@@ -144,7 +145,7 @@ func (p *Parser) Parse() *AST {
 
 		default:
 			if tok.Kind == TokenCurlyBraceClose || tok.Kind == TokenCurlyBraceOpen {
-				fmt.Printf("unexpected brace token outside of a command block at line %d\n", tok.Row)
+				fmt.Printf("unexpected brace token outside of a command process at line %d\n", tok.Row)
 				return nil
 			}
 			fmt.Printf("unexpected token %s at line %d col %v\n", tok.Text, tok.Row, tok.Col)
@@ -179,8 +180,8 @@ func (p *Parser) parseCommand() (*StatementNode, error) {
 		return p.setHandler(position)
 	case TokenUse:
 		return p.useHandler(position)
-	case TokenBlock:
-		return p.blockHandler(position)
+	case TokenProcess:
+		return p.processHandler(position)
 	}
 
 	// All good, create AST node
@@ -443,7 +444,7 @@ func (p *Parser) thumbnailHandler(pos Position) (*StatementNode, error) {
 	}, nil
 }
 
-func (p *Parser) blockHandler(pos Position) (*StatementNode, error) {
+func (p *Parser) processHandler(pos Position) (*StatementNode, error) {
 	args := make([]ExpressionNode, 0)
 	tok := p.next()
 
@@ -477,10 +478,10 @@ func (p *Parser) blockHandler(pos Position) (*StatementNode, error) {
 		}
 
 		// this part, doesn't allow for nested blocks
-		if ast.Type != BlockStatement {
+		if ast.Type != ProcessStatement {
 			body = append(body, *ast)
 		} else {
-			return nil, fmt.Errorf("ERROR: block isn't allowed inside of another block")
+			return nil, fmt.Errorf("ERROR: process isn't allowed inside of another process")
 		}
 
 	}
@@ -492,7 +493,7 @@ func (p *Parser) blockHandler(pos Position) (*StatementNode, error) {
 	}
 
 	return &StatementNode{
-		Type:     BlockStatement,
+		Type:     ProcessStatement,
 		Params:   args,
 		Body:     body,
 		Position: pos,
@@ -528,13 +529,69 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 		path := tok.Text
 		// check the param format
 		// the param format needs to be a valid path
-		if err := p.videoPathCheck(path); err != nil {
-			return nil, err
+		err := p.videoPathCheck(path)
+		if err != nil {
+			if err.Error() == "ERROR: file extension needs to be a video" {
+				return nil, err
+			}
+			args = append(args, ExpressionNode{
+				Type:     LiteralExpression,
+				ExprType: FilterType,
+				Value:    tok.Text,
+				Position: Position{
+					Col: tok.Col,
+					Row: tok.Row,
+				},
+			})
 		}
 		args = append(args, ExpressionNode{
 			Type:     LiteralExpression,
 			Value:    tok.Text,
 			ExprType: FilepathType,
+			Position: Position{
+				Row: tok.Row,
+				Col: tok.Col,
+			},
+		})
+
+	case TokenBool:
+		args = append(args, ExpressionNode{
+			Type:     LiteralExpression,
+			Value:    tok.Text == "true",
+			ExprType: BooleanType,
+			Position: Position{
+				Row: tok.Row,
+				Col: tok.Col,
+			},
+		})
+	case TokenMinus:
+		tok = p.next()
+		// parse the value first then append it to the args array
+		num, err := strconv.ParseFloat(tok.Text, 64)
+		if err != nil {
+			return nil, err
+		}
+
+		args = append(args, ExpressionNode{
+			Type:     LiteralExpression,
+			Value:    -num,
+			ExprType: NumberType,
+			Position: Position{
+				Row: tok.Row,
+				Col: tok.Col,
+			},
+		})
+
+	case TokenNumber:
+		num, err := strconv.ParseFloat(tok.Text, 64)
+		if err != nil {
+			return nil, err
+		}
+
+		args = append(args, ExpressionNode{
+			Type:     LiteralExpression,
+			Value:    num,
+			ExprType: NumberType,
 			Position: Position{
 				Row: tok.Row,
 				Col: tok.Col,
