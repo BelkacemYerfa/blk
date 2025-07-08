@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"subcut/cmd"
 	"subcut/parser"
 	"subcut/tests"
 )
@@ -88,17 +89,13 @@ func dev() {
 
 func main() {
 
-	arg := ""
-
-	if len(os.Args) < 1 {
-		arg = "dev"
-	} else {
-		arg = os.Args[1]
-	}
+	arg := os.Args[1]
 
 	if arg == "dev" {
 		dev()
-	} else {
+	} else if arg == "test" {
 		tests.TestRunner()
+	} else {
+		cmd.Execute()
 	}
 }
