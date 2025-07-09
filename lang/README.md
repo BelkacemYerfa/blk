@@ -32,18 +32,6 @@ set bg_track {
 
 ---
 
-### `push <video.mp4>`
-
-Push a video file onto the stack.
-
-Example:
-
-```text
-push "videos/intro.mp4"
-```
-
----
-
 ### `trim <start> <end> (video-path?)`
 
 Trim the top videos on the stack to a time range.
@@ -55,14 +43,6 @@ trim "00:00:05" "00:00:30"
 ```
 
 **Note:** if <video.mp4> is provided, it will be used as the source for trimming.
-
-### `export <file.mp4>`
-
-Write the current top of the stack to the given path.
-
-```text
-export "out/video.mp4"
-```
 
 ---
 
@@ -123,6 +103,127 @@ process {
 
 **Note:** You can't have another process inside a process.
 
+---
+
+### `for each <name> in <folder-path> [recurse] { ... }`
+
+Iterate over every video file in a directory and apply a block of operations.
+
+```text
+for each file in "videos/" {
+  push file
+  trim 00:00:00 00:00:30
+  export "out/{filename}_short.mp4"
+}
+```
+
+#### Optional `recurse`
+
+Add `recurse` after the path to recursively search in subdirectories.
+
+```text
+for each video in "projects/" recurse {
+  push video
+  caption "subs/{filename}.vtt" embed
+  export "out/processed/{filename}.mp4"
+}
+```
+
+#### Runtime value exposure
+
+When using for each, the current file's path and metadata are made available within the loop's element scope through special read-only runtime properties:
+
+| Properties | Description                                    |
+| ---------- | ---------------------------------------------- |
+| `filepath` | Full path to the current file                  |
+| `filename` | File name without extension (e.g., `clip01`)   |
+| `ext`      | File extension (e.g., `.mp4`, `.mov`)          |
+| `meta`     | Metadata of the file (duration, resolution...) |
+
+Example using metadata:
+
+```text
+for each f in "clips/" {
+  if meta.duration < 5
+    skip
+
+  push f
+  export "out/{filename}_final.mp4"
+}
+```
+
+---
+
+### `if <condition>`
+
+Conditionally execute the next line or block.
+
+```text
+if meta.duration > 10
+  trim 00:00:00 00:00:10
+```
+
+With block:
+
+```text
+if index == 0 {
+  caption "subs/intro.vtt" embed
+}
+```
+
+---
+
+### `else if <condition>`
+
+Chain additional conditions.
+
+```text
+if index == 0 {
+  caption "subs/intro.vtt" embed
+} else if index == 1 {
+  caption "subs/second.vtt" embed
+}
+```
+
+---
+
+### `else`
+
+Fallback if no previous conditions match.
+
+```text
+if index == 0 {
+  caption "subs/intro.vtt" embed
+} else {
+  caption "subs/default.vtt" embed
+}
+```
+
+---
+
+### `skip`
+
+Skips the current iteration (like `continue`).
+
+```text
+if meta.duration < 5
+  skip
+```
+
+---
+
+### Notes on Reserved Variables
+
+These names are reserved in `for each` and runtime scope:
+
+- `file`
+- `filename`
+- `ext`
+- `index`
+- `meta`
+
+They are automatically assigned per iteration. Attempting to override them will throw a parsing/runtime error.
+
 ## 🔜 Phase 2 — Templates & Styling
 
 ### `template <name>`
@@ -179,22 +280,6 @@ Example:
 split_into_clips 10 "out/clips/"
 ```
 
----
-
-### `batch <input-dir> <output-dir> <template>`
-
-Batch edit every video in a folder.
-
-```text
-batch "videos/" "out/" "tiktok" {
- trim 00:00:00 00:01:00
- caption auto embed
- export auto
-}
-```
-
----
-
 ## ✨ Optional / Advanced (Planned)
 
 ### `detect_speech`
@@ -241,3 +326,7 @@ export out/final_tiktok.mp4
 ```
 
 ---
+
+```
+
+```

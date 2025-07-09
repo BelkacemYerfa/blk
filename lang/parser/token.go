@@ -14,6 +14,8 @@ const (
 	TokenUse           TokenKind = "use"
 	TokenOn            TokenKind = "on"
 	TokenProcess       TokenKind = "process"
+	TokenIf            TokenKind = "if"
+	TokenElse          TokenKind = "else"
 
 	// Block Units
 	TokenCurlyBraceOpen  TokenKind = "{"
@@ -22,6 +24,12 @@ const (
 	TokenColon           TokenKind = ":"
 	TokenMinus           TokenKind = "-"
 	TokenPlus            TokenKind = "+"
+	TokenEqual           TokenKind = "="
+	TokenEquals          TokenKind = "=="
+	TokenGreater         TokenKind = ">"
+	TokenLess            TokenKind = "<"
+	TokenGreaterOrEqual  TokenKind = ">="
+	TokenLessOrEqual     TokenKind = "<="
 
 	// Comment
 	TokenComment TokenKind = "#"

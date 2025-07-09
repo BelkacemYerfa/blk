@@ -1,14 +1,9 @@
 package parser
 
 import (
-	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
-	"strings"
-	"subcut/internals"
 )
 
 func NewParser(tokens []Token) *Parser {
@@ -43,7 +38,7 @@ func (p *Parser) Parse() *AST {
 		tok := p.peek()
 		fmt.Println(tok)
 		switch tok.Kind {
-		case TokenPush, TokenConcat, TokenTrim, TokenExport, TokenSet, TokenThumbnailFrom, TokenUse, TokenProcess:
+		case TokenPush, TokenConcat, TokenTrim, TokenExport, TokenSet, TokenThumbnailFrom, TokenUse, TokenProcess, TokenIf, TokenElse:
 			node, err := p.parseCommand()
 			if err != nil {
 				fmt.Println(err)
@@ -53,7 +48,9 @@ func (p *Parser) Parse() *AST {
 
 		case TokenEOF:
 			return &ast
-
+		case TokenError:
+			fmt.Println(tok.Text)
+			return nil
 		default:
 			if tok.Kind == TokenCurlyBraceClose || tok.Kind == TokenCurlyBraceOpen {
 				fmt.Printf("unexpected brace token outside of a command process at line %d\n", tok.Row)
@@ -93,51 +90,149 @@ func (p *Parser) parseCommand() (*StatementNode, error) {
 		return p.useHandler(position)
 	case TokenProcess:
 		return p.processHandler(position)
+	case TokenIf:
+		return p.ifHandler(position)
+	case TokenElse:
+		return p.elseHandler(position)
 	}
 
 	// All good, create AST node
 	return &StatementNode{}, fmt.Errorf("ERROR: unexpected token appeared, line %v row%v", cmdToken.Row, cmdToken.Col)
 }
 
-func (p *Parser) videoPathCheck(path string) error {
-	path = strings.TrimSpace(path)
+func (p *Parser) ifHandler(pos Position) (*StatementNode, error) {
+	args := make([]ExpressionNode, 0)
 
-	_, err := isValidPathFormat(path)
-	if err != nil {
-		return err
+	tok := p.next()
+
+	if tok.Kind != TokenIdentifier {
+		return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenIdentifier, tok.Kind)
 	}
 
-	osPath, _ := os.Getwd()
-	path = filepath.Join(osPath, path)
-	path = filepath.Clean(path)
+	args = append(args, ExpressionNode{
+		Type:     IdentifierExpression,
+		Value:    tok.Text,
+		ExprType: IdentifierType,
+		Position: Position{
+			Col: tok.Col,
+			Row: tok.Row,
+		},
+	})
 
-	if !checkFileIsOfTypeMode(path, internals.VIDEO) {
-		return errors.New("ERROR: file extension needs to be a video")
+	tok = p.next()
+
+	switch tok.Kind {
+	case TokenEquals, TokenGreater, TokenGreaterOrEqual, TokenLess, TokenLessOrEqual:
+		tok = p.next()
+		switch tok.Kind {
+		case TokenString:
+			args = append(args, ExpressionNode{
+				Type:     LiteralExpression,
+				Value:    tok.Text,
+				ExprType: StringType,
+				Position: Position{
+					Col: tok.Col,
+					Row: tok.Row,
+				},
+			})
+		case TokenNumber:
+			num, err := strconv.ParseFloat(tok.Text, 64)
+			if err != nil {
+				return nil, fmt.Errorf("invalid number format, %v", err)
+			}
+			args = append(args, ExpressionNode{
+				Type:     LiteralExpression,
+				Value:    num,
+				ExprType: NumberType,
+				Position: Position{
+					Col: tok.Col,
+					Row: tok.Row,
+				},
+			})
+		case TokenIdentifier:
+			args = append(args, ExpressionNode{
+				Type:     IdentifierExpression,
+				Value:    tok.Text,
+				ExprType: IdentifierType,
+				Position: Position{
+					Col: tok.Col,
+					Row: tok.Row,
+				},
+			})
+		default:
+			return nil, fmt.Errorf("ERROR: expected operator (string|number|identifier), got %v", tok.Kind)
+		}
+	default:
+		return nil, fmt.Errorf("ERROR: expected operator (== | <= | ...etc), got %v", tok.Kind)
 	}
 
-	return nil
+	tok = p.next()
+
+	if tok.Kind != TokenCurlyBraceOpen {
+		return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenCurlyBraceOpen, tok.Kind)
+	}
+
+	body := make(AST, 0)
+
+	for p.peek().Kind != TokenCurlyBraceClose {
+		ast, err := p.parseCommand()
+		if err != nil {
+			return nil, err
+		}
+		body = append(body, *ast)
+	}
+
+	tok = p.next()
+
+	if tok.Kind != TokenCurlyBraceClose {
+		return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenCurlyBraceClose, tok.Kind)
+	}
+
+	return &StatementNode{
+		Type:     IfStatement,
+		Params:   args,
+		Body:     body,
+		Position: pos,
+		Order:    p.Pos,
+	}, nil
 }
 
-func (p *Parser) imagePathCheck(path string) error {
-	path = strings.TrimSpace(path)
+func (p *Parser) elseHandler(pos Position) (*StatementNode, error) {
+	tok := p.next()
 
-	_, err := isValidPathFormat(path)
-	if err != nil {
-		return err
+	switch tok.Kind {
+	case TokenIf:
+		return p.ifHandler(pos)
+	case TokenCurlyBraceOpen:
+		body := make(AST, 0)
+
+		for p.peek().Kind != TokenCurlyBraceClose {
+			ast, err := p.parseCommand()
+			if err != nil {
+				return nil, err
+			}
+			body = append(body, *ast)
+		}
+		tok = p.next()
+
+		if tok.Kind != TokenCurlyBraceClose {
+			return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenCurlyBraceClose, tok.Kind)
+		}
+
+		return &StatementNode{
+			Type:     ElseStatement,
+			Params:   []ExpressionNode{},
+			Body:     body,
+			Position: pos,
+			Order:    p.Pos,
+		}, nil
+	default:
+		return nil, fmt.Errorf("ERROR: expected (if statement | nothing), got %v", tok.Kind)
 	}
-
-	osPath, _ := os.Getwd()
-	path = filepath.Join(osPath, path)
-	path = filepath.Clean(path)
-
-	if !checkFileIsOfTypeMode(path, internals.IMAGE) {
-		return errors.New("ERROR: file extension needs to be a image")
-	}
-
-	return nil
 }
 
 func (p *Parser) pushHandler(pos Position) (*StatementNode, error) {
+
 	args := make([]ExpressionNode, 0)
 
 	tok := p.next()
@@ -147,16 +242,12 @@ func (p *Parser) pushHandler(pos Position) (*StatementNode, error) {
 	}
 
 	if tok.Kind == TokenString {
-		path := tok.Text
 		// check the param format
 		// the param format needs to be a valid path
-		if err := p.videoPathCheck(path); err != nil {
-			return nil, err
-		}
 		args = append(args, ExpressionNode{
 			Type:     LiteralExpression,
-			ExprType: FilepathType,
 			Value:    tok.Text,
+			ExprType: StringType,
 			Position: Position{
 				Col: tok.Col,
 				Row: tok.Row,
@@ -210,14 +301,10 @@ func (p *Parser) trimHandler(pos Position) (*StatementNode, error) {
 
 	switch tok.Kind {
 	case TokenString:
-		if err := p.videoPathCheck(tok.Text); err != nil {
-			return nil, err
-		}
-
 		args = append(args, ExpressionNode{
 			Type:     LiteralExpression,
-			ExprType: FilepathType,
 			Value:    tok.Text,
+			ExprType: StringType,
 			Position: Position{
 				Row: tok.Row,
 				Col: tok.Col,
@@ -227,8 +314,8 @@ func (p *Parser) trimHandler(pos Position) (*StatementNode, error) {
 	case TokenIdentifier:
 		args = append(args, ExpressionNode{
 			Type:     LiteralExpression,
-			ExprType: FilepathType,
 			Value:    tok.Text,
+			ExprType: IdentifierType,
 			Position: Position{
 				Row: tok.Row,
 				Col: tok.Col,
@@ -238,7 +325,7 @@ func (p *Parser) trimHandler(pos Position) (*StatementNode, error) {
 		p.Pos--
 		args = append(args, ExpressionNode{
 			Type:     LiteralExpression,
-			ExprType: FilepathType,
+			ExprType: StringType,
 			Value:    "last", // indicates that this will get applied at the last element in the stack
 			Position: Position{
 				Row: tok.Row,
@@ -320,14 +407,11 @@ func (p *Parser) thumbnailHandler(pos Position) (*StatementNode, error) {
 
 	// this may return an error cause it forces to use a video format only
 	if tok.Kind == TokenString {
-		if err := p.imagePathCheck(tok.Text); err != nil {
-			return nil, err
-		}
 
 		args = append(args, ExpressionNode{
 			Type:     LiteralExpression,
 			Value:    tok.Text,
-			ExprType: FilepathType,
+			ExprType: StringType,
 			Position: Position{
 				Row: tok.Row,
 				Col: tok.Col,
@@ -437,28 +521,10 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 
 	switch tok.Kind {
 	case TokenString:
-		path := tok.Text
-		// check the param format
-		// the param format needs to be a valid path
-		err := p.videoPathCheck(path)
-		if err != nil {
-			if err.Error() == "ERROR: file extension needs to be a video" {
-				return nil, err
-			}
-			args = append(args, ExpressionNode{
-				Type:     LiteralExpression,
-				ExprType: FilterType,
-				Value:    tok.Text,
-				Position: Position{
-					Col: tok.Col,
-					Row: tok.Row,
-				},
-			})
-		}
 		args = append(args, ExpressionNode{
 			Type:     LiteralExpression,
 			Value:    tok.Text,
-			ExprType: FilepathType,
+			ExprType: StringType,
 			Position: Position{
 				Row: tok.Row,
 				Col: tok.Col,
@@ -567,7 +633,7 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 				val = ExpressionNode{
 					Type:     LiteralExpression,
 					Value:    value.Text,
-					ExprType: FilepathType,
+					ExprType: StringType,
 					Position: Position{
 						Row: key.Row,
 						Col: key.Col,
@@ -659,14 +725,10 @@ func (p *Parser) useHandler(pos Position) (*StatementNode, error) {
 		}
 
 		if tok.Kind == TokenString {
-			if err := p.videoPathCheck(tok.Text); err != nil {
-				return nil, err
-			}
-
 			args = append(args, ExpressionNode{
 				Type:     LiteralExpression,
 				Value:    tok.Text,
-				ExprType: FilepathType,
+				ExprType: StringType,
 				Position: Position{
 					Row: tok.Row,
 					Col: tok.Col,
@@ -707,16 +769,11 @@ func (p *Parser) exportHandler(pos Position) (*StatementNode, error) {
 	}
 	// check the param format
 	if tok.Kind == TokenString {
-		path := tok.Text
-
-		if err := p.videoPathCheck(path); err != nil {
-			return nil, err
-		}
 
 		args = append(args, ExpressionNode{
 			Type:     LiteralExpression,
 			Value:    tok.Text,
-			ExprType: FilepathType,
+			ExprType: StringType,
 			Position: Position{
 				Row: tok.Row,
 				Col: tok.Col,
@@ -742,36 +799,4 @@ func (p *Parser) exportHandler(pos Position) (*StatementNode, error) {
 		Position: pos,
 		Order:    p.Pos,
 	}, nil
-}
-
-func isValidPathFormat(path string) (bool, error) {
-	if strings.ContainsAny(path, `<>:"|?*`) {
-		return false, errors.New("ERROR: special characters like (<>:'|?*) are not allowed")
-	}
-
-	// Must be valid filepath format
-	if !filepath.IsLocal(path) {
-		return false, errors.New("ERROR: path is invalid")
-	}
-
-	// Must have extension
-	ext := filepath.Ext(path)
-	if ext == "" {
-		return false, errors.New("ERROR: file at the end of path needs to have an extension")
-	}
-	return true, nil
-}
-
-func checkFileIsOfTypeMode(path string, mode internals.Mode) bool {
-	ext := filepath.Ext(path)
-
-	modeOptions := make([]string, 0)
-	switch mode {
-	case internals.VIDEO:
-		modeOptions = videoExts
-	case internals.IMAGE:
-		modeOptions = imageExts
-	}
-
-	return internals.CheckIfElementExist(modeOptions, ext)
 }

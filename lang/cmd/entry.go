@@ -26,17 +26,17 @@ var commands map[string]CommandInfo
 
 func init() {
 	commands = map[string]CommandInfo{
-		"run": CommandInfo{
+		"run": {
 			Description: "Takes the filepath of program, and executes it",
 			Function:    Run,
 			Flags: []FlagInfo{
-				FlagInfo{
+				{
 					Name:        "-f",
 					Description: "program file path",
 				},
 			},
 		},
-		"help": CommandInfo{
+		"help": {
 			Description: "Prints the usage of all commands",
 			Function:    Help,
 			Flags:       []FlagInfo{},
@@ -125,6 +125,9 @@ func Run(args []string) {
 
 	lexer := parser.NewLexer(targetFile, content)
 	tokens := lexer.Tokenize()
+
+	// tokens
+	fmt.Println(tokens)
 
 	parser := parser.NewParser(tokens)
 	ast := parser.Parse()

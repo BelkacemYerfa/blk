@@ -16,6 +16,8 @@ const (
 	SetStatement       Statement = "SetStatement"
 	UseStatement       Statement = "UseStatement"
 	ProcessStatement   Statement = "ProcessStatement"
+	IfStatement        Statement = "IfStatement"
+	ElseStatement      Statement = "ElseStatement"
 
 	// Expressions
 	LiteralExpression    Expression = "LiteralExpression"
@@ -26,9 +28,8 @@ const (
 	// Primitive
 	NumberType  Type = "NumberType"
 	BooleanType Type = "BooleanType"
+	StringType  Type = "StringType"
 	// Custom
-	FilterType     Type = "FilterType"
-	FilepathType   Type = "FilepathType"
 	IdentifierType Type = "IdentifierType"
 	TimeType       Type = "TimeType"
 	// Complex

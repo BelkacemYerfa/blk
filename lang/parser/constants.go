@@ -1,16 +1,6 @@
 package parser
 
 var (
-	videoExts = []string{
-		".mp4", ".mov", ".avi", ".mkv",
-		".webm", ".flv", ".wmv",
-	}
-
-	imageExts = []string{
-		".jpg", ".jpeg", ".png", ".gif",
-		".bmp", ".webp", ".tiff",
-	}
-
 	keywords = map[string]TokenKind{
 		"set":            TokenSet,
 		"push":           TokenPush,
@@ -21,6 +11,8 @@ var (
 		"thumbnail_from": TokenThumbnailFrom,
 		"concat":         TokenConcat,
 		"process":        TokenProcess,
+		"if":             TokenIf,
+		"else":           TokenElse,
 		"true":           TokenBool,
 		"false":          TokenBool,
 	}

@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"strings"
 	"time"
 	"unicode"
@@ -95,6 +96,62 @@ func (l *Lexer) NextToken() Token {
 		token.LiteralToken = LiteralToken{
 			Kind: TokenPlus,
 			Text: "+",
+		}
+		return token
+	case TokenEqual:
+		l.readChar()
+		equalChar := string(l.Content[l.Cur])
+		if equalChar == TokenEqual {
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenEquals,
+				Text: "==",
+			}
+		} else {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenError,
+				Text: fmt.Sprintf("ERROR: expected = token, got %v", char),
+			}
+		}
+		return token
+	case TokenGreater:
+		l.readChar()
+		nextChar := string(l.Content[l.Cur])
+		if nextChar == TokenEqual {
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenGreaterOrEqual,
+				Text: ">=",
+			}
+		} else if isLetter(char) {
+			return l.readIdentifier()
+		} else if isDigit(char) {
+			return l.readNumber()
+		} else {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenGreater,
+				Text: ">",
+			}
+		}
+		return token
+	case TokenLess:
+		l.readChar()
+		nextChar := string(l.Content[l.Cur])
+		if nextChar == TokenEqual {
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenGreaterOrEqual,
+				Text: "<=",
+			}
+		} else if isLetter(char) {
+			return l.readIdentifier()
+		} else if isDigit(char) {
+			return l.readNumber()
+		} else {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenLess,
+				Text: "<",
+			}
 		}
 		return token
 	case TokenQuote:
@@ -257,9 +314,6 @@ func (l *Lexer) readNumber() Token {
 func (l *Lexer) skipComment() {
 	for l.Cur < len(l.Content) && l.Content[l.Cur] == '#' {
 		for l.Cur < len(l.Content) && l.Content[l.Cur] != '\n' {
-			l.readChar()
-		}
-		if l.Cur < len(l.Content) && l.Content[l.Cur] == '\n' {
 			l.readChar()
 		}
 		l.skipWhiteSpace()
