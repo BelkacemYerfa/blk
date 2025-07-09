@@ -25,6 +25,7 @@ const (
 	LiteralExpression    Expression = "LiteralExpression"
 	IdentifierExpression Expression = "IdentifierExpression"
 	ObjectExpression     Expression = "ObjectExpression"
+	MemberExpression     Expression = "MemberAccessExpression"
 
 	// Types
 	// Primitive
@@ -41,6 +42,11 @@ const (
 type Position struct {
 	Row int
 	Col int
+}
+
+type MemberAccessExpression struct {
+	Name     string
+	Property *MemberAccessExpression
 }
 
 type ExpressionNode struct {

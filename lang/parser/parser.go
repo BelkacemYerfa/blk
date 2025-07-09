@@ -104,6 +104,36 @@ func (p *Parser) parseCommand() (*StatementNode, error) {
 	return &StatementNode{}, fmt.Errorf("ERROR: unexpected token appeared, line %v row%v", cmdToken.Row, cmdToken.Col)
 }
 
+func (p *Parser) parseMemberAccess() (*MemberAccessExpression, error) {
+	tok := p.next()
+
+	if tok.Kind != TokenIdentifier {
+		return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenIdentifier, tok.Kind)
+	}
+
+	identifierName := tok.Text
+
+	tok = p.next()
+
+	if tok.Kind == TokenDot {
+		property, err := p.parseMemberAccess()
+
+		if err != nil {
+			return nil, err
+		}
+
+		return &MemberAccessExpression{
+			Name:     identifierName,
+			Property: property,
+		}, nil
+	} else {
+		p.Pos--
+		return &MemberAccessExpression{
+			Name: identifierName,
+		}, nil
+	}
+}
+
 func (p *Parser) foreachHandler(pos Position) (*StatementNode, error) {
 	args := make([]ExpressionNode, 0)
 	tok := p.next()
@@ -206,13 +236,21 @@ func (p *Parser) ifHandler(pos Position) (*StatementNode, error) {
 		return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenIdentifier, tok.Kind)
 	}
 
+	p.Pos--
+
+	prop, err := p.parseMemberAccess()
+
+	if err != nil {
+		return nil, err
+	}
+
 	args = append(args, ExpressionNode{
 		Type:     IdentifierExpression,
-		Value:    tok.Text,
+		Value:    prop,
 		ExprType: IdentifierType,
 		Position: Position{
-			Col: tok.Col,
 			Row: tok.Row,
+			Col: tok.Col,
 		},
 	})
 
@@ -638,6 +676,7 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 				Col: tok.Col,
 			},
 		})
+
 	case TokenMinus:
 		tok = p.next()
 		// parse the value first then append it to the args array
@@ -655,6 +694,7 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 				Col: tok.Col,
 			},
 		})
+
 	case TokenPlus:
 		tok = p.next()
 		// parse the value first then append it to the args array
@@ -690,9 +730,16 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 		})
 
 	case TokenIdentifier:
+		p.Pos--
+		prop, err := p.parseMemberAccess()
+
+		if err != nil {
+			return nil, err
+		}
+
 		args = append(args, ExpressionNode{
 			Type:     IdentifierExpression,
-			Value:    tok.Text,
+			Value:    prop,
 			ExprType: IdentifierType,
 			Position: Position{
 				Row: tok.Row,

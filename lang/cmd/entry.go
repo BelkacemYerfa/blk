@@ -129,8 +129,8 @@ func Run(args []string) {
 	// tokens
 	fmt.Println(tokens)
 
-	parser := parser.NewParser(tokens)
-	ast := parser.Parse()
+	p := parser.NewParser(tokens)
+	ast := p.Parse()
 
 	if ast == nil {
 		fmt.Println("ERROR: result of the parsing is null, check again")

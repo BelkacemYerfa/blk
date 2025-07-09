@@ -26,6 +26,7 @@ const (
 	TokenCurlyBraceClose TokenKind = "}"
 	TokenQuote           TokenKind = `"`
 	TokenColon           TokenKind = ":"
+	TokenDot             TokenKind = "."
 	TokenMinus           TokenKind = "-"
 	TokenPlus            TokenKind = "+"
 	TokenEqual           TokenKind = "="
