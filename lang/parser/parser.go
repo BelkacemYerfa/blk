@@ -38,7 +38,7 @@ func (p *Parser) Parse() *AST {
 		tok := p.peek()
 		fmt.Println(tok)
 		switch tok.Kind {
-		case TokenPush, TokenConcat, TokenTrim, TokenExport, TokenSet, TokenThumbnailFrom, TokenUse, TokenProcess, TokenIf, TokenElse:
+		case TokenPush, TokenConcat, TokenTrim, TokenExport, TokenSet, TokenThumbnailFrom, TokenUse, TokenProcess, TokenIf, TokenElse, TokenForEach, TokenSkip:
 			node, err := p.parseCommand()
 			if err != nil {
 				fmt.Println(err)
@@ -94,10 +94,107 @@ func (p *Parser) parseCommand() (*StatementNode, error) {
 		return p.ifHandler(position)
 	case TokenElse:
 		return p.elseHandler(position)
+	case TokenForEach:
+		return p.foreachHandler(position)
+	case TokenSkip:
+		return p.skipHandler(position)
 	}
 
 	// All good, create AST node
 	return &StatementNode{}, fmt.Errorf("ERROR: unexpected token appeared, line %v row%v", cmdToken.Row, cmdToken.Col)
+}
+
+func (p *Parser) foreachHandler(pos Position) (*StatementNode, error) {
+	args := make([]ExpressionNode, 0)
+	tok := p.next()
+
+	if tok.Kind != TokenIdentifier {
+		return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenIdentifier, tok.Kind)
+	}
+
+	args = append(args, ExpressionNode{
+		Type:     IdentifierExpression,
+		Value:    tok.Text,
+		ExprType: IdentifierType,
+		Position: Position{
+			Col: tok.Col,
+			Row: tok.Row,
+		},
+	})
+
+	tok = p.next()
+
+	if tok.Kind != TokenIn {
+		return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenIn, tok.Kind)
+	}
+
+	tok = p.next()
+
+	if tok.Kind != TokenString && tok.Kind != TokenIdentifier {
+		return nil, fmt.Errorf("ERROR: expected (string | identifier), got %v", tok.Kind)
+	}
+
+	tok = p.next()
+
+	if tok.Kind == TokenRecurse {
+		args = append(args, ExpressionNode{
+			Type:     IdentifierExpression,
+			Value:    tok.Text,
+			ExprType: IdentifierType,
+			Position: Position{
+				Col: tok.Col,
+				Row: tok.Row,
+			},
+		})
+	} else {
+		p.Pos--
+	}
+
+	tok = p.next()
+
+	if tok.Kind != TokenCurlyBraceOpen {
+		return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenCurlyBraceOpen, tok.Kind)
+	}
+
+	body := make(AST, 0)
+
+	for p.peek().Kind != TokenCurlyBraceClose {
+		ast, err := p.parseCommand()
+		if err != nil {
+			return nil, err
+		}
+		body = append(body, *ast)
+	}
+
+	tok = p.next()
+
+	if tok.Kind != TokenCurlyBraceClose {
+		return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenCurlyBraceClose, tok.Kind)
+	}
+
+	return &StatementNode{
+		Type:     ForeachStatement,
+		Params:   args,
+		Body:     body,
+		Position: pos,
+		Order:    p.Pos,
+	}, nil
+}
+
+func (p *Parser) skipHandler(pos Position) (*StatementNode, error) {
+	tok := p.peek()
+
+	if tokenKey, isMatched := keywords[tok.Text]; isMatched {
+		if tokenKey == TokenBool {
+			return nil, fmt.Errorf("ERROR: expected nothing, got %v", TokenBool)
+		}
+	}
+	return &StatementNode{
+		Type:     SkipStatement,
+		Params:   []ExpressionNode{},
+		Position: pos,
+		Order:    p.Pos,
+	}, nil
 }
 
 func (p *Parser) ifHandler(pos Position) (*StatementNode, error) {

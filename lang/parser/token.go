@@ -16,6 +16,10 @@ const (
 	TokenProcess       TokenKind = "process"
 	TokenIf            TokenKind = "if"
 	TokenElse          TokenKind = "else"
+	TokenForEach       TokenKind = "foreach"
+	TokenIn            TokenKind = "in"
+	TokenRecurse       TokenKind = "recurse"
+	TokenSkip          TokenKind = "skip"
 
 	// Block Units
 	TokenCurlyBraceOpen  TokenKind = "{"

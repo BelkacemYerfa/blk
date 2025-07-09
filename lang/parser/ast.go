@@ -18,6 +18,8 @@ const (
 	ProcessStatement   Statement = "ProcessStatement"
 	IfStatement        Statement = "IfStatement"
 	ElseStatement      Statement = "ElseStatement"
+	ForeachStatement   Statement = "ForeachStatement"
+	SkipStatement      Statement = "SkipStatement"
 
 	// Expressions
 	LiteralExpression    Expression = "LiteralExpression"

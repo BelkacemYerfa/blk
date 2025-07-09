@@ -13,6 +13,10 @@ var (
 		"process":        TokenProcess,
 		"if":             TokenIf,
 		"else":           TokenElse,
+		"foreach":        TokenForEach,
+		"in":             TokenIn,
+		"recurse":        TokenRecurse,
+		"skip":           TokenSkip,
 		"true":           TokenBool,
 		"false":          TokenBool,
 	}
