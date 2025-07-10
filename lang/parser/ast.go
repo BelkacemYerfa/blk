@@ -4,6 +4,7 @@ type (
 	Statement  = string
 	Expression = string
 	Type       = string
+	Operator   = string
 )
 
 const (
@@ -26,6 +27,16 @@ const (
 	IdentifierExpression Expression = "IdentifierExpression"
 	ObjectExpression     Expression = "ObjectExpression"
 	MemberExpression     Expression = "MemberAccessExpression"
+	BinaryExpression     Expression = "BinaryExpression"
+	UnaryExpression      Expression = "UnaryExpression"
+
+	// Operators
+	EqualsOperator         Operator = "=="
+	GreaterOperator        Operator = ">"
+	GreaterOrEqualOperator Operator = ">="
+	LessOperator           Operator = "<"
+	LessOrEqualOperator    Operator = "<="
+	ExclamationOperator    Operator = "!"
 
 	// Types
 	// Primitive
@@ -49,16 +60,30 @@ type MemberAccessExpression struct {
 	Property *MemberAccessExpression
 }
 
+type BinaryExpressionNode struct {
+	Type     Expression
+	Left     ExpressionNode
+	Right    ExpressionNode
+	Operator Operator
+}
+
+type UnaryExpressionNode struct {
+	Type     Expression
+	Operator Operator
+	Right    ExpressionNode
+}
+
 type ExpressionNode struct {
-	Type     Expression // "literal_expression", "identifier_expression", etc.
-	Value    any        // string, float64, bool, or even ObjectLiteral
-	ExprType Type       // For type-checking: "number", "bool", etc.
-	Position Position
+	Type       Expression // "literal_expression", "identifier_expression", etc.
+	Identifier string     // used when declaring variables (it will hold the value name)
+	Value      any        // string, float64, bool, or even ObjectLiteral for identifier type
+	ExprType   Type       // For type-checking: "number", "bool", etc.
+	Position   Position
 }
 
 type StatementNode struct {
-	Type     Statement // e.g., "push", "set", etc.
-	Params   []ExpressionNode
+	Type     Statement       // e.g., "push", "set", etc.
+	Params   []any           // can take an expression node or a binary expression node
 	Body     []StatementNode // Only for process/batch/etc.
 	Position Position
 	Order    int

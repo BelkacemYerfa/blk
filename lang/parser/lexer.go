@@ -105,6 +105,13 @@ func (l *Lexer) NextToken() Token {
 			Text: "+",
 		}
 		return token
+	case TokenExclamation:
+		l.readChar()
+		token.LiteralToken = LiteralToken{
+			Kind: TokenExclamation,
+			Text: "!",
+		}
+		return token
 	case TokenEqual:
 		l.readChar()
 		equalChar := string(l.Content[l.Cur])

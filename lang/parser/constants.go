@@ -20,4 +20,16 @@ var (
 		"true":           TokenBool,
 		"false":          TokenBool,
 	}
+
+	binOperators = map[TokenKind]Operator{
+		TokenEquals:         "==",
+		TokenGreater:        ">",
+		TokenGreaterOrEqual: ">=",
+		TokenLess:           "<",
+		TokenLessOrEqual:    "<=",
+	}
+
+	unaryOperators = map[TokenKind]Operator{
+		TokenEquals: "!",
+	}
 )

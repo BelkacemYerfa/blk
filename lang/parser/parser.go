@@ -135,7 +135,7 @@ func (p *Parser) parseMemberAccess() (*MemberAccessExpression, error) {
 }
 
 func (p *Parser) foreachHandler(pos Position) (*StatementNode, error) {
-	args := make([]ExpressionNode, 0)
+	args := make([]any, 0)
 	tok := p.next()
 
 	if tok.Kind != TokenIdentifier {
@@ -221,84 +221,128 @@ func (p *Parser) skipHandler(pos Position) (*StatementNode, error) {
 	}
 	return &StatementNode{
 		Type:     SkipStatement,
-		Params:   []ExpressionNode{},
+		Params:   []any{},
 		Position: pos,
 		Order:    p.Pos,
 	}, nil
 }
 
 func (p *Parser) ifHandler(pos Position) (*StatementNode, error) {
-	args := make([]ExpressionNode, 0)
+	args := make([]any, 0)
 
 	tok := p.next()
 
-	if tok.Kind != TokenIdentifier {
-		return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenIdentifier, tok.Kind)
+	if tok.Kind != TokenIdentifier && tok.Kind != TokenExclamation {
+		return nil, fmt.Errorf("ERROR: expected (%v|%v), got %v", TokenIdentifier, TokenExclamation, tok.Kind)
 	}
 
-	p.Pos--
+	if tok.Kind == TokenIdentifier {
+		p.Pos--
 
-	prop, err := p.parseMemberAccess()
+		prop, err := p.parseMemberAccess()
 
-	if err != nil {
-		return nil, err
-	}
-
-	args = append(args, ExpressionNode{
-		Type:     IdentifierExpression,
-		Value:    prop,
-		ExprType: IdentifierType,
-		Position: Position{
-			Row: tok.Row,
-			Col: tok.Col,
-		},
-	})
-
-	tok = p.next()
-
-	switch tok.Kind {
-	case TokenEquals, TokenGreater, TokenGreaterOrEqual, TokenLess, TokenLessOrEqual:
-		tok = p.next()
-		switch tok.Kind {
-		case TokenString:
-			args = append(args, ExpressionNode{
-				Type:     LiteralExpression,
-				Value:    tok.Text,
-				ExprType: StringType,
-				Position: Position{
-					Col: tok.Col,
-					Row: tok.Row,
-				},
-			})
-		case TokenNumber:
-			num, err := strconv.ParseFloat(tok.Text, 64)
-			if err != nil {
-				return nil, fmt.Errorf("invalid number format, %v", err)
-			}
-			args = append(args, ExpressionNode{
-				Type:     LiteralExpression,
-				Value:    num,
-				ExprType: NumberType,
-				Position: Position{
-					Col: tok.Col,
-					Row: tok.Row,
-				},
-			})
-		case TokenIdentifier:
-			args = append(args, ExpressionNode{
-				Type:     IdentifierExpression,
-				Value:    tok.Text,
-				ExprType: IdentifierType,
-				Position: Position{
-					Col: tok.Col,
-					Row: tok.Row,
-				},
-			})
-		default:
-			return nil, fmt.Errorf("ERROR: expected operator (string|number|identifier), got %v", tok.Kind)
+		if err != nil {
+			return nil, err
 		}
-	default:
-		return nil, fmt.Errorf("ERROR: expected operator (== | <= | ...etc), got %v", tok.Kind)
+
+		leftIdExpr := ExpressionNode{
+			Type:     IdentifierExpression,
+			Value:    prop,
+			ExprType: IdentifierType,
+			Position: Position{
+				Row: tok.Row,
+				Col: tok.Col,
+			},
+		}
+
+		tok = p.next()
+
+		switch tok.Kind {
+		case TokenEquals, TokenGreater, TokenGreaterOrEqual, TokenLess, TokenLessOrEqual:
+			binExpr := BinaryExpressionNode{
+				Type:     BinaryExpression,
+				Left:     leftIdExpr,
+				Operator: binOperators[tok.Kind],
+			}
+
+			tok = p.next()
+			switch tok.Kind {
+			case TokenString:
+				binExpr.Right = ExpressionNode{
+					Type:     LiteralExpression,
+					Value:    tok.Text,
+					ExprType: StringType,
+					Position: Position{
+						Col: tok.Col,
+						Row: tok.Row,
+					},
+				}
+			case TokenNumber:
+				num, err := strconv.ParseFloat(tok.Text, 64)
+				if err != nil {
+					return nil, fmt.Errorf("invalid number format, %v", err)
+				}
+				binExpr.Right = ExpressionNode{
+					Type:     LiteralExpression,
+					Value:    num,
+					ExprType: NumberType,
+					Position: Position{
+						Col: tok.Col,
+						Row: tok.Row,
+					},
+				}
+			case TokenIdentifier:
+				binExpr.Right = ExpressionNode{
+					Type:     IdentifierExpression,
+					Value:    tok.Text,
+					ExprType: IdentifierType,
+					Position: Position{
+						Col: tok.Col,
+						Row: tok.Row,
+					},
+				}
+			default:
+				return nil, fmt.Errorf("ERROR: expected operator (string|number|identifier), got %v", tok.Kind)
+			}
+			args = append(args, binExpr)
+		case TokenCurlyBraceOpen:
+			p.Pos--
+			args = append(args, leftIdExpr)
+		default:
+			return nil, fmt.Errorf("ERROR: expected operator (== | <= | ...etc), got %v", tok.Kind)
+		}
+	}
+
+	if tok.Kind == TokenExclamation {
+		// for the !
+		unaryExpr := UnaryExpressionNode{
+			Type:     UnaryExpression,
+			Operator: unaryOperators[tok.Text],
+		}
+
+		tok = p.next()
+
+		if tok.Kind != TokenIdentifier {
+			return nil, fmt.Errorf("ERROR: expected %v, got %v", TokenIdentifier, tok.Kind)
+		}
+
+		p.Pos--
+
+		prop, err := p.parseMemberAccess()
+
+		if err != nil {
+			return nil, err
+		}
+
+		unaryExpr.Right = ExpressionNode{
+			Type:     IdentifierExpression,
+			Value:    prop,
+			ExprType: IdentifierType,
+			Position: Position{
+				Row: tok.Row,
+				Col: tok.Col,
+			},
+		}
 	}
 
 	tok = p.next()
@@ -356,7 +400,7 @@ func (p *Parser) elseHandler(pos Position) (*StatementNode, error) {
 
 		return &StatementNode{
 			Type:     ElseStatement,
-			Params:   []ExpressionNode{},
+			Params:   []any{},
 			Body:     body,
 			Position: pos,
 			Order:    p.Pos,
@@ -368,7 +412,7 @@ func (p *Parser) elseHandler(pos Position) (*StatementNode, error) {
 
 func (p *Parser) pushHandler(pos Position) (*StatementNode, error) {
 
-	args := make([]ExpressionNode, 0)
+	args := make([]any, 0)
 
 	tok := p.next()
 
@@ -412,7 +456,7 @@ func (p *Parser) pushHandler(pos Position) (*StatementNode, error) {
 }
 
 func (p *Parser) trimHandler(pos Position) (*StatementNode, error) {
-	args := make([]ExpressionNode, 0)
+	args := make([]any, 0)
 
 	for range 2 {
 		tok := p.next()
@@ -487,14 +531,14 @@ func (p *Parser) concatHandler(pos Position) (*StatementNode, error) {
 	}
 	return &StatementNode{
 		Type:     ConcatStatement,
-		Params:   []ExpressionNode{},
+		Params:   []any{},
 		Position: pos,
 		Order:    p.Pos,
 	}, nil
 }
 
 func (p *Parser) thumbnailHandler(pos Position) (*StatementNode, error) {
-	args := make([]ExpressionNode, 0)
+	args := make([]any, 0)
 
 	tok := p.next()
 
@@ -575,7 +619,7 @@ func (p *Parser) thumbnailHandler(pos Position) (*StatementNode, error) {
 }
 
 func (p *Parser) processHandler(pos Position) (*StatementNode, error) {
-	args := make([]ExpressionNode, 0)
+	args := make([]any, 0)
 	tok := p.next()
 
 	if tok.Kind != TokenIdentifier {
@@ -632,51 +676,34 @@ func (p *Parser) processHandler(pos Position) (*StatementNode, error) {
 }
 
 func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
-	args := make([]ExpressionNode, 0)
+	args := make([]any, 0)
 	tok := p.next()
 
 	if tok.Kind != TokenIdentifier {
 		return nil, fmt.Errorf("ERROR: expect a %v, got %v", TokenIdentifier, tok.Kind)
 	}
 
-	args = append(args, ExpressionNode{
-		Type:     IdentifierExpression,
-		Value:    tok.Text,
-		ExprType: IdentifierType,
+	expression := ExpressionNode{
+		Type:       IdentifierExpression,
+		Identifier: tok.Text,
+		ExprType:   IdentifierType,
 		Position: Position{
 			Row: tok.Row,
 			Col: tok.Col,
 		},
-	})
+	}
 
 	tok = p.next()
-	// different types of token kind
 
 	objPos := Position{}
 
+	var value any
+	// different types of definition
 	switch tok.Kind {
 	case TokenString:
-		args = append(args, ExpressionNode{
-			Type:     LiteralExpression,
-			Value:    tok.Text,
-			ExprType: StringType,
-			Position: Position{
-				Row: tok.Row,
-				Col: tok.Col,
-			},
-		})
-
+		value = tok.Text
 	case TokenBool:
-		args = append(args, ExpressionNode{
-			Type:     LiteralExpression,
-			Value:    tok.Text == "true",
-			ExprType: BooleanType,
-			Position: Position{
-				Row: tok.Row,
-				Col: tok.Col,
-			},
-		})
-
+		value = tok.Text == "true"
 	case TokenMinus:
 		tok = p.next()
 		// parse the value first then append it to the args array
@@ -685,15 +712,7 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 			return nil, err
 		}
 
-		args = append(args, ExpressionNode{
-			Type:     LiteralExpression,
-			Value:    -num,
-			ExprType: NumberType,
-			Position: Position{
-				Row: tok.Row,
-				Col: tok.Col,
-			},
-		})
+		value = -num
 
 	case TokenPlus:
 		tok = p.next()
@@ -703,15 +722,7 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 			return nil, err
 		}
 
-		args = append(args, ExpressionNode{
-			Type:     LiteralExpression,
-			Value:    num,
-			ExprType: NumberType,
-			Position: Position{
-				Row: tok.Row,
-				Col: tok.Col,
-			},
-		})
+		value = num
 
 	case TokenNumber:
 		num, err := strconv.ParseFloat(tok.Text, 64)
@@ -719,15 +730,7 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 			return nil, err
 		}
 
-		args = append(args, ExpressionNode{
-			Type:     LiteralExpression,
-			Value:    num,
-			ExprType: NumberType,
-			Position: Position{
-				Row: tok.Row,
-				Col: tok.Col,
-			},
-		})
+		value = num
 
 	case TokenIdentifier:
 		p.Pos--
@@ -737,15 +740,7 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 			return nil, err
 		}
 
-		args = append(args, ExpressionNode{
-			Type:     IdentifierExpression,
-			Value:    prop,
-			ExprType: IdentifierType,
-			Position: Position{
-				Row: tok.Row,
-				Col: tok.Col,
-			},
-		})
+		value = prop
 
 	case TokenCurlyBraceOpen:
 
@@ -769,14 +764,14 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 				return nil, fmt.Errorf("ERROR: expected a %v, got %v", TokenColon, colon.Kind)
 			}
 
-			value := p.next()
+			nextTok := p.next()
 
 			var val ExpressionNode
-			switch value.Kind {
+			switch nextTok.Kind {
 			case TokenString:
 				val = ExpressionNode{
 					Type:     LiteralExpression,
-					Value:    value.Text,
+					Value:    nextTok.Text,
 					ExprType: StringType,
 					Position: Position{
 						Row: key.Row,
@@ -785,7 +780,7 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 				}
 
 			case TokenNumber:
-				num, err := strconv.ParseFloat(value.Text, 64)
+				num, err := strconv.ParseFloat(nextTok.Text, 64)
 				if err != nil {
 					return nil, fmt.Errorf("invalid number format, %v", err)
 				}
@@ -801,7 +796,7 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 			case TokenBool:
 				val = ExpressionNode{
 					Type:     LiteralExpression,
-					Value:    value.Text == "true",
+					Value:    nextTok.Text == "true",
 					ExprType: BooleanType,
 					Position: Position{
 						Row: key.Row,
@@ -809,18 +804,12 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 					},
 				}
 			default:
-				return nil, fmt.Errorf("ERROR: unsupported type %v", value.Kind)
+				return nil, fmt.Errorf("ERROR: unsupported type %v", nextTok.Kind)
 			}
 
 			objValue[key.Text] = val
 		}
-
-		args = append(args, ExpressionNode{
-			Type:     ObjectExpression,
-			Value:    objValue,
-			ExprType: ObjectType,
-			Position: objPos,
-		})
+		value = objValue
 
 		tok = p.next()
 
@@ -832,6 +821,9 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 		return nil, fmt.Errorf("ERROR, %v isn't supportd, use (%v,%v,%v)", tok.Kind, TokenString, TokenIdentifier, TokenCurlyBraceOpen)
 	}
 
+	expression.Value = value
+	args = append(args, expression)
+
 	return &StatementNode{
 		Type:     SetStatement,
 		Params:   args,
@@ -841,7 +833,7 @@ func (p *Parser) setHandler(pos Position) (*StatementNode, error) {
 }
 
 func (p *Parser) useHandler(pos Position) (*StatementNode, error) {
-	args := make([]ExpressionNode, 0)
+	args := make([]any, 0)
 	tok := p.next()
 
 	if tok.Kind != TokenIdentifier {
@@ -904,7 +896,7 @@ func (p *Parser) useHandler(pos Position) (*StatementNode, error) {
 }
 
 func (p *Parser) exportHandler(pos Position) (*StatementNode, error) {
-	args := make([]ExpressionNode, 0)
+	args := make([]any, 0)
 
 	tok := p.next()
 

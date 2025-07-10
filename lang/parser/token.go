@@ -35,6 +35,7 @@ const (
 	TokenLess            TokenKind = "<"
 	TokenGreaterOrEqual  TokenKind = ">="
 	TokenLessOrEqual     TokenKind = "<="
+	TokenExclamation     TokenKind = "!"
 
 	// Comment
 	TokenComment TokenKind = "#"
