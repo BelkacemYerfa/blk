@@ -128,12 +128,11 @@ func Run(args []string) {
 
 	// tokens
 	fmt.Println(tokens)
-
-	p := parser.NewParser(tokens)
+	filename, _ := os.Stat(targetFile)
+	p := parser.NewParser(tokens, filename.Name())
 	ast := p.Parse()
 
 	if ast == nil {
-		fmt.Println("ERROR: result of the parsing is null, check again")
 		return
 	}
 

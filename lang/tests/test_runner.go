@@ -106,7 +106,7 @@ func TestRunner() {
 		tokenBytes, _ := json.MarshalIndent(tokensInterface, "", "  ")
 		result.Tokens = string(tokenBytes)
 
-		parser := parser.NewParser(tokens)
+		parser := parser.NewParser(tokens, "")
 		ast := parser.Parse()
 
 		if ast != nil {

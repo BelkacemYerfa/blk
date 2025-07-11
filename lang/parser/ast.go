@@ -95,6 +95,7 @@ type ObjectLiteral map[string]ExpressionNode
 type AST = []StatementNode
 
 type Parser struct {
-	Tokens []Token
-	Pos    int
+	Tokens   []Token
+	FilePath string
+	Pos      int
 }

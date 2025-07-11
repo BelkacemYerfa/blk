@@ -122,7 +122,17 @@ for each file in "videos/" {
 Add `recurse` after the path to recursively search in subdirectories.
 
 ```text
-for each video in "projects/" recurse {
+for each video in "projects/" recurse  {
+  push video
+  caption "subs/{filename}.vtt" embed
+  export "out/processed/{filename}.mp4"
+}
+```
+
+**Note:** You can add a level limit to recursion by specifying `recurse <level>`:
+
+```text
+for each video in "projects/" recurse 2 {
   push video
   caption "subs/{filename}.vtt" embed
   export "out/processed/{filename}.mp4"
@@ -209,20 +219,6 @@ Skips the current iteration (like `continue`).
 if meta.duration < 5
   skip
 ```
-
----
-
-### Notes on Reserved Variables
-
-These names are reserved in `for each` and runtime scope:
-
-- `file`
-- `filename`
-- `ext`
-- `index`
-- `meta`
-
-They are automatically assigned per iteration. Attempting to override them will throw a parsing/runtime error.
 
 ## 🔜 Phase 2 — Templates & Styling
 
