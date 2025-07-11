@@ -320,9 +320,3 @@ concat
 burn bottom font=Roboto size=28 bg=true
 export out/final_tiktok.mp4
 ```
-
----
-
-```
-
-```

@@ -382,6 +382,23 @@ func (p *Parser) ifHandler(pos Position) (*StatementNode, error) {
 						Row: tok.Row,
 					},
 				}
+			case TokenMinus:
+				// for negative numbers
+				tok := p.next()
+				num, err := strconv.ParseFloat(tok.Text, 64)
+				if err != nil {
+					errMsg := fmt.Sprintf("invalid number format, %v", err)
+					return nil, p.Error(tok, errMsg)
+				}
+				binExpr.Right = ExpressionNode{
+					Type:     LiteralExpression,
+					Value:    -num,
+					ExprType: NumberType,
+					Position: Position{
+						Col: tok.Col,
+						Row: tok.Row,
+					},
+				}
 			case TokenIdentifier:
 				binExpr.Right = ExpressionNode{
 					Type:     IdentifierExpression,
