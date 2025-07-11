@@ -90,10 +90,12 @@ func (p *Parser) Parse() *AST {
 			return nil
 		default:
 			if tok.Kind == TokenCurlyBraceClose || tok.Kind == TokenCurlyBraceOpen {
-				fmt.Printf("unexpected brace token outside of a command process at line %d\n", tok.Row)
+				errMsg := fmt.Sprintf("ERROR: unexpected brace token outside of a command process at line %d\n", tok.Row)
+				fmt.Println(p.Error(tok, errMsg).Error())
 				return nil
 			}
-			fmt.Printf("unexpected token %s at line %d col %v\n", tok.Text, tok.Row, tok.Col)
+			errMsg := fmt.Sprintf("ERROR: unexpected token %s at line %d col %v\n", tok.Text, tok.Row, tok.Col)
+			fmt.Println(p.Error(tok, errMsg).Error())
 			return nil
 		}
 	}
