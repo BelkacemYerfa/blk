@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 	"unicode"
@@ -262,12 +263,17 @@ func (l *Lexer) readString() Token {
 	start := l.Cur + 1 // skip the opening quote
 	row, col := l.Row, l.Col
 
-	for {
+	l.Cur++
+
+	for l.Cur < len(l.Content) && l.Content[l.Cur] != '"' {
 		l.readChar()
-		if l.Cur >= len(l.Content) || l.Content[l.Cur] == '"' {
-			break
-		}
 	}
+
+	if l.Cur >= len(l.Content) {
+		fmt.Println(`ERROR: the quoted data, doesn't have a closing Quote (")`)
+		os.Exit(1)
+	}
+
 	end := l.Cur
 	l.readChar() // consume the closing quote
 
