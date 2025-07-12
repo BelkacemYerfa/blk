@@ -32,6 +32,183 @@ set bg_track {
 
 ---
 
+### `push <source>`
+
+Push a video file, audio file, or variable onto the stack.
+
+Examples:
+
+```text
+push "videos/intro.mp4"
+push intro
+```
+
+---
+
+### `pop`
+
+Remove and discard the top item from the stack.
+
+Example:
+
+```text
+pop
+```
+
+---
+
+### `pop as <name>`
+
+Remove the top item from the stack and assign it to a variable.
+
+Example:
+
+```text
+pop as outro_clip
+```
+
+---
+
+### `dup`
+
+Duplicate the top item on the stack.
+
+Example:
+
+```text
+dup
+```
+
+---
+
+### `swap`
+
+Swap the top two items on the stack.
+
+Example:
+
+```text
+swap
+```
+
+---
+
+### `rotate <n>`
+
+Rotate the top N items on the stack.
+
+- `rotate 3` moves the third item to the top.
+
+Example:
+
+```text
+rotate 3
+```
+
+If the stack is:
+
+```
+[a] [b] [c]
+```
+
+After `rotate 3`:
+
+```
+[b] [c] [a]
+```
+
+---
+
+### `concat`
+
+Combine all items on the stack into one.
+
+Example:
+
+```text
+push a
+push b
+push c
+concat
+```
+
+---
+
+### `clear`
+
+Empty the entire stack.
+
+Example:
+
+```text
+clear
+```
+
+---
+
+## ✅ Notes
+
+- Stack is scoped inside `process` blocks or globally if outside.
+- All stack operations only affect the active stack context.
+- Attempting to manipulate an empty stack throws a runtime error.
+
+## 🧪 Example Stack Workflows
+
+---
+
+### Save and Use Intermediate Clip
+
+```text
+push video.mp4
+trim "00:00:10" "00:00:20"
+pop as segment
+
+push segment
+export "segment_final.mp4"
+```
+
+---
+
+### Fork Processing Path
+
+```text
+set base_clip "base.mp4"
+
+push base_clip
+dup
+
+# Process first version
+pop as version_a
+
+push base_clip
+# Process second version
+pop as version_b
+```
+
+---
+
+### Debug Current Stack State
+
+```text
+push one
+push two
+push three
+print_stack
+```
+
+---
+
+### Rotate Clips
+
+```text
+push a
+push b
+push c
+rotate 3      # Stack: b, c, a
+```
+
+---
+
 ### `trim <start> <end> (video-path?)`
 
 Trim the top videos on the stack to a time range.
