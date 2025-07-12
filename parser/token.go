@@ -21,21 +21,23 @@ const (
 	TokenRecurse       TokenKind = "recurse"
 	TokenSkip          TokenKind = "skip"
 
-	// Block Units
+	// Units
 	TokenCurlyBraceOpen  TokenKind = "{"
 	TokenCurlyBraceClose TokenKind = "}"
 	TokenQuote           TokenKind = `"`
 	TokenColon           TokenKind = ":"
 	TokenDot             TokenKind = "."
-	TokenMinus           TokenKind = "-"
-	TokenPlus            TokenKind = "+"
-	TokenEqual           TokenKind = "="
-	TokenEquals          TokenKind = "=="
-	TokenGreater         TokenKind = ">"
-	TokenLess            TokenKind = "<"
-	TokenGreaterOrEqual  TokenKind = ">="
-	TokenLessOrEqual     TokenKind = "<="
-	TokenExclamation     TokenKind = "!"
+
+	// Arithmetic Operators
+	TokenMinus          TokenKind = "-"
+	TokenPlus           TokenKind = "+"
+	TokenEqual          TokenKind = "="
+	TokenEquals         TokenKind = "=="
+	TokenGreater        TokenKind = ">"
+	TokenLess           TokenKind = "<"
+	TokenGreaterOrEqual TokenKind = ">="
+	TokenLessOrEqual    TokenKind = "<="
+	TokenExclamation    TokenKind = "!"
 
 	// Comment
 	TokenComment TokenKind = "#"

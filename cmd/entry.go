@@ -94,13 +94,15 @@ func Help(args []string) {
 func Run(args []string) {
 	fileTarget := ""
 	if len(args) < 2 {
-		fmt.Println("ERROR: heem you're likely missing either the flag name or it's value, check again")
-		return
-	}
+		if args[0] != "-f" {
+			fmt.Println("ERROR: provide the filepath flag -f to assign the path to it")
+			return
+		}
 
-	if args[0] != "-f" {
-		fmt.Println("ERROR: provide the filepath flag -f to assign the path to it")
-		return
+		if len(args[1]) <= 0 {
+			fmt.Println("ERROR: provide the filepath to the subcut script")
+			return
+		}
 	}
 
 	fileTarget = args[1]

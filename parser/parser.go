@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -17,13 +18,20 @@ func NewParser(tokens []Token, filepath string) *Parser {
 	}
 }
 
-// advances to the next token
 func (p *Parser) next() Token {
 	if p.Pos >= len(p.Tokens) {
 		return Token{LiteralToken: LiteralToken{Kind: TokenEOF}}
 	}
 	tok := p.Tokens[p.Pos]
 	p.Pos++
+	return tok
+}
+
+func (p *Parser) previous() Token {
+	if p.Pos >= len(p.Tokens) {
+		return Token{LiteralToken: LiteralToken{Kind: TokenEOF}}
+	}
+	tok := p.Tokens[p.Pos-1]
 	return tok
 }
 
@@ -46,56 +54,131 @@ func (p *Parser) expect(kinds []TokenKind) (Token, error) {
 }
 
 func (p *Parser) Error(tok Token, msg string) error {
-	space := fmt.Sprintf("%d   ", tok.Row)
-	errMsg := fmt.Sprintf("\033[1;90m%v:%v:%v:\033[0m\n\n", p.FilePath, tok.Row, tok.Col)
-	instruction := ""
-	subSet := slices.DeleteFunc(p.Tokens, func(t Token) bool {
-		return t.Row != tok.Row
-	})
-	for _, tk := range subSet {
-		instruction += fmt.Sprintf(" %v", tk.Text)
+	switch tok.Kind {
+	case TokenCurlyBraceOpen, TokenCurlyBraceClose, TokenColon:
+		tok = p.Tokens[p.Pos-2]
+		tok.Col = tok.Col + len(tok.Text)
+	case TokenEOF:
+		tok = p.Tokens[p.Pos-2]
+		tok.Col = tok.Col + len(tok.Text) + 1
+	default:
+		if key, isMatching := keywords[tok.Text]; isMatching && key != TokenBool {
+			prev := p.Tokens[p.Pos-2]
+			if tok.Row >= prev.Row {
+				tok = prev
+				tok.Col = tok.Col + len(tok.Text) + 1
+			}
+		}
 	}
-	errMsg += fmt.Sprintf("%s%s\n", space, instruction)
-	for range len(space) + len(strings.Split(instruction, tok.Text)[0]) {
-		errMsg += " "
+
+	errMsg := fmt.Sprintf("\033[1;90m%s:%d:%d:\033[0m\n\n", p.FilePath, tok.Row, tok.Col)
+
+	// Build row set map
+	rowSet := make(map[int][]Token)
+	for _, t := range p.Tokens {
+		rowSet[t.Row] = append(rowSet[t.Row], t)
 	}
-	errMsg += "\033[1;31m"
-	for range len(tok.Text) {
-		errMsg += "^"
+
+	// Collect sorted rows
+	rows := []int{}
+	for row := range rowSet {
+		rows = append(rows, row)
 	}
-	errMsg += "\033[0m"
-	errMsg += "\n" + msg
+	sort.Ints(rows)
+
+	// Find closest previous and next row
+	var prevRow, nextRow int
+	prevRow, nextRow = -1, -1
+	for _, row := range rows {
+		if row < tok.Row {
+			prevRow = row
+		} else if row > tok.Row && nextRow == -1 {
+			nextRow = row
+		}
+	}
+
+	// Build rowMap with only prevRow, tok.Row, nextRow
+	rowMap := make(map[int][]Token)
+	if prevRow != -1 {
+		rowMap[prevRow] = rowSet[prevRow]
+	}
+	rowMap[tok.Row] = rowSet[tok.Row]
+	if nextRow != -1 {
+		rowMap[nextRow] = rowSet[nextRow]
+	}
+
+	// Format rows
+	formattedRows := []int{}
+	for row := range rowMap {
+		formattedRows = append(formattedRows, row)
+	}
+	sort.Ints(formattedRows)
+
+	for _, row := range formattedRows {
+		currentLine := rowMap[row]
+		lineContent := ""
+		lastCol := 0
+
+		for _, t := range currentLine {
+			if t.Col > lastCol {
+				lineContent += strings.Repeat(" ", t.Col-lastCol)
+			}
+			lineContent += t.Text
+			lastCol = t.Col + len(t.Text)
+		}
+
+		lineNumStr := fmt.Sprintf("%d", row)
+		errMsg += fmt.Sprintf("%s    %s\n", lineNumStr, lineContent)
+
+		if row == tok.Row {
+			spacesBeforeLineNum := len(lineNumStr)
+			spacesAfterLineNum := 4
+			spacesBeforeToken := tok.Col
+
+			totalSpaces := spacesBeforeLineNum + spacesAfterLineNum + spacesBeforeToken
+
+			errorIndicator := strings.Repeat(" ", totalSpaces)
+			errMsg += errorIndicator + "\033[1;31m"
+			errMsg += strings.Repeat("^", len(tok.Text))
+			errMsg += "\033[0m\n"
+		}
+	}
+
+	errMsg += msg
 	return errors.New(errMsg)
 }
 
 func (p *Parser) Parse() *AST {
-
 	ast := make(AST, 0)
 
-	for p.Pos <= len(p.Tokens) {
+	for p.Pos < len(p.Tokens) {
 		tok := p.peek()
+
 		switch tok.Kind {
 		case TokenPush, TokenConcat, TokenTrim, TokenExport, TokenSet, TokenThumbnailFrom, TokenUse, TokenProcess, TokenIf, TokenElse, TokenForEach, TokenSkip:
 			node, err := p.parseCommand()
 			if err != nil {
 				fmt.Println(err)
 				return nil
+			} else {
+				ast = append(ast, *node)
 			}
-			ast = append(ast, *node)
 
 		case TokenEOF:
 			return &ast
 		case TokenError:
-			fmt.Println(tok.Text)
+			fmt.Println(p.Error(tok, tok.Text))
 			return nil
 		default:
+			errMsg := ""
 			if tok.Kind == TokenCurlyBraceClose || tok.Kind == TokenCurlyBraceOpen {
-				errMsg := fmt.Sprintf("ERROR: unexpected brace token outside of a command process at line %d\n", tok.Row)
-				fmt.Println(p.Error(tok, errMsg).Error())
-				return nil
+				// Handle braces specifically - they're likely part of if/else blocks
+				errMsg = fmt.Sprintf("ERROR: unexpected brace token at line %d", tok.Row)
+			} else {
+				errMsg = fmt.Sprintf("ERROR: unexpected token %s at line %d col %v", tok.Text, tok.Row, tok.Col)
 			}
-			errMsg := fmt.Sprintf("ERROR: unexpected token %s at line %d col %v\n", tok.Text, tok.Row, tok.Col)
-			fmt.Println(p.Error(tok, errMsg).Error())
+			// This should now be hit much less frequently
+			fmt.Println(p.Error(tok, errMsg))
 			return nil
 		}
 	}
@@ -764,6 +847,7 @@ func (p *Parser) processHandler(pos Position) (*StatementNode, error) {
 	body := make(AST, 0)
 
 	for p.peek().Kind != TokenCurlyBraceClose {
+		pos := p.Pos
 		ast, err := p.parseCommand()
 
 		if err != nil {
@@ -774,7 +858,8 @@ func (p *Parser) processHandler(pos Position) (*StatementNode, error) {
 		if ast.Type != ProcessStatement {
 			body = append(body, *ast)
 		} else {
-			return nil, fmt.Errorf("ERROR: process isn't allowed inside of another process")
+			errMsg := "ERROR: process isn't allowed inside of another process"
+			return nil, p.Error(p.Tokens[pos], errMsg)
 		}
 
 	}
@@ -1023,7 +1108,8 @@ func (p *Parser) exportHandler(pos Position) (*StatementNode, error) {
 
 	tok, err := p.expect([]TokenKind{TokenIdentifier, TokenString})
 	if err != nil {
-		errMsg := fmt.Sprintf("ERROR: push statement, expects either string or string reference, got %v", tok.Kind)
+		errMsg := fmt.Sprintf("ERROR: export statement, expects either string or string reference, got %v", tok.Kind)
+		fmt.Println(p.Pos)
 		return nil, p.Error(tok, errMsg)
 	}
 	// check the param format
