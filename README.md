@@ -119,21 +119,6 @@ After `rotate 3`:
 
 ---
 
-### `concat`
-
-Combine all items on the stack into one.
-
-Example:
-
-```text
-push a
-push b
-push c
-concat
-```
-
----
-
 ### `clear`
 
 Empty the entire stack.

@@ -27,14 +27,6 @@ func (p *Parser) next() Token {
 	return tok
 }
 
-func (p *Parser) previous() Token {
-	if p.Pos >= len(p.Tokens) {
-		return Token{LiteralToken: LiteralToken{Kind: TokenEOF}}
-	}
-	tok := p.Tokens[p.Pos-1]
-	return tok
-}
-
 // Returns the current token to process, if none, returns the EOF
 func (p *Parser) peek() Token {
 	if p.Pos >= len(p.Tokens) {
@@ -123,6 +115,9 @@ func (p *Parser) Error(tok Token, msg string) error {
 			if t.Col > lastCol {
 				lineContent += strings.Repeat(" ", t.Col-lastCol)
 			}
+			if t.Kind == TokenString || t.Kind == TokenTime {
+				t.Text = fmt.Sprintf(`"%s"`, t.Text)
+			}
 			lineContent += t.Text
 			lastCol = t.Col + len(t.Text)
 		}
@@ -139,7 +134,11 @@ func (p *Parser) Error(tok Token, msg string) error {
 
 			errorIndicator := strings.Repeat(" ", totalSpaces)
 			errMsg += errorIndicator + "\033[1;31m"
-			errMsg += strings.Repeat("^", len(tok.Text))
+			repeat := len(tok.Text)
+			if repeat == 0 {
+				repeat = 1
+			}
+			errMsg += strings.Repeat("^", repeat)
 			errMsg += "\033[0m\n"
 		}
 	}
@@ -155,7 +154,7 @@ func (p *Parser) Parse() *AST {
 		tok := p.peek()
 
 		switch tok.Kind {
-		case TokenPush, TokenConcat, TokenTrim, TokenExport, TokenSet, TokenThumbnailFrom, TokenUse, TokenProcess, TokenIf, TokenElse, TokenForEach, TokenSkip:
+		case TokenPush, TokenConcat, TokenTrim, TokenExport, TokenSet, TokenThumbnailFrom, TokenUse, TokenProcess, TokenIf, TokenElse, TokenForEach, TokenSkip, TokenDup, TokenSwap, TokenClear, TokenRotate, TokenPrintStack, TokenPop:
 			node, err := p.parseCommand()
 			if err != nil {
 				fmt.Println(err)
@@ -166,9 +165,6 @@ func (p *Parser) Parse() *AST {
 
 		case TokenEOF:
 			return &ast
-		case TokenError:
-			fmt.Println(p.Error(tok, tok.Text))
-			return nil
 		default:
 			errMsg := ""
 			if tok.Kind == TokenCurlyBraceClose || tok.Kind == TokenCurlyBraceOpen {
@@ -198,6 +194,18 @@ func (p *Parser) parseCommand() (*StatementNode, error) {
 	switch cmdToken.Kind {
 	case TokenPush:
 		return p.pushHandler(position)
+	case TokenPop:
+		return p.popHandler(position)
+	case TokenDup:
+		return p.dupHandler(position)
+	case TokenClear:
+		return p.clearHandler(position)
+	case TokenRotate:
+		return p.rotateHandler(position)
+	case TokenSwap:
+		return p.swapHandler(position)
+	case TokenPrintStack:
+		return p.printStackHandler(position)
 	case TokenTrim:
 		return p.trimHandler(position)
 	case TokenConcat:
@@ -646,6 +654,168 @@ func (p *Parser) pushHandler(pos Position) (*StatementNode, error) {
 	return &StatementNode{
 		Type:     PushStatement,
 		Params:   args,
+		Position: pos,
+		Order:    p.Pos,
+	}, nil
+}
+
+func (p *Parser) dupHandler(pos Position) (*StatementNode, error) {
+	tok := p.peek()
+
+	if tokenKey, isMatched := keywords[tok.Text]; isMatched {
+		if tokenKey == TokenBool {
+			errMsg := "ERROR: dup statement, doesn't expect any additional tokens"
+			return nil, p.Error(tok, errMsg)
+		}
+	}
+	return &StatementNode{
+		Type:     DupStatement,
+		Params:   []any{},
+		Position: pos,
+		Order:    p.Pos,
+	}, nil
+}
+
+func (p *Parser) swapHandler(pos Position) (*StatementNode, error) {
+	tok := p.peek()
+
+	if tokenKey, isMatched := keywords[tok.Text]; isMatched {
+		if tokenKey == TokenBool {
+			errMsg := "ERROR: swap statement, doesn't expect any additional tokens"
+			return nil, p.Error(tok, errMsg)
+		}
+	}
+
+	return &StatementNode{
+		Type:     SwapStatement,
+		Params:   []any{},
+		Position: pos,
+		Order:    p.Pos,
+	}, nil
+}
+
+func (p *Parser) popHandler(pos Position) (*StatementNode, error) {
+
+	args := make([]any, 0)
+	tok := p.next()
+
+	if tok.Kind == TokenAs {
+		tok, err := p.expect([]TokenKind{TokenString, TokenIdentifier})
+
+		if err != nil {
+			errMsg := fmt.Sprintf("ERROR: after as keyword, pop expects string or string reference, got %v", tok.Kind)
+			return nil, p.Error(tok, errMsg)
+		}
+
+		if tok.Kind == TokenString {
+			args = append(args, ExpressionNode{
+				Type:     LiteralExpression,
+				Value:    tok.Text,
+				ExprType: StringType,
+				Position: Position{
+					Col: tok.Col,
+					Row: tok.Row,
+				},
+			})
+		}
+
+		if tok.Kind == TokenIdentifier {
+			args = append(args, ExpressionNode{
+				Type:     IdentifierExpression,
+				Value:    tok.Text,
+				ExprType: IdentifierType,
+				Position: Position{
+					Col: tok.Col,
+					Row: tok.Row,
+				},
+			})
+		}
+	}
+
+	return &StatementNode{
+		Type:     PopStatement,
+		Params:   args,
+		Position: pos,
+		Order:    p.Pos,
+	}, nil
+
+}
+
+func (p *Parser) printStackHandler(pos Position) (*StatementNode, error) {
+	tok := p.peek()
+
+	if tokenKey, isMatched := keywords[tok.Text]; isMatched {
+		if tokenKey == TokenBool {
+			errMsg := "ERROR: print_stack statement, doesn't expect any additional tokens"
+			return nil, p.Error(tok, errMsg)
+		}
+	}
+	return &StatementNode{
+		Type:     PrintStackStatement,
+		Params:   []any{},
+		Position: pos,
+		Order:    p.Pos,
+	}, nil
+}
+
+func (p *Parser) rotateHandler(pos Position) (*StatementNode, error) {
+	args := make([]any, 0)
+
+	tok, err := p.expect([]TokenKind{TokenIdentifier, TokenNumber})
+	if err != nil {
+		errMsg := fmt.Sprintf("ERROR: rotate statement, expects either string or string reference, got %v", tok.Kind)
+		return nil, p.Error(tok, errMsg)
+	}
+	if tok.Kind == TokenNumber {
+		num, err := strconv.ParseFloat(tok.Text, 64)
+		if err != nil {
+			errMsg := "invalid number format"
+			return nil, p.Error(tok, errMsg)
+		}
+		args = append(args, ExpressionNode{
+			Type:     LiteralExpression,
+			Value:    num,
+			ExprType: NumberType,
+			Position: Position{
+				Col: tok.Col,
+				Row: tok.Row,
+			},
+		})
+
+	}
+
+	if tok.Kind == TokenIdentifier {
+		args = append(args, ExpressionNode{
+			Type:     IdentifierExpression,
+			Value:    tok.Text,
+			ExprType: IdentifierType,
+			Position: Position{
+				Col: tok.Col,
+				Row: tok.Row,
+			},
+		})
+	}
+
+	return &StatementNode{
+		Type:     RotateStatement,
+		Params:   args,
+		Position: pos,
+		Order:    p.Pos,
+	}, nil
+}
+
+func (p *Parser) clearHandler(pos Position) (*StatementNode, error) {
+	tok := p.peek()
+
+	if tokenKey, isMatched := keywords[tok.Text]; isMatched {
+		if tokenKey == TokenBool {
+			errMsg := "ERROR: clear statement, doesn't expect any additional tokens"
+			return nil, p.Error(tok, errMsg)
+		}
+	}
+	return &StatementNode{
+		Type:     ClearStatement,
+		Params:   []any{},
 		Position: pos,
 		Order:    p.Pos,
 	}, nil

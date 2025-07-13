@@ -125,7 +125,7 @@ func (l *Lexer) NextToken() Token {
 		} else {
 			token.LiteralToken = LiteralToken{
 				Kind: TokenError,
-				Text: fmt.Sprintf("ERROR: expected = token, got %v", char),
+				Text: string(char),
 			}
 		}
 		return token
@@ -186,7 +186,7 @@ func (l *Lexer) NextToken() Token {
 			l.readChar()
 			token.LiteralToken = LiteralToken{
 				Kind: TokenError,
-				Text: "unexpected token encountered",
+				Text: string(char),
 			}
 		}
 	}
