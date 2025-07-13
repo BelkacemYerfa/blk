@@ -5,7 +5,6 @@ type TokenKind = string
 const (
 
 	// Keywords
-
 	TokenLet    TokenKind = "let"
 	TokenVar    TokenKind = "var"
 	TokenFn     TokenKind = "fn"
@@ -57,7 +56,6 @@ const (
 
 	// Var Types
 	TokenString TokenKind = "string"
-	TokenTime   TokenKind = "time"
 	TokenNumber TokenKind = "number"
 	TokenBool   TokenKind = "bool"
 

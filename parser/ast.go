@@ -1,104 +1,63 @@
 package parser
 
-type (
-	Statement  = string
-	Expression = string
-	Type       = string
-	Operator   = string
-)
-
-const (
-	// Statements
-	PushStatement       Statement = "PushStatement"
-	ExportStatement     Statement = "ExportStatement"
-	DupStatement        Statement = "DupStatement"
-	SwapStatement       Statement = "SwapStatement"
-	PopStatement        Statement = "PopStatement"
-	ClearStatement      Statement = "ClearStatement"
-	RotateStatement     Statement = "RotateStatement"
-	PrintStackStatement Statement = "PrintStackStatement"
-	TrimStatement       Statement = "TrimStatement"
-	ConcatStatement     Statement = "ConcatStatement"
-	ThumbnailStatement  Statement = "ThumbnailStatement"
-	SetStatement        Statement = "SetStatement"
-	UseStatement        Statement = "UseStatement"
-	ProcessStatement    Statement = "ProcessStatement"
-	IfStatement         Statement = "IfStatement"
-	ElseStatement       Statement = "ElseStatement"
-	ForeachStatement    Statement = "ForeachStatement"
-	SkipStatement       Statement = "SkipStatement"
-
-	// Expressions
-	LiteralExpression    Expression = "LiteralExpression"
-	IdentifierExpression Expression = "IdentifierExpression"
-	ObjectExpression     Expression = "ObjectExpression"
-	MemberExpression     Expression = "MemberAccessExpression"
-	BinaryExpression     Expression = "BinaryExpression"
-	UnaryExpression      Expression = "UnaryExpression"
-
-	// Operators
-	EqualsOperator         Operator = "=="
-	GreaterOperator        Operator = ">"
-	GreaterOrEqualOperator Operator = ">="
-	LessOperator           Operator = "<"
-	LessOrEqualOperator    Operator = "<="
-	ExclamationOperator    Operator = "!"
-
-	// Types
-	// Primitive
-	NumberType  Type = "NumberType"
-	BooleanType Type = "BooleanType"
-	StringType  Type = "StringType"
-	// Custom
-	IdentifierType Type = "IdentifierType"
-	TimeType       Type = "TimeType"
-	// Complex
-	ObjectType Type = "ObjectType"
-)
-
-type Position struct {
-	Row int
-	Col int
+type Node interface {
+	TokenLiteral() string
+}
+type Statement interface {
+	Node
+	statementNode()
+}
+type Expression interface {
+	Node
+	expressionNode()
 }
 
-type MemberAccessExpression struct {
-	Name     string
-	Property *MemberAccessExpression
+type Program struct {
+	Statements []Statement
 }
 
-type BinaryExpressionNode struct {
-	Type     Expression
-	Left     ExpressionNode
-	Right    ExpressionNode
-	Operator Operator
+func (p *Program) TokenLiteral() string {
+	if len(p.Statements) > 0 {
+		return p.Statements[0].TokenLiteral()
+	} else {
+		return ""
+	}
 }
 
-type UnaryExpressionNode struct {
-	Type     Expression
-	Operator Operator
-	Right    ExpressionNode
+type LetStatement struct {
+	Token Token // the token.LET token
+	Name  *Identifier
+	Value Expression
 }
 
-type ExpressionNode struct {
-	Type       Expression // "literal_expression", "identifier_expression", etc.
-	Identifier string     // used when declaring variables (it will hold the value name)
-	Value      any        // string, float64, bool, or even ObjectLiteral for identifier type
-	ExprType   Type       // For type-checking: "number", "bool", etc.
-	Position   Position
+func (ls *LetStatement) statementNode()       {}
+func (ls *LetStatement) TokenLiteral() string { return ls.Token.Kind }
+
+type Identifier struct {
+	Token Token // the token.IDENT token
+	Value string
 }
 
-type StatementNode struct {
-	Type     Statement       // e.g., "push", "set", etc.
-	Params   []any           // can take an expression node or a binary expression node
-	Body     []StatementNode // Only for process/batch/etc.
-	Position Position
-	Order    int
+func (i *Identifier) expressionNode()      {}
+func (i *Identifier) TokenLiteral() string { return i.Token.Kind }
+
+type LiteralExpression struct {
+	Token Token // the token.IDENT token
+	Value any
 }
 
-// we use this when an expression is an object expression
-type ObjectLiteral map[string]ExpressionNode
+func (l *LiteralExpression) expressionNode()      {}
+func (l *LiteralExpression) TokenLiteral() string { return l.Token.Kind }
 
-type AST = []StatementNode
+type BinaryExpression struct {
+	Token    Token // the token.IDENT token
+	Operator string
+	Left     Expression
+	Right    Expression
+}
+
+func (b *BinaryExpression) expressionNode()      {}
+func (b *BinaryExpression) TokenLiteral() string { return b.Token.Kind }
 
 type Parser struct {
 	Tokens   []Token

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 	"unicode"
 )
 
@@ -214,11 +213,6 @@ func isDigit(char rune) bool {
 	return unicode.IsDigit(char)
 }
 
-func checkTimeTrimFormatValid(tm string) bool {
-	_, err := time.Parse("15:04:05", tm)
-	return err == nil
-}
-
 func (l *Lexer) readIdentifier() Token {
 	startPos := l.Cur
 
@@ -278,17 +272,6 @@ func (l *Lexer) readString() Token {
 	l.readChar() // consume the closing quote
 
 	text := strings.TrimSpace(string(l.Content[start:end]))
-	// check the format if it is time format, that we support return a time token
-	if checkTimeTrimFormatValid(text) {
-		return Token{
-			LiteralToken: LiteralToken{
-				Kind: TokenTime,
-				Text: text,
-			},
-			Row: row,
-			Col: col,
-		}
-	}
 
 	return Token{
 		LiteralToken: LiteralToken{
@@ -321,6 +304,8 @@ func (l *Lexer) readNumber() Token {
 	}
 
 	text := string(l.Content[startPos:l.Cur])
+
+	
 	return Token{
 		LiteralToken: LiteralToken{
 			Kind: TokenNumber,

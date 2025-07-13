@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -136,16 +137,30 @@ func Run(args []string) {
 	// tokens
 	fmt.Println(tokens)
 
-	// filename, _ := os.Stat(targetFile)
-	// p := parser.NewParser(tokens, filename.Name())
-	// ast := p.Parse()
+	filename, _ := os.Stat(targetFile)
+	p := parser.NewParser(tokens, filename.Name())
+	ast := p.Parse()
 
-	// if ast == nil {
-	// 	return
-	// }
+	if ast == nil {
+		return
+	}
+	fmt.Println("Parsed successfully")
 
-	// fmt.Println("Parsed successfully")
-	// fmt.Println(ast)
+	// Marshal AST to JSON
+	jsonData, err := json.MarshalIndent(ast, "", "  ")
+	if err != nil {
+		fmt.Printf("ERROR: failed to marshal AST to JSON: %v\n", err)
+		return
+	}
+
+	// Write JSON to file
+	err = os.WriteFile(filepath.Join(osPath, "/internal_examples/main_ast.json"), jsonData, 0644)
+	if err != nil {
+		fmt.Printf("ERROR: failed to write AST to file: %v\n", err)
+		return
+	}
+
+	fmt.Println("AST written to main_ast.json")
 }
 
 func Execute() {

@@ -1,5 +1,7 @@
 package parser
 
+type Operator = string
+
 var (
 	keywords = map[string]TokenKind{
 		"let":    TokenLet,

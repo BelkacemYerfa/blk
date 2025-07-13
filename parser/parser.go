@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -113,7 +114,7 @@ func (p *Parser) error(tok Token, msg string) error {
 			if t.Col > lastCol {
 				lineContent += strings.Repeat(" ", t.Col-lastCol)
 			}
-			if t.Kind == TokenString || t.Kind == TokenTime {
+			if t.Kind == TokenString {
 				t.Text = fmt.Sprintf(`"%s"`, t.Text)
 			}
 			lineContent += t.Text
@@ -145,21 +146,140 @@ func (p *Parser) error(tok Token, msg string) error {
 	return errors.New(errMsg)
 }
 
-func (p *Parser) Parse() *AST {
-	ast := make(AST, 0)
+func (p *Parser) Parse() *Program {
+	ast := Program{}
+	ast.Statements = make([]Statement, 0)
 
-	for p.Pos < len(p.Tokens) {
+	for p.peek().Kind != TokenEOF {
 		tok := p.peek()
-		fmt.Println(tok)
-		p.next()
+		switch tok.Kind {
+		case TokenLet, TokenVar:
+			stmt, err := p.parseStatement()
+
+			if err != nil {
+				fmt.Println(err)
+				return nil
+			} else {
+				ast.Statements = append(ast.Statements, stmt)
+			}
+		}
 	}
 
 	return &ast
 }
 
-func (p *Parser) parseCommand() (*StatementNode, error) {
+func (p *Parser) parseStatement() (Statement, error) {
 	cmdToken := p.next() // Consume command
-
+	switch cmdToken.Kind {
+	case TokenLet:
+		return p.parseLetStatement()
+	}
 	// All good, create AST node
-	return &StatementNode{}, fmt.Errorf("ERROR: unexpected token appeared, line %v row%v", cmdToken.Row, cmdToken.Col)
+	return nil, fmt.Errorf("ERROR: unexpected token appeared, line %v row%v", cmdToken.Row, cmdToken.Col)
+}
+
+func (p *Parser) parseLetStatement() (*LetStatement, error) {
+
+	identifier, err := p.ParseIdentifier()
+	if err != nil {
+		return nil, err
+	}
+
+	tok := p.next()
+
+	if tok.Kind != TokenColon {
+		return nil, p.error(tok, "ERROR: expected colon (:), got shit")
+	}
+
+	tok = p.next()
+
+	if tok.Kind != TokenIdentifier {
+		return nil, p.error(tok, "ERROR: expected a type, got shit")
+	}
+
+	tok = p.next()
+
+	if tok.Kind != TokenEqual {
+		return nil, p.error(tok, "ERROR: expected an assignment (=), got shit")
+	}
+
+	value := p.parseExpression()
+
+	return &LetStatement{
+		Name:  identifier,
+		Value: value,
+	}, nil
+}
+
+func (p *Parser) ParseIdentifier() (*Identifier, error) {
+	tok := p.next()
+
+	if tok.Kind != TokenIdentifier {
+		return nil, p.error(tok, "ERROR: expected identifier, got shit")
+	}
+
+	identifier := Identifier{}
+	identifier.Token = tok
+	identifier.Value = tok.Text
+	return &identifier, nil
+}
+
+func (p *Parser) parseExpression() Expression {
+	key := p.next()
+
+	switch key.Kind {
+	case TokenNumber:
+		tok := p.next()
+		switch tok.Kind {
+		case TokenPlus, TokenSlash, TokenMultiply, TokenMinus:
+			return p.parseBinaryExpression(key)
+		default:
+			p.Pos--
+			return p.parseNumberLiteral(key)
+		}
+	case TokenString:
+		tok := p.next()
+		switch tok.Kind {
+		case TokenPlus, TokenSlash, TokenMultiply, TokenMinus:
+			return p.parseBinaryExpression(key)
+		default:
+			p.Pos--
+			return p.parseStringLiteral(key)
+		}
+	default:
+		p.Pos--
+	}
+	return nil
+}
+
+func (p *Parser) parseBinaryExpression(prev Token) *BinaryExpression {
+	operator := p.peek().Text
+
+	left := p.parseNumberLiteral(prev)
+	right := p.parseExpression()
+
+	return &BinaryExpression{
+		Token:    p.peek(),
+		Operator: operator,
+		Left:     left,
+		Right:    right,
+	}
+}
+
+func (p *Parser) parseNumberLiteral(prev Token) *LiteralExpression {
+	num, err := strconv.ParseFloat(prev.Text, 64)
+	if err != nil {
+		return nil
+	}
+	return &LiteralExpression{
+		Token: prev,
+		Value: num,
+	}
+}
+
+func (p *Parser) parseStringLiteral(prev Token) *LiteralExpression {
+	return &LiteralExpression{
+		Token: prev,
+		Value: prev.Text,
+	}
 }
