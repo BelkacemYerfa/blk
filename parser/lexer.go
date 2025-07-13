@@ -124,8 +124,8 @@ func (l *Lexer) NextToken() Token {
 			}
 		} else {
 			token.LiteralToken = LiteralToken{
-				Kind: TokenError,
-				Text: string(char),
+				Kind: TokenEqual,
+				Text: "=",
 			}
 		}
 		return token

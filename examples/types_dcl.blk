@@ -1,0 +1,8 @@
+type Vec2 {
+    x: float
+    y: float
+}
+
+fn length(v: Vec2): float {
+    return sqrt(v.x * v.x + v.y * v.y)
+}

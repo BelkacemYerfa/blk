@@ -100,7 +100,7 @@ func Run(args []string) {
 		}
 
 		if len(args[1]) <= 0 {
-			fmt.Println("ERROR: provide the filepath to the subcut script")
+			fmt.Println("ERROR: provide the filepath to the blk program")
 			return
 		}
 	}
@@ -110,6 +110,11 @@ func Run(args []string) {
 	// open the file target in this case
 	if len(fileTarget) <= 0 {
 		fmt.Println("ERROR: provide a valid filepath")
+		return
+	}
+
+	if filepath.Ext(fileTarget) != ".blk" {
+		fmt.Println("ERROR: provide a blk program to compile")
 		return
 	}
 
@@ -130,16 +135,17 @@ func Run(args []string) {
 
 	// tokens
 	fmt.Println(tokens)
-	filename, _ := os.Stat(targetFile)
-	p := parser.NewParser(tokens, filename.Name())
-	ast := p.Parse()
 
-	if ast == nil {
-		return
-	}
+	// filename, _ := os.Stat(targetFile)
+	// p := parser.NewParser(tokens, filename.Name())
+	// ast := p.Parse()
 
-	fmt.Println("Parsed successfully")
-	fmt.Println(ast)
+	// if ast == nil {
+	// 	return
+	// }
+
+	// fmt.Println("Parsed successfully")
+	// fmt.Println(ast)
 }
 
 func Execute() {

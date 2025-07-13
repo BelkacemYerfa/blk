@@ -4,47 +4,50 @@ type TokenKind = string
 
 const (
 
-	// Commands (Reserved Keywords)
-	TokenPush          TokenKind = "push"
-	TokenDup           TokenKind = "dup"
-	TokenSwap          TokenKind = "swap"
-	TokenPop           TokenKind = "pop"
-	TokenAs            TokenKind = "as"
-	TokenRotate        TokenKind = "rotate"
-	TokenClear         TokenKind = "clear"
-	TokenPrintStack    TokenKind = "print_stack"
-	TokenConcat        TokenKind = "concat"
-	TokenExport        TokenKind = "export"
-	TokenTrim          TokenKind = "trim"
-	TokenThumbnailFrom TokenKind = "thumbnail_from"
-	TokenSet           TokenKind = "set"
-	TokenUse           TokenKind = "use"
-	TokenOn            TokenKind = "on"
-	TokenProcess       TokenKind = "process"
-	TokenIf            TokenKind = "if"
-	TokenElse          TokenKind = "else"
-	TokenForEach       TokenKind = "foreach"
-	TokenIn            TokenKind = "in"
-	TokenRecurse       TokenKind = "recurse"
-	TokenSkip          TokenKind = "skip"
+	// Keywords
+
+	TokenLet    TokenKind = "let"
+	TokenVar    TokenKind = "var"
+	TokenFn     TokenKind = "fn"
+	TokenFor    TokenKind = "for"
+	TokenWhile  TokenKind = "while"
+	TokenSkip   TokenKind = "skip"
+	TokenIf     TokenKind = "if"
+	TokenElse   TokenKind = "else"
+	TokenReturn TokenKind = "return"
+	TokenImport TokenKind = "import"
+	TokenAs     TokenKind = "as"
+	TokenExport TokenKind = "export"
 
 	// Units
 	TokenCurlyBraceOpen  TokenKind = "{"
 	TokenCurlyBraceClose TokenKind = "}"
+	TokenBracketOpen     TokenKind = "["
+	TokenBracketClose    TokenKind = "]"
+	TokenBraceOpen       TokenKind = "("
+	TokenBraceClose      TokenKind = ")"
 	TokenQuote           TokenKind = `"`
+	TokenSingleQuote     TokenKind = `'`
 	TokenColon           TokenKind = ":"
 	TokenDot             TokenKind = "."
 
 	// Arithmetic Operators
 	TokenMinus          TokenKind = "-"
 	TokenPlus           TokenKind = "+"
+	TokenMultiply       TokenKind = "*"
+	TokenSlash          TokenKind = "/"
 	TokenEqual          TokenKind = "="
 	TokenEquals         TokenKind = "=="
+	TokenNotEquals      TokenKind = "!="
 	TokenGreater        TokenKind = ">"
 	TokenLess           TokenKind = "<"
 	TokenGreaterOrEqual TokenKind = ">="
 	TokenLessOrEqual    TokenKind = "<="
-	TokenExclamation    TokenKind = "!"
+
+	// Logical Operators
+	TokenAnd         TokenKind = "&&"
+	TokenOr          TokenKind = "||"
+	TokenExclamation TokenKind = "!"
 
 	// Comment
 	TokenComment TokenKind = "#"
