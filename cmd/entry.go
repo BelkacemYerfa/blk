@@ -141,7 +141,10 @@ func Run(args []string) {
 	p := parser.NewParser(tokens, filename.Name())
 	ast := p.Parse()
 
-	if ast == nil {
+	if len(p.Errors) > 0 {
+		for _, err := range p.Errors {
+			fmt.Println(err)
+		}
 		return
 	}
 	fmt.Println("Parsed successfully")

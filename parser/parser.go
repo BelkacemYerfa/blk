@@ -13,6 +13,7 @@ func NewParser(tokens []Token, filepath string) *Parser {
 	return &Parser{
 		Tokens:   tokens,
 		FilePath: filepath,
+		Errors:   []error{},
 		Pos:      0,
 	}
 }
@@ -143,6 +144,16 @@ func (p *Parser) error(tok Token, msg string) error {
 	}
 
 	errMsg += msg
+	// skip until the next useful line
+	for p.peek().Kind != TokenEOF {
+		cur := p.peek()
+
+		if cur.Row > tok.Row {
+			break
+		}
+
+		p.next()
+	}
 	return errors.New(errMsg)
 }
 
@@ -152,16 +163,19 @@ func (p *Parser) Parse() *Program {
 
 	for p.peek().Kind != TokenEOF {
 		tok := p.peek()
+		fmt.Println(tok)
 		switch tok.Kind {
-		case TokenLet, TokenVar:
+		case TokenLet, TokenVar, TokenReturn:
 			stmt, err := p.parseStatement()
 
 			if err != nil {
-				fmt.Println(err)
-				return nil
+				p.Errors = append(p.Errors, err)
 			} else {
 				ast.Statements = append(ast.Statements, stmt)
 			}
+		default:
+			p.Errors = append(p.Errors, p.error(tok, "ERROR: expected a stmt, got shit"))
+			return nil
 		}
 	}
 
@@ -169,22 +183,26 @@ func (p *Parser) Parse() *Program {
 }
 
 func (p *Parser) parseStatement() (Statement, error) {
-	cmdToken := p.next() // Consume command
+	cmdToken := p.peek() // Consume command
 	switch cmdToken.Kind {
-	case TokenLet:
+	case TokenLet, TokenVar:
 		return p.parseLetStatement()
+	case TokenReturn:
+		return p.parseReturnStatement()
 	}
 	// All good, create AST node
 	return nil, fmt.Errorf("ERROR: unexpected token appeared, line %v row%v", cmdToken.Row, cmdToken.Col)
 }
 
 func (p *Parser) parseLetStatement() (*LetStatement, error) {
-
+	stmt := &LetStatement{Token: p.peek()}
+	p.next()
 	identifier, err := p.ParseIdentifier()
 	if err != nil {
 		return nil, err
 	}
 
+	stmt.Name = identifier
 	tok := p.next()
 
 	if tok.Kind != TokenColon {
@@ -205,10 +223,25 @@ func (p *Parser) parseLetStatement() (*LetStatement, error) {
 
 	value := p.parseExpression()
 
-	return &LetStatement{
-		Name:  identifier,
-		Value: value,
-	}, nil
+	if value == nil {
+		return nil, p.error(p.peek(), "ERROR: expected value, got nothing")
+	}
+
+	stmt.Value = value
+
+	return stmt, nil
+}
+
+func (p *Parser) parseReturnStatement() (*ReturnStatement, error) {
+	stmt := &ReturnStatement{Token: p.peek()}
+	p.next()
+
+	value := p.parseExpression()
+	if value == nil {
+		return nil, p.error(p.peek(), "ERROR: expected an expression, got shit")
+	}
+	stmt.ReturnValue = value
+	return stmt, nil
 }
 
 func (p *Parser) ParseIdentifier() (*Identifier, error) {

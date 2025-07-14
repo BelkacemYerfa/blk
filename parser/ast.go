@@ -33,6 +33,14 @@ type LetStatement struct {
 func (ls *LetStatement) statementNode()       {}
 func (ls *LetStatement) TokenLiteral() string { return ls.Token.Kind }
 
+type ReturnStatement struct {
+	Token       Token // the 'return' token
+	ReturnValue Expression
+}
+
+func (rs *ReturnStatement) statementNode()       {}
+func (rs *ReturnStatement) TokenLiteral() string { return rs.Token.Kind }
+
 type Identifier struct {
 	Token Token // the token.IDENT token
 	Value string
@@ -62,5 +70,6 @@ func (b *BinaryExpression) TokenLiteral() string { return b.Token.Kind }
 type Parser struct {
 	Tokens   []Token
 	FilePath string
+	Errors   []error
 	Pos      int
 }
