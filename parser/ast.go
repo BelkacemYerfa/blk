@@ -162,6 +162,43 @@ func (b *BinaryExpression) String() string {
 	return out.String()
 }
 
+type BlockStatement struct {
+	Token Token
+	Body  []Statement
+}
+
+func (bk *BlockStatement) expressionNode()      {}
+func (bk *BlockStatement) TokenLiteral() string { return bk.Token.Kind }
+func (bs *BlockStatement) String() string {
+	var out bytes.Buffer
+	for _, s := range bs.Body {
+		out.WriteString(s.String())
+	}
+	return out.String()
+}
+
+type IfExpression struct {
+	Token       Token
+	Condition   Expression
+	Consequence *BlockStatement
+	Alternative *BlockStatement
+}
+
+func (ie *IfExpression) expressionNode()      {}
+func (ie *IfExpression) TokenLiteral() string { return ie.Token.Kind }
+func (ie *IfExpression) String() string {
+	var out bytes.Buffer
+	out.WriteString("if")
+	out.WriteString(ie.Condition.String())
+	out.WriteString(" ")
+	out.WriteString(ie.Consequence.String())
+	if ie.Alternative != nil {
+		out.WriteString("else ")
+		out.WriteString(ie.Alternative.String())
+	}
+	return out.String()
+}
+
 type Parser struct {
 	Tokens         []Token
 	FilePath       string

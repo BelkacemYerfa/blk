@@ -57,6 +57,7 @@ func NewParser(tokens []Token, filepath string) *Parser {
 	p.registerPrefix(TokenTrue, p.parseBooleanLiteral)
 	p.registerPrefix(TokenFalse, p.parseBooleanLiteral)
 	p.registerPrefix(TokenBraceOpen, p.parseGroupedExpression)
+	p.registerPrefix(TokenIf, p.parseIfExpression)
 
 	// infix/binary operators
 	p.registerInfix(TokenPlus, p.parseInfixExpression)
@@ -358,6 +359,58 @@ func (p *Parser) parseGroupedExpression() Expression {
 	return exp
 }
 
+func (p *Parser) parseIfExpression() Expression {
+	prev := p.peekToken()
+	p.nextToken()
+
+	condition := p.parseExpression(LOWEST)
+
+	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
+		return nil
+	}
+
+	consequence := p.parseBlockStatement().(*BlockStatement)
+
+	// check if there is an else stmt
+	tok := p.nextToken()
+	alternative := &BlockStatement{}
+	if tok.Kind == TokenElse {
+		if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
+			return nil
+		}
+		alternative = p.parseBlockStatement().(*BlockStatement)
+	} else {
+		p.Pos--
+	}
+
+	return &IfExpression{
+		Token:       prev,
+		Condition:   condition,
+		Consequence: consequence,
+		Alternative: alternative,
+	}
+}
+
+func (p *Parser) parseBlockStatement() Expression {
+	block := BlockStatement{Token: p.peekToken()}
+	block.Body = make([]Statement, 0)
+	for p.peekToken().Kind != TokenCurlyBraceClose && p.peekToken().Kind != TokenEOF {
+		// parse body expressions and statements
+		stmt, err := p.parseStatement()
+		if err != nil {
+			p.Errors = append(p.Errors, err)
+		} else {
+			block.Body = append(block.Body, stmt)
+		}
+	}
+
+	if !p.expect([]TokenKind{TokenCurlyBraceClose}) {
+		return nil
+	}
+
+	return &block
+}
+
 func (p *Parser) parsePrefixExpression() Expression {
 	tok := p.nextToken()
 
@@ -403,6 +456,7 @@ func (p *Parser) parseExpression(precedence int) Expression {
 	}
 
 	leftExp := prefix()
+
 	cur := p.peekToken()
 	for p.peekToken().Row <= cur.Row && precedence < p.peekPrecedence() {
 		infix := p.infixParseFns[p.peekToken().Kind]
