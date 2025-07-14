@@ -117,6 +117,15 @@ func (fl *FloatLiteral) expressionNode()      {}
 func (fl *FloatLiteral) TokenLiteral() string { return fl.Token.Kind }
 func (fl *FloatLiteral) String() string       { return fl.Token.Text }
 
+type BooleanLiteral struct {
+	Token Token
+	Value bool
+}
+
+func (bl *BooleanLiteral) expressionNode()      {}
+func (bl *BooleanLiteral) TokenLiteral() string { return bl.Token.Kind }
+func (bl *BooleanLiteral) String() string       { return bl.Token.Text }
+
 type UnaryExpression struct {
 	Token    Token // the token.IDENT token
 	Operator string

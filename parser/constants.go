@@ -16,8 +16,8 @@ var (
 		"export": TokenExport,
 		"return": TokenReturn,
 		"skip":   TokenSkip,
-		"true":   TokenBool,
-		"false":  TokenBool,
+		"true":   TokenTrue,
+		"false":  TokenFalse,
 	}
 
 	binOperators = map[TokenKind]Operator{

@@ -77,6 +77,18 @@ func (l *Lexer) NextToken() Token {
 			Kind: TokenCurlyBraceClose,
 			Text: "}",
 		}
+	case TokenBraceOpen:
+		l.readChar()
+		token.LiteralToken = LiteralToken{
+			Kind: TokenBraceOpen,
+			Text: "(",
+		}
+	case TokenBraceClose:
+		l.readChar()
+		token.LiteralToken = LiteralToken{
+			Kind: TokenBraceClose,
+			Text: ")",
+		}
 	case TokenColon:
 		l.readChar()
 		token.LiteralToken = LiteralToken{
@@ -252,8 +264,12 @@ func (l *Lexer) readIdentifier() Token {
 	}
 
 	// check for boolean time token
-	if text == "true" || text == "false" {
-		return Token{LiteralToken: LiteralToken{Kind: TokenBool, Text: text}, Row: row, Col: col}
+	if text == "true" {
+		return Token{LiteralToken: LiteralToken{Kind: TokenTrue, Text: text}, Row: row, Col: col}
+	}
+
+	if text == "false" {
+		return Token{LiteralToken: LiteralToken{Kind: TokenFalse, Text: text}, Row: row, Col: col}
 	}
 
 	return Token{

@@ -54,6 +54,9 @@ func NewParser(tokens []Token, filepath string) *Parser {
 	p.registerPrefix(TokenFloat, p.parseFloatLiteral)
 	p.registerPrefix(TokenExclamation, p.parsePrefixExpression)
 	p.registerPrefix(TokenMinus, p.parsePrefixExpression)
+	p.registerPrefix(TokenTrue, p.parseBooleanLiteral)
+	p.registerPrefix(TokenFalse, p.parseBooleanLiteral)
+	p.registerPrefix(TokenBraceOpen, p.parseGroupedExpression)
 
 	// infix/binary operators
 	p.registerInfix(TokenPlus, p.parseInfixExpression)
@@ -93,14 +96,15 @@ func (p *Parser) peekToken() Token {
 	return p.Tokens[p.Pos]
 }
 
-func (p *Parser) expect(kinds []TokenKind) (Token, error) {
+func (p *Parser) expect(kinds []TokenKind) bool {
 	tok := p.nextToken()
 
 	if slices.Index(kinds, tok.Kind) == -1 {
-		return tok, fmt.Errorf("ERROR: expected one of (%v), received %v", kinds, tok.Kind)
+		p.Errors = append(p.Errors, p.error(tok, fmt.Sprintf("ERROR: expected one of (%v), received %v", kinds, tok.Kind)))
+		return false
 	}
 
-	return tok, nil
+	return true
 }
 
 func (p *Parser) error(tok Token, msg string) error {
@@ -112,7 +116,7 @@ func (p *Parser) error(tok Token, msg string) error {
 		tok = p.Tokens[p.Pos-2]
 		tok.Col = tok.Col + len(tok.Text) + 1
 	default:
-		if key, isMatching := keywords[tok.Text]; isMatching && key != TokenBool {
+		if key, isMatching := keywords[tok.Text]; isMatching && key != TokenFalse && key != TokenTrue {
 			prev := p.Tokens[p.Pos-2]
 			if tok.Row >= prev.Row {
 				tok = prev
@@ -221,7 +225,10 @@ func (p *Parser) Parse() *Program {
 	ast.Statements = make([]Statement, 0)
 
 	for p.peekToken().Kind != TokenEOF {
+		// tok := p.peekToken()
 
+		// switch tok.Kind {
+		// case TokenLet, TokenVar, TokenReturn:
 		stmt, err := p.parseStatement()
 
 		if err != nil {
@@ -229,7 +236,10 @@ func (p *Parser) Parse() *Program {
 		} else {
 			ast.Statements = append(ast.Statements, stmt)
 		}
-
+		// default:
+		// 	p.Errors = append(p.Errors, p.error(tok, "ERROR: expected a stmt, got shit"))
+		// 	return nil
+		// }
 	}
 
 	return &ast
@@ -330,6 +340,24 @@ func (p *Parser) parseFloatLiteral() Expression {
 	}
 }
 
+func (p *Parser) parseBooleanLiteral() Expression {
+	tok := p.nextToken()
+	truth := tok.Text == "true"
+	return &BooleanLiteral{
+		Token: tok,
+		Value: truth,
+	}
+}
+
+func (p *Parser) parseGroupedExpression() Expression {
+	p.nextToken()
+	exp := p.parseExpression(LOWEST)
+	if !p.expect([]TokenKind{TokenBraceClose}) {
+		return nil
+	}
+	return exp
+}
+
 func (p *Parser) parsePrefixExpression() Expression {
 	tok := p.nextToken()
 
@@ -376,7 +404,7 @@ func (p *Parser) parseExpression(precedence int) Expression {
 
 	leftExp := prefix()
 	cur := p.peekToken()
-	for p.peekToken().Row <= cur.Row && p.peekToken().Kind != TokenEOF && precedence < p.peekPrecedence() {
+	for p.peekToken().Row <= cur.Row && precedence < p.peekPrecedence() {
 		infix := p.infixParseFns[p.peekToken().Kind]
 		if infix == nil {
 			return leftExp
