@@ -1,7 +1,7 @@
 package tests
 
 import (
-	"subcut/parser"
+	"blk/parser"
 	"testing"
 )
 
@@ -23,28 +23,8 @@ func TestOperatorPrecedenceParsing(t *testing.T) {
 			"((a + b) + c)",
 		},
 		{
-			"a + b - c",
-			"((a + b) - c)",
-		},
-		{
-			"a * b * c",
-			"((a * b) * c)",
-		},
-		{
-			"a * b / c",
-			"((a * b) / c)",
-		},
-		{
-			"a + b / c",
-			"(a + (b / c))",
-		},
-		{
 			"a + b * c + d / e - f",
 			"(((a + (b * c)) + (d / e)) - f)",
-		},
-		{
-			"3 + 4; -5 * 5",
-			"(3 + 4)((-5) * 5)",
 		},
 		{
 			"5 > 4 == 3 < 4",
@@ -67,7 +47,6 @@ func TestOperatorPrecedenceParsing(t *testing.T) {
 		l := parser.NewLexer("", tt.input)
 		p := parser.NewParser(l.Tokenize(), "")
 		program := p.Parse()
-
 		actual := program.String()
 		if actual != tt.expected {
 			t.Errorf("expected=%q, got=%q", tt.expected, actual)

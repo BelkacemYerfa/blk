@@ -17,8 +17,8 @@ type (
 const (
 	_ int = iota
 	LOWEST
-	EQUALS      // ==
-	LESSGREATER // > or <
+	EQUALS      // == !=
+	LESSGREATER // > < >= <=
 	SUM         // +
 	PRODUCT     // *
 	PREFIX      // -X or !X
@@ -26,12 +26,12 @@ const (
 )
 
 var precedences = map[TokenKind]int{
-	TokenEqual:          EQUALS,
+	TokenEquals:         EQUALS,
 	TokenNotEquals:      EQUALS,
 	TokenLess:           LESSGREATER,
+	TokenLessOrEqual:    LESSGREATER,
 	TokenGreater:        LESSGREATER,
 	TokenGreaterOrEqual: LESSGREATER,
-	TokenLessOrEqual:    LESSGREATER,
 	TokenPlus:           SUM,
 	TokenMinus:          SUM,
 	TokenSlash:          PRODUCT,
@@ -375,15 +375,13 @@ func (p *Parser) parseExpression(precedence int) Expression {
 	}
 
 	leftExp := prefix()
-	curToken := p.peekToken()
-
-	for p.peekToken().Row <= curToken.Row {
+	cur := p.peekToken()
+	for p.peekToken().Row <= cur.Row && p.peekToken().Kind != TokenEOF && precedence < p.peekPrecedence() {
 		infix := p.infixParseFns[p.peekToken().Kind]
 		if infix == nil {
 			return leftExp
 		}
 		leftExp = infix(leftExp)
-		p.nextToken()
 	}
 
 	return leftExp

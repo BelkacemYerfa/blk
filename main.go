@@ -1,7 +1,7 @@
 package main
 
 import (
-	"subcut/cmd"
+	"blk/cmd"
 )
 
 func main() {

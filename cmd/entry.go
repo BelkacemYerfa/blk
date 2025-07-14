@@ -1,11 +1,11 @@
 package cmd
 
 import (
+	"blk/parser"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"subcut/parser"
 )
 
 type (

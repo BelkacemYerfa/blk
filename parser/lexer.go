@@ -115,14 +115,23 @@ func (l *Lexer) NextToken() Token {
 		}
 	case TokenExclamation:
 		l.readChar()
-		token.LiteralToken = LiteralToken{
-			Kind: TokenExclamation,
-			Text: "!",
+		equalChar := string(l.Content[l.Cur])
+		if equalChar == TokenAssign {
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenNotEquals,
+				Text: "!=",
+			}
+		} else {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenExclamation,
+				Text: "!",
+			}
 		}
-	case TokenEqual:
+	case TokenAssign:
 		l.readChar()
 		equalChar := string(l.Content[l.Cur])
-		if equalChar == TokenEqual {
+		if equalChar == TokenAssign {
 			l.readChar()
 			token.LiteralToken = LiteralToken{
 				Kind: TokenEquals,
@@ -130,14 +139,14 @@ func (l *Lexer) NextToken() Token {
 			}
 		} else {
 			token.LiteralToken = LiteralToken{
-				Kind: TokenEqual,
+				Kind: TokenAssign,
 				Text: "=",
 			}
 		}
 	case TokenGreater:
 		l.readChar()
 		nextChar := string(l.Content[l.Cur])
-		if nextChar == TokenEqual {
+		if nextChar == TokenAssign {
 			l.readChar()
 			token.LiteralToken = LiteralToken{
 				Kind: TokenGreaterOrEqual,
@@ -156,7 +165,7 @@ func (l *Lexer) NextToken() Token {
 	case TokenLess:
 		l.readChar()
 		nextChar := string(l.Content[l.Cur])
-		if nextChar == TokenEqual {
+		if nextChar == TokenAssign {
 			l.readChar()
 			token.LiteralToken = LiteralToken{
 				Kind: TokenGreaterOrEqual,
@@ -297,7 +306,7 @@ func (l *Lexer) readNumber() Token {
 		l.readChar()
 	}
 
-	if l.Content[l.Cur] == '.' {
+	if l.Cur < len(l.Content) && l.Content[l.Cur] == '.' {
 		if l.Cur < len(l.Content) && l.Content[l.Cur] == '.' {
 			l.readChar() // consume '.'
 

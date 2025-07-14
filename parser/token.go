@@ -35,7 +35,7 @@ const (
 	TokenPlus           TokenKind = "+"
 	TokenMultiply       TokenKind = "*"
 	TokenSlash          TokenKind = "/"
-	TokenEqual          TokenKind = "="
+	TokenAssign         TokenKind = "="
 	TokenEquals         TokenKind = "=="
 	TokenNotEquals      TokenKind = "!="
 	TokenGreater        TokenKind = ">"
