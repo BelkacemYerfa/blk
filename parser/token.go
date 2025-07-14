@@ -56,7 +56,8 @@ const (
 
 	// Var Types
 	TokenString TokenKind = "string"
-	TokenNumber TokenKind = "number"
+	TokenInt    TokenKind = "int"
+	TokenFloat  TokenKind = "float"
 	TokenBool   TokenKind = "bool"
 
 	// Error

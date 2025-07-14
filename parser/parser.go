@@ -9,16 +9,74 @@ import (
 	"strings"
 )
 
-func NewParser(tokens []Token, filepath string) *Parser {
-	return &Parser{
-		Tokens:   tokens,
-		FilePath: filepath,
-		Errors:   []error{},
-		Pos:      0,
-	}
+type (
+	prefixParseFn func() Expression
+	infixParseFn  func(Expression) Expression
+)
+
+const (
+	_ int = iota
+	LOWEST
+	EQUALS      // ==
+	LESSGREATER // > or <
+	SUM         // +
+	PRODUCT     // *
+	PREFIX      // -X or !X
+	CALL        // myFunction(X)
+)
+
+var precedences = map[TokenKind]int{
+	TokenEqual:          EQUALS,
+	TokenNotEquals:      EQUALS,
+	TokenLess:           LESSGREATER,
+	TokenGreater:        LESSGREATER,
+	TokenGreaterOrEqual: LESSGREATER,
+	TokenLessOrEqual:    LESSGREATER,
+	TokenPlus:           SUM,
+	TokenMinus:          SUM,
+	TokenSlash:          PRODUCT,
+	TokenMultiply:       PRODUCT,
 }
 
-func (p *Parser) next() Token {
+func NewParser(tokens []Token, filepath string) *Parser {
+	p := Parser{
+		Tokens:         tokens,
+		FilePath:       filepath,
+		Errors:         []error{},
+		prefixParseFns: make(map[TokenKind]prefixParseFn),
+		infixParseFns:  make(map[TokenKind]infixParseFn),
+		Pos:            0,
+	}
+
+	// prefix/unary operators
+	p.registerPrefix(TokenIdentifier, p.parseIdentifier)
+	p.registerPrefix(TokenInt, p.parseIntLiteral)
+	p.registerPrefix(TokenFloat, p.parseFloatLiteral)
+	p.registerPrefix(TokenExclamation, p.parsePrefixExpression)
+	p.registerPrefix(TokenMinus, p.parsePrefixExpression)
+
+	// infix/binary operators
+	p.registerInfix(TokenPlus, p.parseInfixExpression)
+	p.registerInfix(TokenMinus, p.parseInfixExpression)
+	p.registerInfix(TokenSlash, p.parseInfixExpression)
+	p.registerInfix(TokenMultiply, p.parseInfixExpression)
+	p.registerInfix(TokenEquals, p.parseInfixExpression)
+	p.registerInfix(TokenNotEquals, p.parseInfixExpression)
+	p.registerInfix(TokenLess, p.parseInfixExpression)
+	p.registerInfix(TokenGreater, p.parseInfixExpression)
+	p.registerInfix(TokenLessOrEqual, p.parseInfixExpression)
+	p.registerInfix(TokenGreaterOrEqual, p.parseInfixExpression)
+	return &p
+}
+
+func (p *Parser) peekPrecedence() int {
+	if p, ok := precedences[p.peekToken().Kind]; ok {
+		return p
+	}
+	return LOWEST
+}
+
+func (p *Parser) nextToken() Token {
 	if p.Pos >= len(p.Tokens) {
 		return Token{LiteralToken: LiteralToken{Kind: TokenEOF}}
 	}
@@ -28,7 +86,7 @@ func (p *Parser) next() Token {
 }
 
 // Returns the current token to process, if none, returns the EOF
-func (p *Parser) peek() Token {
+func (p *Parser) peekToken() Token {
 	if p.Pos >= len(p.Tokens) {
 		return Token{LiteralToken: LiteralToken{Kind: TokenEOF}}
 	}
@@ -36,7 +94,7 @@ func (p *Parser) peek() Token {
 }
 
 func (p *Parser) expect(kinds []TokenKind) (Token, error) {
-	tok := p.next()
+	tok := p.nextToken()
 
 	if slices.Index(kinds, tok.Kind) == -1 {
 		return tok, fmt.Errorf("ERROR: expected one of (%v), received %v", kinds, tok.Kind)
@@ -145,174 +203,188 @@ func (p *Parser) error(tok Token, msg string) error {
 
 	errMsg += msg
 	// skip until the next useful line
-	for p.peek().Kind != TokenEOF {
-		cur := p.peek()
-
-		if cur.Row > tok.Row {
-			break
-		}
-
-		p.next()
+	for p.peekToken().Row <= tok.Row {
+		p.nextToken()
 	}
 	return errors.New(errMsg)
+}
+
+func (p *Parser) registerPrefix(tokenType TokenKind, fn prefixParseFn) {
+	p.prefixParseFns[tokenType] = fn
+}
+func (p *Parser) registerInfix(tokenType TokenKind, fn infixParseFn) {
+	p.infixParseFns[tokenType] = fn
 }
 
 func (p *Parser) Parse() *Program {
 	ast := Program{}
 	ast.Statements = make([]Statement, 0)
 
-	for p.peek().Kind != TokenEOF {
-		tok := p.peek()
-		fmt.Println(tok)
-		switch tok.Kind {
-		case TokenLet, TokenVar, TokenReturn:
-			stmt, err := p.parseStatement()
+	for p.peekToken().Kind != TokenEOF {
 
-			if err != nil {
-				p.Errors = append(p.Errors, err)
-			} else {
-				ast.Statements = append(ast.Statements, stmt)
-			}
-		default:
-			p.Errors = append(p.Errors, p.error(tok, "ERROR: expected a stmt, got shit"))
-			return nil
+		stmt, err := p.parseStatement()
+
+		if err != nil {
+			p.Errors = append(p.Errors, err)
+		} else {
+			ast.Statements = append(ast.Statements, stmt)
 		}
+
 	}
 
 	return &ast
 }
 
 func (p *Parser) parseStatement() (Statement, error) {
-	cmdToken := p.peek() // Consume command
+	cmdToken := p.peekToken() // Consume command
 	switch cmdToken.Kind {
 	case TokenLet, TokenVar:
 		return p.parseLetStatement()
 	case TokenReturn:
 		return p.parseReturnStatement()
+	default:
+		return p.parseExpressionStatement()
 	}
-	// All good, create AST node
-	return nil, fmt.Errorf("ERROR: unexpected token appeared, line %v row%v", cmdToken.Row, cmdToken.Col)
 }
 
 func (p *Parser) parseLetStatement() (*LetStatement, error) {
-	stmt := &LetStatement{Token: p.peek()}
-	p.next()
-	identifier, err := p.ParseIdentifier()
-	if err != nil {
-		return nil, err
+	stmt := &LetStatement{Token: p.peekToken()}
+	p.nextToken()
+	identifier := p.parseIdentifier()
+	if identifier == nil {
+		return nil, p.Errors[len(p.Errors)-1]
 	}
 
-	stmt.Name = identifier
-	tok := p.next()
+	stmt.Name = identifier.(*Identifier)
+	tok := p.nextToken()
 
 	if tok.Kind != TokenColon {
 		return nil, p.error(tok, "ERROR: expected colon (:), got shit")
 	}
 
-	tok = p.next()
+	tok = p.nextToken()
 
 	if tok.Kind != TokenIdentifier {
-		return nil, p.error(tok, "ERROR: expected a type, got shit")
+		return nil, p.error(tok, "ERROR: expected type, got shit")
 	}
 
-	tok = p.next()
-
-	if tok.Kind != TokenEqual {
-		return nil, p.error(tok, "ERROR: expected an assignment (=), got shit")
+	for p.peekToken().Row <= tok.Row {
+		p.nextToken()
 	}
-
-	value := p.parseExpression()
-
-	if value == nil {
-		return nil, p.error(p.peek(), "ERROR: expected value, got nothing")
-	}
-
-	stmt.Value = value
 
 	return stmt, nil
 }
 
 func (p *Parser) parseReturnStatement() (*ReturnStatement, error) {
-	stmt := &ReturnStatement{Token: p.peek()}
-	p.next()
+	stmt := &ReturnStatement{Token: p.peekToken()}
+	tok := p.nextToken()
 
-	value := p.parseExpression()
-	if value == nil {
-		return nil, p.error(p.peek(), "ERROR: expected an expression, got shit")
+	for p.peekToken().Row <= tok.Row {
+		p.nextToken()
 	}
-	stmt.ReturnValue = value
 	return stmt, nil
 }
 
-func (p *Parser) ParseIdentifier() (*Identifier, error) {
-	tok := p.next()
+func (p *Parser) parseExpressionStatement() (*ExpressionStatement, error) {
+	stmt := &ExpressionStatement{}
+	stmt.Expression = p.parseExpression(LOWEST)
+	return stmt, nil
+}
+
+func (p *Parser) parseIdentifier() Expression {
+	tok := p.nextToken()
 
 	if tok.Kind != TokenIdentifier {
-		return nil, p.error(tok, "ERROR: expected identifier, got shit")
+		p.Errors = append(p.Errors, p.error(tok, "ERROR: expected identifier, got shit"))
+		return nil
 	}
 
-	identifier := Identifier{}
-	identifier.Token = tok
-	identifier.Value = tok.Text
-	return &identifier, nil
-}
-
-func (p *Parser) parseExpression() Expression {
-	key := p.next()
-
-	switch key.Kind {
-	case TokenNumber:
-		tok := p.next()
-		switch tok.Kind {
-		case TokenPlus, TokenSlash, TokenMultiply, TokenMinus:
-			return p.parseBinaryExpression(key)
-		default:
-			p.Pos--
-			return p.parseNumberLiteral(key)
-		}
-	case TokenString:
-		tok := p.next()
-		switch tok.Kind {
-		case TokenPlus, TokenSlash, TokenMultiply, TokenMinus:
-			return p.parseBinaryExpression(key)
-		default:
-			p.Pos--
-			return p.parseStringLiteral(key)
-		}
-	default:
-		p.Pos--
+	return &Identifier{
+		Token: tok,
+		Value: tok.Text,
 	}
-	return nil
 }
 
-func (p *Parser) parseBinaryExpression(prev Token) *BinaryExpression {
-	operator := p.peek().Text
+func (p *Parser) parseIntLiteral() Expression {
+	tok := p.nextToken()
 
-	left := p.parseNumberLiteral(prev)
-	right := p.parseExpression()
+	num, err := strconv.ParseInt(tok.Text, 0, 64)
+	if err != nil {
+		return nil
+	}
+	return &IntegerLiteral{
+		Token: tok,
+		Value: num,
+	}
+}
+
+func (p *Parser) parseFloatLiteral() Expression {
+	tok := p.nextToken()
+	num, err := strconv.ParseFloat(tok.Text, 64)
+	if err != nil {
+		return nil
+	}
+	return &FloatLiteral{
+		Token: tok,
+		Value: num,
+	}
+}
+
+func (p *Parser) parsePrefixExpression() Expression {
+	tok := p.nextToken()
+
+	if _, ok := unaryOperators[tok.Kind]; !ok {
+		p.Errors = append(p.Errors, p.error(tok, "ERROR: expected a unary operator (! | -), got shut"))
+		return nil
+	}
+
+	right := p.parseExpression(PREFIX)
+
+	return &UnaryExpression{
+		Token:    tok,
+		Operator: tok.Text,
+		Right:    right,
+	}
+}
+
+func (p *Parser) parseInfixExpression(left Expression) Expression {
+	tok := p.peekToken()
+
+	if _, ok := binOperators[tok.Kind]; !ok {
+		p.Errors = append(p.Errors, p.error(tok, "ERROR: expected a binary operator (== | > | < | ...), got shut"))
+		return nil
+	}
+
+	precedence := p.peekPrecedence()
+	p.nextToken()
+	right := p.parseExpression(precedence)
 
 	return &BinaryExpression{
-		Token:    p.peek(),
-		Operator: operator,
+		Token:    tok,
+		Operator: tok.Text,
 		Left:     left,
 		Right:    right,
 	}
 }
 
-func (p *Parser) parseNumberLiteral(prev Token) *LiteralExpression {
-	num, err := strconv.ParseFloat(prev.Text, 64)
-	if err != nil {
+func (p *Parser) parseExpression(precedence int) Expression {
+	prefix := p.prefixParseFns[p.peekToken().Kind]
+	if prefix == nil {
+		p.Errors = append(p.Errors, fmt.Errorf("ERROR: %v kind ain't supported", p.peekToken().Kind))
 		return nil
 	}
-	return &LiteralExpression{
-		Token: prev,
-		Value: num,
-	}
-}
 
-func (p *Parser) parseStringLiteral(prev Token) *LiteralExpression {
-	return &LiteralExpression{
-		Token: prev,
-		Value: prev.Text,
+	leftExp := prefix()
+	curToken := p.peekToken()
+
+	for p.peekToken().Row <= curToken.Row {
+		infix := p.infixParseFns[p.peekToken().Kind]
+		if infix == nil {
+			return leftExp
+		}
+		leftExp = infix(leftExp)
+		p.nextToken()
 	}
+
+	return leftExp
 }

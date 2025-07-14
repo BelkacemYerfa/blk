@@ -83,35 +83,42 @@ func (l *Lexer) NextToken() Token {
 			Kind: TokenColon,
 			Text: ":",
 		}
-		return token
 	case TokenDot:
 		l.readChar()
 		token.LiteralToken = LiteralToken{
 			Kind: TokenDot,
 			Text: ".",
 		}
-		return token
 	case TokenMinus:
 		l.readChar()
 		token.LiteralToken = LiteralToken{
 			Kind: TokenMinus,
 			Text: "-",
 		}
-		return token
 	case TokenPlus:
 		l.readChar()
 		token.LiteralToken = LiteralToken{
 			Kind: TokenPlus,
 			Text: "+",
 		}
-		return token
+	case TokenMultiply:
+		l.readChar()
+		token.LiteralToken = LiteralToken{
+			Kind: TokenMultiply,
+			Text: "*",
+		}
+	case TokenSlash:
+		l.readChar()
+		token.LiteralToken = LiteralToken{
+			Kind: TokenSlash,
+			Text: "/",
+		}
 	case TokenExclamation:
 		l.readChar()
 		token.LiteralToken = LiteralToken{
 			Kind: TokenExclamation,
 			Text: "!",
 		}
-		return token
 	case TokenEqual:
 		l.readChar()
 		equalChar := string(l.Content[l.Cur])
@@ -127,7 +134,6 @@ func (l *Lexer) NextToken() Token {
 				Text: "=",
 			}
 		}
-		return token
 	case TokenGreater:
 		l.readChar()
 		nextChar := string(l.Content[l.Cur])
@@ -147,7 +153,6 @@ func (l *Lexer) NextToken() Token {
 				Text: ">",
 			}
 		}
-		return token
 	case TokenLess:
 		l.readChar()
 		nextChar := string(l.Content[l.Cur])
@@ -167,7 +172,6 @@ func (l *Lexer) NextToken() Token {
 				Text: "<",
 			}
 		}
-		return token
 	case TokenQuote:
 		return l.readString()
 	case TokenEOF:
@@ -293,27 +297,37 @@ func (l *Lexer) readNumber() Token {
 		l.readChar()
 	}
 
-	// Handle decimal point
-	if l.Cur < len(l.Content) && l.Content[l.Cur] == '.' {
-		l.readChar() // consume '.'
+	if l.Content[l.Cur] == '.' {
+		if l.Cur < len(l.Content) && l.Content[l.Cur] == '.' {
+			l.readChar() // consume '.'
 
-		// Read fractional part
-		for l.Cur < len(l.Content) && isDigit(l.Content[l.Cur]) {
-			l.readChar()
+			// Read fractional part
+			for l.Cur < len(l.Content) && isDigit(l.Content[l.Cur]) {
+				l.readChar()
+			}
+		}
+		text := string(l.Content[startPos:l.Cur])
+		return Token{
+			LiteralToken: LiteralToken{
+				Kind: TokenFloat,
+				Text: text,
+			},
+			Row: row,
+			Col: col,
+		}
+	} else {
+		text := string(l.Content[startPos:l.Cur])
+
+		return Token{
+			LiteralToken: LiteralToken{
+				Kind: TokenInt,
+				Text: text,
+			},
+			Row: row,
+			Col: col,
 		}
 	}
 
-	text := string(l.Content[startPos:l.Cur])
-
-	
-	return Token{
-		LiteralToken: LiteralToken{
-			Kind: TokenNumber,
-			Text: text,
-		},
-		Row: row,
-		Col: col,
-	}
 }
 
 func (l *Lexer) skipComment() {

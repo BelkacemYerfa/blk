@@ -1,7 +1,10 @@
 package parser
 
+import "bytes"
+
 type Node interface {
 	TokenLiteral() string
+	String() string
 }
 type Statement interface {
 	Node
@@ -24,6 +27,14 @@ func (p *Program) TokenLiteral() string {
 	}
 }
 
+func (p *Program) String() string {
+	var out bytes.Buffer
+	for _, s := range p.Statements {
+		out.WriteString(s.String())
+	}
+	return out.String()
+}
+
 type LetStatement struct {
 	Token Token // the token.LET token
 	Name  *Identifier
@@ -33,6 +44,18 @@ type LetStatement struct {
 func (ls *LetStatement) statementNode()       {}
 func (ls *LetStatement) TokenLiteral() string { return ls.Token.Kind }
 
+func (ls *LetStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString(ls.TokenLiteral() + " ")
+	out.WriteString(ls.Name.String())
+	out.WriteString(" = ")
+	if ls.Value != nil {
+		out.WriteString(ls.Value.String())
+	}
+	out.WriteString(";")
+	return out.String()
+}
+
 type ReturnStatement struct {
 	Token       Token // the 'return' token
 	ReturnValue Expression
@@ -40,6 +63,31 @@ type ReturnStatement struct {
 
 func (rs *ReturnStatement) statementNode()       {}
 func (rs *ReturnStatement) TokenLiteral() string { return rs.Token.Kind }
+
+func (rs *ReturnStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString(rs.TokenLiteral() + " ")
+	if rs.ReturnValue != nil {
+		out.WriteString(rs.ReturnValue.String())
+	}
+	out.WriteString(";")
+	return out.String()
+}
+
+type ExpressionStatement struct {
+	Token      Token // the first token of the expression
+	Expression Expression
+}
+
+func (es *ExpressionStatement) statementNode()       {}
+func (es *ExpressionStatement) TokenLiteral() string { return es.Token.Kind }
+
+func (es *ExpressionStatement) String() string {
+	if es.Expression != nil {
+		return es.Expression.String()
+	}
+	return ""
+}
 
 type Identifier struct {
 	Token Token // the token.IDENT token
@@ -49,13 +97,42 @@ type Identifier struct {
 func (i *Identifier) expressionNode()      {}
 func (i *Identifier) TokenLiteral() string { return i.Token.Kind }
 
-type LiteralExpression struct {
-	Token Token // the token.IDENT token
-	Value any
+func (i *Identifier) String() string { return i.Value }
+
+type IntegerLiteral struct {
+	Token Token
+	Value int64
 }
 
-func (l *LiteralExpression) expressionNode()      {}
-func (l *LiteralExpression) TokenLiteral() string { return l.Token.Kind }
+func (il *IntegerLiteral) expressionNode()      {}
+func (il *IntegerLiteral) TokenLiteral() string { return il.Token.Kind }
+func (il *IntegerLiteral) String() string       { return il.Token.Text }
+
+type FloatLiteral struct {
+	Token Token
+	Value float64
+}
+
+func (fl *FloatLiteral) expressionNode()      {}
+func (fl *FloatLiteral) TokenLiteral() string { return fl.Token.Kind }
+func (fl *FloatLiteral) String() string       { return fl.Token.Text }
+
+type UnaryExpression struct {
+	Token    Token // the token.IDENT token
+	Operator string
+	Right    Expression
+}
+
+func (b *UnaryExpression) expressionNode()      {}
+func (b *UnaryExpression) TokenLiteral() string { return b.Token.Kind }
+func (u *UnaryExpression) String() string {
+	var out bytes.Buffer
+	out.WriteString("(")
+	out.WriteString(u.Operator)
+	out.WriteString(u.Right.String())
+	out.WriteString(")")
+	return out.String()
+}
 
 type BinaryExpression struct {
 	Token    Token // the token.IDENT token
@@ -66,10 +143,21 @@ type BinaryExpression struct {
 
 func (b *BinaryExpression) expressionNode()      {}
 func (b *BinaryExpression) TokenLiteral() string { return b.Token.Kind }
+func (b *BinaryExpression) String() string {
+	var out bytes.Buffer
+	out.WriteString("(")
+	out.WriteString(b.Left.String())
+	out.WriteString(" " + b.Operator + " ")
+	out.WriteString(b.Right.String())
+	out.WriteString(")")
+	return out.String()
+}
 
 type Parser struct {
-	Tokens   []Token
-	FilePath string
-	Errors   []error
-	Pos      int
+	Tokens         []Token
+	FilePath       string
+	Errors         []error
+	Pos            int
+	prefixParseFns map[TokenKind]prefixParseFn
+	infixParseFns  map[TokenKind]infixParseFn
 }

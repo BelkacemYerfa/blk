@@ -26,9 +26,15 @@ var (
 		TokenGreaterOrEqual: ">=",
 		TokenLess:           "<",
 		TokenLessOrEqual:    "<=",
+		TokenNotEquals:      "!=",
+		TokenMultiply:       "*",
+		TokenSlash:          "/",
+		TokenPlus:           "+",
+		TokenMinus:          "-",
 	}
 
 	unaryOperators = map[TokenKind]Operator{
-		TokenEquals: "!",
+		TokenExclamation: "!",
+		TokenMinus:       "-",
 	}
 )
