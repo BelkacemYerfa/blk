@@ -53,6 +53,7 @@ func NewParser(tokens []Token, filepath string) *Parser {
 	p.registerPrefix(TokenIdentifier, p.parseIdentifier)
 	p.registerPrefix(TokenInt, p.parseIntLiteral)
 	p.registerPrefix(TokenFloat, p.parseFloatLiteral)
+	p.registerPrefix(TokenString, p.parseStringLiteral)
 	p.registerPrefix(TokenExclamation, p.parsePrefixExpression)
 	p.registerPrefix(TokenMinus, p.parsePrefixExpression)
 	p.registerPrefix(TokenTrue, p.parseBooleanLiteral)
@@ -282,20 +283,21 @@ func (p *Parser) parseLetStatement() (*LetStatement, error) {
 		return nil, p.error(tok, "ERROR: expected type, got shit")
 	}
 
-	for p.peekToken().Row <= tok.Row {
-		p.nextToken()
+	tok = p.nextToken()
+
+	if tok.Kind != TokenAssign {
+		return nil, p.error(tok, "ERROR: expected assign (=), got shit")
 	}
+
+	stmt.Value = p.parseExpression(LOWEST)
 
 	return stmt, nil
 }
 
 func (p *Parser) parseReturnStatement() (*ReturnStatement, error) {
 	stmt := &ReturnStatement{Token: p.peekToken()}
-	tok := p.nextToken()
-
-	for p.peekToken().Row <= tok.Row {
-		p.nextToken()
-	}
+	p.nextToken()
+	stmt.ReturnValue = p.parseExpression(LOWEST)
 	return stmt, nil
 }
 
@@ -345,6 +347,14 @@ func (p *Parser) parseFloatLiteral() Expression {
 	return &FloatLiteral{
 		Token: tok,
 		Value: num,
+	}
+}
+
+func (p *Parser) parseStringLiteral() Expression {
+	tok := p.nextToken()
+	return &StringLiteral{
+		Token: tok,
+		Value: tok.Text,
 	}
 }
 

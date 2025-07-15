@@ -120,6 +120,15 @@ func (fl *FloatLiteral) expressionNode()      {}
 func (fl *FloatLiteral) TokenLiteral() string { return fl.Token.Text }
 func (fl *FloatLiteral) String() string       { return fl.Token.Text }
 
+type StringLiteral struct {
+	Token Token
+	Value string
+}
+
+func (sl *StringLiteral) expressionNode()      {}
+func (sl *StringLiteral) TokenLiteral() string { return sl.Token.Text }
+func (sl *StringLiteral) String() string       { return sl.Token.Text }
+
 type BooleanLiteral struct {
 	Token Token
 	Value bool
@@ -226,9 +235,9 @@ func (fn *FnExpression) String() string {
 }
 
 type CallExpression struct {
-	Token     Token      // The '(' token
-	Function  Identifier // Identifier
-	Args []Expression
+	Token    Token      // The '(' token
+	Function Identifier // Identifier
+	Args     []Expression
 }
 
 func (ce *CallExpression) expressionNode()      {}

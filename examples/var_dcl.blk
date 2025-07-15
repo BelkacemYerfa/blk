@@ -1,3 +1,5 @@
 let x: int = 10
 let pi: float = 3.14
 let greeting: string = "Hello, blk!"
+var names: [string] = ["Alice", "Bob", "Charlie"]
+let is_done: bool = true
