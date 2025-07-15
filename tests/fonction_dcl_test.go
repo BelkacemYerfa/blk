@@ -16,7 +16,7 @@ func TestFunctionParameterParsing(t *testing.T) {
 	}
 	for _, tt := range tests {
 		l := parser.NewLexer("", tt.input)
-		p := parser.NewParser(l.Tokenize(), "")
+		p := parser.NewParser(l.Tokenize(), "", []string{})
 		program := p.Parse()
 		functionStmt := program.Statements[0].(*parser.FunctionStatement)
 		if len(functionStmt.Args) != len(tt.expectedParams) {

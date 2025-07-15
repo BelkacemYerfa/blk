@@ -138,7 +138,7 @@ func Run(args []string) {
 	fmt.Println(tokens)
 
 	filename, _ := os.Stat(targetFile)
-	p := parser.NewParser(tokens, filename.Name())
+	p := parser.NewParser(tokens, filename.Name(), []string{})
 	ast := p.Parse()
 
 	if len(p.Errors) > 0 {

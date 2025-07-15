@@ -258,7 +258,7 @@ type FunctionStatement struct {
 	Body       *BlockStatement
 }
 
-func (fn *FunctionStatement) statementNode()      {}
+func (fn *FunctionStatement) statementNode()       {}
 func (fn *FunctionStatement) TokenLiteral() string { return fn.Token.Text }
 func (fn *FunctionStatement) String() string {
 	var out bytes.Buffer
@@ -320,4 +320,5 @@ type Parser struct {
 	Pos            int
 	prefixParseFns map[TokenKind]prefixParseFn
 	infixParseFns  map[TokenKind]infixParseFn
+	internalFlags  []string
 }

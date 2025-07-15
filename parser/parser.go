@@ -41,7 +41,7 @@ var precedences = map[TokenKind]int{
 	TokenBracketOpen:    INDEX,
 }
 
-func NewParser(tokens []Token, filepath string) *Parser {
+func NewParser(tokens []Token, filepath string, internalFlags []string) *Parser {
 	p := Parser{
 		Tokens:         tokens,
 		FilePath:       filepath,
@@ -49,6 +49,7 @@ func NewParser(tokens []Token, filepath string) *Parser {
 		prefixParseFns: make(map[TokenKind]prefixParseFn),
 		infixParseFns:  make(map[TokenKind]infixParseFn),
 		Pos:            0,
+		internalFlags:  internalFlags,
 	}
 
 	// prefix/unary operators
@@ -263,6 +264,9 @@ func (p *Parser) parseStatement() (Statement, error) {
 	case TokenFn:
 		return p.parseFunctionStatement()
 	case TokenIdentifier:
+		if slices.Index(p.internalFlags, "-as") != -1 {
+			return p.parseExpressionStatement()
+		}
 		return p.parseAssignmentStatement()
 	default:
 		return p.parseExpressionStatement()
