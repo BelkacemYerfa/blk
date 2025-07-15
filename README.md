@@ -17,16 +17,16 @@
 ## 🚀 Example
 
 ```blk
-import "math.blk"
-import "utils.blk"
+import "math"
+import "utils"
 
-export fn main(): int {
+fn main(): int {
     let result: int = utils::double(5)
     print(result)
     return 0
 }
 
-export fn add(a: int, b: int): int {
+fn add(a: int, b: int): int {
     return a + b
 }
 ```
@@ -56,13 +56,22 @@ let numbers: [int] = [1, 2, 3, 4]
 let names: [string] = ["Alice", "Bob"]
 ```
 
-- Import system using `import "file.blk"`. No aliasing via `as`; always use namespace prefix:
+- Import system using `import "file"`. No `.blk` extension. No aliasing. Always use namespace prefix:
 
 ```blk
-import "math.blk"
-import "utils.blk"
+import "math"
+import "utils"
 
 let result: int = utils::double(10)
+```
+
+- All top-level symbols in a module are automatically visible. No `export` keyword is needed.
+- To declare something as internal/private to a module, prefix it with `_`:
+
+```blk
+fn _internal_helper(): int {
+    return 42
+}
 ```
 
 - Conditionals: `if`, `else if`, `else`
@@ -155,17 +164,18 @@ while i < 10 {
 ### Importing Modules
 
 ```blk
-import "math.blk"
-import "utils.blk"
+import "math"
+import "utils"
 ```
 
-- Always use `namespace::symbol` format. No **ALIASING** keyword.
+- Always use `namespace::symbol` format. No aliasing keyword.
+- No `.blk` file extension in imports.
 
-### Exported Symbols
+### Internal/Private Symbols
 
 ```blk
-export fn add(a: int, b: int): int {
-    return a + b
+fn _helper(): int {
+    return 123
 }
 ```
 

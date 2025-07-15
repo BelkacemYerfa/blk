@@ -23,6 +23,7 @@ const (
 	PRODUCT     // *
 	PREFIX      // -X or !X
 	CALL        // myFunction(X)
+	INDEX       // arr[i]
 )
 
 var precedences = map[TokenKind]int{
@@ -37,6 +38,7 @@ var precedences = map[TokenKind]int{
 	TokenSlash:          PRODUCT,
 	TokenMultiply:       PRODUCT,
 	TokenBraceOpen:      CALL,
+	TokenBracketOpen:    INDEX,
 }
 
 func NewParser(tokens []Token, filepath string) *Parser {
@@ -75,6 +77,7 @@ func NewParser(tokens []Token, filepath string) *Parser {
 	p.registerInfix(TokenLessOrEqual, p.parseInfixExpression)
 	p.registerInfix(TokenGreaterOrEqual, p.parseInfixExpression)
 	p.registerInfix(TokenBraceOpen, p.parseCallExpression)
+	p.registerInfix(TokenBracketOpen, p.parseIndexExpression)
 	return &p
 }
 
@@ -258,6 +261,8 @@ func (p *Parser) parseStatement() (Statement, error) {
 		return p.parseLetStatement()
 	case TokenReturn:
 		return p.parseReturnStatement()
+	case TokenIdentifier:
+		return p.parseAssignmentStatement()
 	default:
 		return p.parseExpressionStatement()
 	}
@@ -300,12 +305,41 @@ func (p *Parser) parseReturnStatement() (*ReturnStatement, error) {
 }
 
 func (p *Parser) parseExpressionStatement() (*ExpressionStatement, error) {
-	stmt := &ExpressionStatement{}
+	stmt := &ExpressionStatement{Token: p.peekToken()}
 	expr := p.parseExpression(LOWEST)
 	if expr == nil {
 		return nil, fmt.Errorf("ERROR: on the expression stmt")
 	}
 	stmt.Expression = expr
+	return stmt, nil
+}
+
+func (p *Parser) parseAssignmentStatement() (*AssignmentStatement, error) {
+	stmt := &AssignmentStatement{Token: p.peekToken()}
+
+	stmt.Name = p.parseExpression(LOWEST)
+
+	// if !p.expect([]TokenKind{TokenIdentifier}) {
+	// 	p.Pos--
+	// 	errMsg := fmt.Sprintf("ERROR: expected identifier, got shit")
+	// 	tok := p.peekToken()
+	// 	p.Pos++
+	// 	return nil, p.error(tok, errMsg)
+	// }
+
+	tok := p.nextToken()
+
+	if tok.Kind != TokenAssign {
+		return nil, p.error(tok, "ERROR: expected assignment (=), got shit")
+	}
+
+	value := p.parseExpression(LOWEST)
+
+	if value == nil {
+		return nil, fmt.Errorf("ERROR: on the expression stmt")
+	}
+
+	stmt.Value = value
 	return stmt, nil
 }
 
@@ -593,7 +627,6 @@ func (p *Parser) parseBlockStatement() Expression {
 }
 
 func (p *Parser) parseCallExpression(left Expression) Expression {
-
 	switch left.(type) {
 	case *Identifier:
 	default:
@@ -629,6 +662,20 @@ func (p *Parser) parseCallArguments() []Expression {
 	}
 
 	return args
+}
+
+func (p *Parser) parseIndexExpression(left Expression) Expression {
+	exp := &IndexExpression{Token: p.peekToken(), Left: left}
+
+	p.nextToken()
+
+	exp.Index = p.parseExpression(LOWEST)
+
+	if !p.expect([]TokenKind{TokenBracketClose}) {
+		return nil
+	}
+
+	return exp
 }
 
 func (p *Parser) parsePrefixExpression() Expression {

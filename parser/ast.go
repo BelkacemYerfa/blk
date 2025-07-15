@@ -66,7 +66,6 @@ func (ls *LetStatement) String() string {
 	if ls.Value != nil {
 		out.WriteString(ls.Value.String())
 	}
-	out.WriteString(";")
 	return out.String()
 }
 
@@ -101,6 +100,26 @@ func (es *ExpressionStatement) String() string {
 		return es.Expression.String()
 	}
 	return ""
+}
+
+type AssignmentStatement struct {
+	Token Token // the first token of the expression
+	Name  Expression
+	Value Expression
+}
+
+func (ae *AssignmentStatement) statementNode()       {}
+func (ae *AssignmentStatement) TokenLiteral() string { return ae.Token.Text }
+
+func (ae *AssignmentStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString(ae.TokenLiteral() + " ")
+	out.WriteString(ae.Name.String())
+	out.WriteString(" = ")
+	if ae.Value != nil {
+		out.WriteString(ae.Value.String())
+	}
+	return out.String()
 }
 
 type Identifier struct {
@@ -273,6 +292,24 @@ func (ce *CallExpression) String() string {
 	out.WriteString("(")
 	out.WriteString(strings.Join(args, ", "))
 	out.WriteString(")")
+	return out.String()
+}
+
+type IndexExpression struct {
+	Token Token // The [ token
+	Left  Expression
+	Index Expression
+}
+
+func (ie *IndexExpression) expressionNode()      {}
+func (ie *IndexExpression) TokenLiteral() string { return ie.Token.Text }
+func (ie *IndexExpression) String() string {
+	var out bytes.Buffer
+	out.WriteString("(")
+	out.WriteString(ie.Left.String())
+	out.WriteString("[")
+	out.WriteString(ie.Index.String())
+	out.WriteString("])")
 	return out.String()
 }
 

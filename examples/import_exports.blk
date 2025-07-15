@@ -1,8 +1,12 @@
 import "math.blk"
 import "utils.blk" as utils
 
-export fn main(): int {
+fn main(): int {
     let value: int = utils.double(21)
     print(value)
+    return 0
+}
+
+fn _main():int {
     return 0
 }
