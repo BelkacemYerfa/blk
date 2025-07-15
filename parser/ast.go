@@ -250,7 +250,7 @@ func (ie *IfExpression) String() string {
 	return out.String()
 }
 
-type FnExpression struct {
+type FunctionStatement struct {
 	Token      Token
 	Name       string
 	Args       []*Identifier
@@ -258,9 +258,9 @@ type FnExpression struct {
 	Body       *BlockStatement
 }
 
-func (fn *FnExpression) expressionNode()      {}
-func (fn *FnExpression) TokenLiteral() string { return fn.Token.Text }
-func (fn *FnExpression) String() string {
+func (fn *FunctionStatement) statementNode()      {}
+func (fn *FunctionStatement) TokenLiteral() string { return fn.Token.Text }
+func (fn *FunctionStatement) String() string {
 	var out bytes.Buffer
 	params := []string{}
 	for _, p := range fn.Args {

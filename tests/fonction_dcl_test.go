@@ -18,11 +18,10 @@ func TestFunctionParameterParsing(t *testing.T) {
 		l := parser.NewLexer("", tt.input)
 		p := parser.NewParser(l.Tokenize(), "")
 		program := p.Parse()
-		stmt := program.Statements[0].(*parser.ExpressionStatement)
-		function := stmt.Expression.(*parser.FnExpression)
-		if len(function.Args) != len(tt.expectedParams) {
+		functionStmt := program.Statements[0].(*parser.FunctionStatement)
+		if len(functionStmt.Args) != len(tt.expectedParams) {
 			t.Errorf("length parameters wrong. want %d, got=%d\n",
-				len(tt.expectedParams), len(function.Args))
+				len(tt.expectedParams), len(functionStmt.Args))
 		}
 	}
 }

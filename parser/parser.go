@@ -63,7 +63,6 @@ func NewParser(tokens []Token, filepath string) *Parser {
 	p.registerPrefix(TokenFalse, p.parseBooleanLiteral)
 	p.registerPrefix(TokenBraceOpen, p.parseGroupedExpression)
 	p.registerPrefix(TokenIf, p.parseIfExpression)
-	p.registerPrefix(TokenFn, p.parseFunctionExpression)
 
 	// infix/binary operators
 	p.registerInfix(TokenPlus, p.parseInfixExpression)
@@ -261,6 +260,8 @@ func (p *Parser) parseStatement() (Statement, error) {
 		return p.parseLetStatement()
 	case TokenReturn:
 		return p.parseReturnStatement()
+	case TokenFn:
+		return p.parseFunctionStatement()
 	case TokenIdentifier:
 		return p.parseAssignmentStatement()
 	default:
@@ -522,42 +523,41 @@ func (p *Parser) parseIfExpression() Expression {
 	}
 }
 
-func (p *Parser) parseFunctionExpression() Expression {
+func (p *Parser) parseFunctionStatement() (*FunctionStatement, error) {
 	prev := p.peekToken()
 	p.nextToken()
 
 	if !p.expect([]TokenKind{TokenIdentifier}) {
-		return nil
+		return nil, fmt.Errorf("ERROR: expected identifier, got shit")
 	}
 	p.Pos--
 	name := p.peekToken().Text
 	p.nextToken()
 	if !p.expect([]TokenKind{TokenBraceOpen}) {
-		return nil
+		return nil, fmt.Errorf("ERROR: expected brace open ( ( ), got shit")
 	}
 
 	args := p.parseArguments()
 
 	if !p.expect([]TokenKind{TokenColon}) {
-		return nil
+		return nil, fmt.Errorf("ERROR: expected colon ( : ), got shit")
 	}
 
 	returnType := p.parseType()
 
 	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
-		return nil
+		return nil, fmt.Errorf("ERROR: expected curly brace open ( { ), got shit")
 	}
 
 	body := p.parseBlockStatement().(*BlockStatement)
 
-	return &FnExpression{
+	return &FunctionStatement{
 		Token:      prev,
 		Name:       name,
 		Args:       args,
 		ReturnType: returnType,
 		Body:       body,
-	}
-
+	}, nil
 }
 
 func (p *Parser) parseArguments() []*Identifier {
