@@ -36,6 +36,7 @@ var precedences = map[TokenKind]int{
 	TokenMinus:          SUM,
 	TokenSlash:          PRODUCT,
 	TokenMultiply:       PRODUCT,
+	TokenBraceOpen:      CALL,
 }
 
 func NewParser(tokens []Token, filepath string) *Parser {
@@ -71,6 +72,7 @@ func NewParser(tokens []Token, filepath string) *Parser {
 	p.registerInfix(TokenGreater, p.parseInfixExpression)
 	p.registerInfix(TokenLessOrEqual, p.parseInfixExpression)
 	p.registerInfix(TokenGreaterOrEqual, p.parseInfixExpression)
+	p.registerInfix(TokenBraceOpen, p.parseCallExpression)
 	return &p
 }
 
@@ -234,6 +236,7 @@ func (p *Parser) Parse() *Program {
 
 		if err != nil {
 			p.Errors = append(p.Errors, err)
+			return nil
 		} else {
 			ast.Statements = append(ast.Statements, stmt)
 		}
@@ -298,7 +301,11 @@ func (p *Parser) parseReturnStatement() (*ReturnStatement, error) {
 
 func (p *Parser) parseExpressionStatement() (*ExpressionStatement, error) {
 	stmt := &ExpressionStatement{}
-	stmt.Expression = p.parseExpression(LOWEST)
+	expr := p.parseExpression(LOWEST)
+	if expr == nil {
+		return nil, fmt.Errorf("ERROR: on the expression stmt")
+	}
+	stmt.Expression = expr
 	return stmt, nil
 }
 
@@ -451,7 +458,6 @@ func (p *Parser) parseArguments() []*Identifier {
 	if !p.expect([]TokenKind{TokenIdentifier}) {
 		return nil
 	}
-	fmt.Println(args, p.peekToken())
 
 	for p.peekToken().Kind == TokenComma {
 		p.nextToken()
@@ -459,6 +465,7 @@ func (p *Parser) parseArguments() []*Identifier {
 			Token: p.peekToken(),
 			Value: p.peekToken().Text,
 		})
+
 		p.nextToken()
 		if !p.expect([]TokenKind{TokenColon}) {
 			return nil
@@ -494,6 +501,45 @@ func (p *Parser) parseBlockStatement() Expression {
 	}
 
 	return &block
+}
+
+func (p *Parser) parseCallExpression(left Expression) Expression {
+
+	switch left.(type) {
+	case *Identifier:
+	default:
+		p.Errors = append(p.Errors, p.error(p.peekToken(), "ERROR: only call are allowed, bounding function into a variable ain't allowed"))
+		return nil
+	}
+
+	exp := CallExpression{Token: p.peekToken(), Function: *(left.(*Identifier))}
+	exp.Args = p.parseCallArguments()
+	return &exp
+}
+
+func (p *Parser) parseCallArguments() []Expression {
+	args := make([]Expression, 0)
+	if !p.expect([]TokenKind{TokenBraceOpen}) {
+		return nil
+	}
+
+	if p.peekToken().Kind == TokenBraceClose {
+		p.nextToken()
+		return args
+	}
+
+	args = append(args, p.parseExpression(LOWEST))
+
+	for p.peekToken().Kind == TokenComma {
+		p.nextToken()
+		args = append(args, p.parseExpression(LOWEST))
+	}
+
+	if !p.expect([]TokenKind{TokenBraceClose}) {
+		return nil
+	}
+
+	return args
 }
 
 func (p *Parser) parsePrefixExpression() Expression {
