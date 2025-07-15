@@ -11,6 +11,7 @@ const (
 	IntType    TYPE = "int"
 	FloatType  TYPE = "float"
 	StringType TYPE = "string"
+	BoolType   TYPE = "bool"
 	VoidType   TYPE = "void"
 )
 

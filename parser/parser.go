@@ -346,6 +346,8 @@ func (p *Parser) typeMapper(typ string) TYPE {
 		return FloatType
 	case "string":
 		return StringType
+	case "bool":
+		return BoolType
 	case "void":
 		return VoidType
 	}
