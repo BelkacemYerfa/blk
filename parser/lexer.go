@@ -101,6 +101,12 @@ func (l *Lexer) NextToken() Token {
 			Kind: TokenDot,
 			Text: ".",
 		}
+	case TokenComma:
+		l.readChar()
+		token.LiteralToken = LiteralToken{
+			Kind: TokenComma,
+			Text: ",",
+		}
 	case TokenMinus:
 		l.readChar()
 		token.LiteralToken = LiteralToken{

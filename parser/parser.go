@@ -58,6 +58,7 @@ func NewParser(tokens []Token, filepath string) *Parser {
 	p.registerPrefix(TokenFalse, p.parseBooleanLiteral)
 	p.registerPrefix(TokenBraceOpen, p.parseGroupedExpression)
 	p.registerPrefix(TokenIf, p.parseIfExpression)
+	p.registerPrefix(TokenFn, p.parseFunctionExpression)
 
 	// infix/binary operators
 	p.registerInfix(TokenPlus, p.parseInfixExpression)
@@ -99,7 +100,6 @@ func (p *Parser) peekToken() Token {
 
 func (p *Parser) expect(kinds []TokenKind) bool {
 	tok := p.nextToken()
-
 	if slices.Index(kinds, tok.Kind) == -1 {
 		p.Errors = append(p.Errors, p.error(tok, fmt.Sprintf("ERROR: expected one of (%v), received %v", kinds, tok.Kind)))
 		return false
@@ -389,6 +389,91 @@ func (p *Parser) parseIfExpression() Expression {
 		Consequence: consequence,
 		Alternative: alternative,
 	}
+}
+
+func (p *Parser) parseFunctionExpression() Expression {
+	prev := p.peekToken()
+	p.nextToken()
+
+	if !p.expect([]TokenKind{TokenIdentifier}) {
+		return nil
+	}
+
+	name := p.peekToken().Text
+
+	if !p.expect([]TokenKind{TokenBraceOpen}) {
+		return nil
+	}
+
+	args := p.parseArguments()
+
+	if !p.expect([]TokenKind{TokenColon}) {
+		return nil
+	}
+
+	if !p.expect([]TokenKind{TokenIdentifier}) {
+		return nil
+	}
+
+	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
+		return nil
+	}
+
+	body := p.parseBlockStatement().(*BlockStatement)
+
+	return &FnExpression{
+		Token: prev,
+		Name:  name,
+		Args:  args,
+		Body:  body,
+	}
+
+}
+
+func (p *Parser) parseArguments() []*Identifier {
+	args := make([]*Identifier, 0)
+
+	if p.peekToken().Kind == TokenBraceClose {
+		p.nextToken()
+		return args
+	}
+
+	args = append(args, &Identifier{
+		Token: p.peekToken(),
+		Value: p.peekToken().Text,
+	})
+
+	p.nextToken()
+	if !p.expect([]TokenKind{TokenColon}) {
+		return nil
+	}
+
+	if !p.expect([]TokenKind{TokenIdentifier}) {
+		return nil
+	}
+	fmt.Println(args, p.peekToken())
+
+	for p.peekToken().Kind == TokenComma {
+		p.nextToken()
+		args = append(args, &Identifier{
+			Token: p.peekToken(),
+			Value: p.peekToken().Text,
+		})
+		p.nextToken()
+		if !p.expect([]TokenKind{TokenColon}) {
+			return nil
+		}
+
+		if !p.expect([]TokenKind{TokenIdentifier}) {
+			return nil
+		}
+	}
+
+	if !p.expect([]TokenKind{TokenBraceClose}) {
+		return nil
+	}
+
+	return args
 }
 
 func (p *Parser) parseBlockStatement() Expression {

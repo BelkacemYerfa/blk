@@ -1,6 +1,9 @@
 package parser
 
-import "bytes"
+import (
+	"bytes"
+	"strings"
+)
 
 type Node interface {
 	TokenLiteral() string
@@ -197,6 +200,30 @@ func (ie *IfExpression) String() string {
 		out.WriteString(ie.Alternative.String())
 	}
 	return out.String()
+}
+
+type FnExpression struct {
+	Token Token
+	Name  string
+	Args  []*Identifier
+	Body  *BlockStatement
+}
+
+func (fn *FnExpression) expressionNode()      {}
+func (fn *FnExpression) TokenLiteral() string { return fn.Token.Kind }
+func (fn *FnExpression) String() string {
+	var out bytes.Buffer
+	params := []string{}
+	for _, p := range fn.Args {
+		params = append(params, p.String())
+	}
+	out.WriteString(fn.TokenLiteral())
+	out.WriteString("(")
+	out.WriteString(strings.Join(params, ", "))
+	out.WriteString(") ")
+	out.WriteString(fn.Body.String())
+	return out.String()
+
 }
 
 type Parser struct {

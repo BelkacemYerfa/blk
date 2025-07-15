@@ -28,6 +28,7 @@ const (
 	TokenQuote           TokenKind = `"`
 	TokenSingleQuote     TokenKind = `'`
 	TokenColon           TokenKind = ":"
+	TokenComma           TokenKind = ","
 	TokenDot             TokenKind = "."
 
 	// Arithmetic Operators

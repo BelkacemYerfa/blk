@@ -8,4 +8,4 @@ fn test_control(x: int): int {
     }
 }
 
-let result = if (10 > 5) { true } else { false };
+let result = if 10 > 5 { true } else { false };
