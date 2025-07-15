@@ -54,6 +54,7 @@ func NewParser(tokens []Token, filepath string) *Parser {
 	p.registerPrefix(TokenInt, p.parseIntLiteral)
 	p.registerPrefix(TokenFloat, p.parseFloatLiteral)
 	p.registerPrefix(TokenString, p.parseStringLiteral)
+	p.registerPrefix(TokenBracketOpen, p.parseArrayLiteral)
 	p.registerPrefix(TokenExclamation, p.parsePrefixExpression)
 	p.registerPrefix(TokenMinus, p.parsePrefixExpression)
 	p.registerPrefix(TokenTrue, p.parseBooleanLiteral)
@@ -277,18 +278,15 @@ func (p *Parser) parseLetStatement() (*LetStatement, error) {
 		return nil, p.error(tok, "ERROR: expected colon (:), got shit")
 	}
 
-	tok = p.nextToken()
+	stmt.ExplicitType = p.parseType()
 
-	if tok.Kind != TokenIdentifier {
-		return nil, p.error(tok, "ERROR: expected type, got shit")
-	}
-
-	tok = p.nextToken()
-
+	tok = p.peekToken()
+	fmt.Println(tok)
 	if tok.Kind != TokenAssign {
 		return nil, p.error(tok, "ERROR: expected assign (=), got shit")
 	}
 
+	p.nextToken()
 	stmt.Value = p.parseExpression(LOWEST)
 
 	return stmt, nil
@@ -309,6 +307,50 @@ func (p *Parser) parseExpressionStatement() (*ExpressionStatement, error) {
 	}
 	stmt.Expression = expr
 	return stmt, nil
+}
+
+func (p *Parser) parseType() TYPE {
+	tok := p.nextToken()
+	switch tok.Kind {
+	case TokenIdentifier:
+		p.Pos--
+		tok = p.peekToken()
+		p.Pos++
+		return p.typeMapper(tok.Text)
+	case TokenBracketOpen:
+		tok = p.peekToken()
+
+		for tok.Kind != TokenIdentifier {
+			tok = p.nextToken()
+		}
+
+		returnedType := p.typeMapper(tok.Text)
+
+		p.nextToken()
+		for tok.Kind == TokenBracketClose {
+			tok = p.nextToken()
+		}
+		p.nextToken()
+		return returnedType
+	default:
+		errMsg := p.error(tok, "ERROR: expected type, got shit")
+		panic(errMsg)
+	}
+}
+
+func (p *Parser) typeMapper(typ string) TYPE {
+	switch typ {
+	case "int":
+		return IntType
+	case "float":
+		return FloatType
+	case "string":
+		return StringType
+	case "void":
+		return VoidType
+	}
+
+	panic(fmt.Sprintf("ERROR: type ain't supported (%v)", typ))
 }
 
 func (p *Parser) parseIdentifier() Expression {
@@ -367,6 +409,42 @@ func (p *Parser) parseBooleanLiteral() Expression {
 	}
 }
 
+func (p *Parser) parseArrayLiteral() Expression {
+	prev := p.peekToken()
+	if !p.expect([]TokenKind{TokenBracketOpen}) {
+		p.Errors = append(p.Errors, p.error(prev, "ERROR: expected open bracket [, got shit"))
+		return nil
+	}
+	elements := make([]Expression, 0)
+
+	tok := p.peekToken()
+
+	if tok.Kind == TokenBracketClose {
+		p.nextToken()
+		return &ArrayLiteral{
+			Token:    prev,
+			Elements: elements,
+		}
+	}
+
+	elements = append(elements, p.parseExpression(LOWEST))
+
+	for p.peekToken().Kind == TokenComma {
+		p.nextToken()
+		elements = append(elements, p.parseExpression(LOWEST))
+	}
+
+	if !p.expect([]TokenKind{TokenBracketClose}) {
+		p.Errors = append(p.Errors, p.error(prev, "ERROR: expected close bracket ( ] ), got shit"))
+		return nil
+	}
+
+	return &ArrayLiteral{
+		Token:    prev,
+		Elements: elements,
+	}
+}
+
 func (p *Parser) parseGroupedExpression() Expression {
 	p.nextToken()
 	exp := p.parseExpression(LOWEST)
@@ -415,9 +493,9 @@ func (p *Parser) parseFunctionExpression() Expression {
 	if !p.expect([]TokenKind{TokenIdentifier}) {
 		return nil
 	}
-
+	p.Pos--
 	name := p.peekToken().Text
-
+	p.nextToken()
 	if !p.expect([]TokenKind{TokenBraceOpen}) {
 		return nil
 	}
@@ -428,9 +506,7 @@ func (p *Parser) parseFunctionExpression() Expression {
 		return nil
 	}
 
-	if !p.expect([]TokenKind{TokenIdentifier}) {
-		return nil
-	}
+	returnType := p.parseType()
 
 	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
 		return nil
@@ -439,10 +515,11 @@ func (p *Parser) parseFunctionExpression() Expression {
 	body := p.parseBlockStatement().(*BlockStatement)
 
 	return &FnExpression{
-		Token: prev,
-		Name:  name,
-		Args:  args,
-		Body:  body,
+		Token:      prev,
+		Name:       name,
+		Args:       args,
+		ReturnType: returnType,
+		Body:       body,
 	}
 
 }

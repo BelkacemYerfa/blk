@@ -89,6 +89,18 @@ func (l *Lexer) NextToken() Token {
 			Kind: TokenBraceClose,
 			Text: ")",
 		}
+	case TokenBracketOpen:
+		l.readChar()
+		token.LiteralToken = LiteralToken{
+			Kind: TokenBracketOpen,
+			Text: "[",
+		}
+	case TokenBracketClose:
+		l.readChar()
+		token.LiteralToken = LiteralToken{
+			Kind: TokenBracketClose,
+			Text: "]",
+		}
 	case TokenColon:
 		l.readChar()
 		token.LiteralToken = LiteralToken{

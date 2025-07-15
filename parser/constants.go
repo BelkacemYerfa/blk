@@ -12,7 +12,6 @@ var (
 		"for":    TokenFor,
 		"while":  TokenWhile,
 		"import": TokenImport,
-		"as":     TokenAs,
 		"export": TokenExport,
 		"return": TokenReturn,
 		"skip":   TokenSkip,

@@ -15,7 +15,6 @@ const (
 	TokenElse   TokenKind = "else"
 	TokenReturn TokenKind = "return"
 	TokenImport TokenKind = "import"
-	TokenAs     TokenKind = "as"
 	TokenExport TokenKind = "export"
 
 	// Units

@@ -5,6 +5,15 @@ import (
 	"strings"
 )
 
+type TYPE = string
+
+const (
+	IntType    TYPE = "int"
+	FloatType  TYPE = "float"
+	StringType TYPE = "string"
+	VoidType   TYPE = "void"
+)
+
 type Node interface {
 	TokenLiteral() string
 	String() string
@@ -39,9 +48,10 @@ func (p *Program) String() string {
 }
 
 type LetStatement struct {
-	Token Token // the token.LET token
-	Name  *Identifier
-	Value Expression
+	Token        Token // the token.LET token
+	Name         *Identifier
+	ExplicitType TYPE
+	Value        Expression
 }
 
 func (ls *LetStatement) statementNode()       {}
@@ -138,6 +148,15 @@ func (bl *BooleanLiteral) expressionNode()      {}
 func (bl *BooleanLiteral) TokenLiteral() string { return bl.Token.Text }
 func (bl *BooleanLiteral) String() string       { return bl.Token.Text }
 
+type ArrayLiteral struct {
+	Token    Token
+	Elements []Expression
+}
+
+func (al *ArrayLiteral) expressionNode()      {}
+func (al *ArrayLiteral) TokenLiteral() string { return al.Token.Text }
+func (al *ArrayLiteral) String() string       { return al.Token.Text }
+
 type UnaryExpression struct {
 	Token    Token // the token.IDENT token
 	Operator string
@@ -212,10 +231,11 @@ func (ie *IfExpression) String() string {
 }
 
 type FnExpression struct {
-	Token Token
-	Name  string
-	Args  []*Identifier
-	Body  *BlockStatement
+	Token      Token
+	Name       string
+	Args       []*Identifier
+	ReturnType TYPE
+	Body       *BlockStatement
 }
 
 func (fn *FnExpression) expressionNode()      {}
