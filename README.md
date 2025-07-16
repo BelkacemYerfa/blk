@@ -35,7 +35,7 @@ fn add(a: int, b: int): int {
 
 ## ✅ Language Features
 
-- Static types: `int`, `float`, `bool`, `string`, `[type]` (arrays), structs via `type`
+- Static types: `int`, `float`, `bool`, `string`, `[]type` (arrays), structs via `type`
 - Functions with explicit return types and parameters
 - Variables using `let` (immutable) and `var` (mutable)
 - Custom types with `type`, including aliases and structs:
@@ -49,11 +49,20 @@ type Person {
 }
 ```
 
-- Array declaration using `[type]`:
+- Array declaration:
+
+for fixed-size arrays, use `[size]type`:
 
 ```blk
-let numbers: [int] = [1, 2, 3, 4]
-let names: [string] = ["Alice", "Bob"]
+let numbers: [3]int = [1, 2, 3]
+let names: [2]string = ["Alice", "Bob"]
+```
+
+for dynamic arrays, use `array(type)`:
+
+```blk
+var dynamicNumbers: array(int) = [10, 20, 30]
+var dynamicNames: array(string) = ["Alice", "Bob", "Charlie"]
 ```
 
 - Import system using `import "file"`. No `.blk` extension. No aliasing. Always use namespace prefix:

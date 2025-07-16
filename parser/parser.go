@@ -254,6 +254,11 @@ func (p *Parser) Parse() *Program {
 	return &ast
 }
 
+// TODO: add support for type aliasing, struct and hashmaps
+// TODO: more tests cases to cover
+// TODO: better error handling and targeting
+// TODO: support for loops and while loops
+
 func (p *Parser) parseStatement() (Statement, error) {
 	cmdToken := p.peekToken() // Consume command
 	switch cmdToken.Kind {
@@ -291,7 +296,7 @@ func (p *Parser) parseLetStatement() (*LetStatement, error) {
 	stmt.ExplicitType = p.parseType()
 
 	tok = p.peekToken()
-	fmt.Println(tok)
+
 	if tok.Kind != TokenAssign {
 		return nil, p.error(tok, "ERROR: expected assign (=), got shit")
 	}
@@ -348,33 +353,69 @@ func (p *Parser) parseAssignmentStatement() (*AssignmentStatement, error) {
 	return stmt, nil
 }
 
-func (p *Parser) parseType() TYPE {
+func (p *Parser) parseType() NodeType {
 	tok := p.nextToken()
 	switch tok.Kind {
 	case TokenIdentifier:
-		p.Pos--
-		tok = p.peekToken()
-		p.Pos++
-		return p.typeMapper(tok.Text)
+		switch tok.Text {
+		case "array":
+			tok = p.nextToken() // consume (
+			for p.peekToken().Kind != TokenIdentifier {
+				tok = p.nextToken()
+			}
+			tok = p.nextToken()
+			if _, isMatching := atomicTypes[tok.Text]; isMatching {
+				returnedType := p.typeMapper(tok.Text)
+				p.nextToken()
+				for p.peekToken().Kind == TokenBraceClose {
+					p.nextToken()
+				}
+				return NodeType{
+					Type: "array",
+					ChildType: &NodeType{
+						Type: returnedType,
+					},
+					Size: "",
+				}
+			} else {
+				p.Pos--
+				childType := p.parseType()
+				return NodeType{
+					Type:      "array",
+					ChildType: &childType,
+					Size:      "",
+				}
+			}
+		default:
+			p.Pos--
+			tok = p.peekToken()
+			p.Pos++
+		}
+		return NodeType{
+			Type: p.typeMapper(tok.Text),
+			Size: "",
+		}
 	case TokenBracketOpen:
 		tok = p.peekToken()
 
 		for tok.Kind != TokenIdentifier {
-			tok = p.nextToken()
+			if tok.Kind == TokenInt {
+				p.nextToken()
+				p.nextToken()
+				childType := p.parseType()
+				return NodeType{
+					Type:      "array",
+					ChildType: &childType,
+					Size:      tok.Text,
+				}
+			}
 		}
-
-		returnedType := p.typeMapper(tok.Text)
-
-		p.nextToken()
-		for tok.Kind == TokenBracketClose {
-			tok = p.nextToken()
-		}
-		p.nextToken()
-		return returnedType
 	default:
 		errMsg := p.error(tok, "ERROR: expected type, got shit")
 		panic(errMsg)
 	}
+
+	return NodeType{}
 }
 
 func (p *Parser) typeMapper(typ string) TYPE {

@@ -134,9 +134,6 @@ func Run(args []string) {
 	lexer := parser.NewLexer(targetFile, content)
 	tokens := lexer.Tokenize()
 
-	// tokens
-	fmt.Println(tokens)
-
 	filename, _ := os.Stat(targetFile)
 	p := parser.NewParser(tokens, filename.Name(), []string{})
 	ast := p.Parse()

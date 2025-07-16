@@ -48,10 +48,16 @@ func (p *Program) String() string {
 	return out.String()
 }
 
+type NodeType struct {
+	Type      TYPE
+	ChildType *NodeType
+	Size      string
+}
+
 type LetStatement struct {
 	Token        Token // the token.LET token
 	Name         *Identifier
-	ExplicitType TYPE
+	ExplicitType NodeType
 	Value        Expression
 }
 
@@ -254,7 +260,7 @@ type FunctionStatement struct {
 	Token      Token
 	Name       string
 	Args       []*Identifier
-	ReturnType TYPE
+	ReturnType NodeType
 	Body       *BlockStatement
 }
 

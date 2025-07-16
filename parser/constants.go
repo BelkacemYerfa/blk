@@ -19,6 +19,13 @@ var (
 		"false":  TokenFalse,
 	}
 
+	atomicTypes = map[string]TokenKind{
+		"int":    TokenInt,
+		"float":  TokenFloat,
+		"string": TokenString,
+		"bool":   TokenIdentifier,
+	}
+
 	binOperators = map[TokenKind]Operator{
 		TokenEquals:         "==",
 		TokenGreater:        ">",
