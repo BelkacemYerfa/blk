@@ -7,6 +7,8 @@ const (
 	// Keywords
 	TokenLet    TokenKind = "let"
 	TokenVar    TokenKind = "var"
+	TokenType   TokenKind = "type"
+	TokenStruct TokenKind = "struct"
 	TokenFn     TokenKind = "fn"
 	TokenFor    TokenKind = "for"
 	TokenWhile  TokenKind = "while"
@@ -15,7 +17,6 @@ const (
 	TokenElse   TokenKind = "else"
 	TokenReturn TokenKind = "return"
 	TokenImport TokenKind = "import"
-	TokenExport TokenKind = "export"
 
 	// Units
 	TokenCurlyBraceOpen  TokenKind = "{"
@@ -60,6 +61,8 @@ const (
 	TokenFloat  TokenKind = "float"
 	TokenTrue   TokenKind = "true"
 	TokenFalse  TokenKind = "false"
+	TokenArray  TokenKind = "array"
+	TokenMap    TokenKind = "map"
 
 	// Error
 	TokenError TokenKind = "error"

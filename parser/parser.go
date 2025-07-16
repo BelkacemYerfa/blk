@@ -54,6 +54,7 @@ func NewParser(tokens []Token, filepath string, internalFlags []string) *Parser 
 
 	// prefix/unary operators
 	p.registerPrefix(TokenIdentifier, p.parseIdentifier)
+	p.registerPrefix(TokenArray, p.parseType)
 	p.registerPrefix(TokenInt, p.parseIntLiteral)
 	p.registerPrefix(TokenFloat, p.parseFloatLiteral)
 	p.registerPrefix(TokenString, p.parseStringLiteral)
@@ -82,7 +83,7 @@ func NewParser(tokens []Token, filepath string, internalFlags []string) *Parser 
 }
 
 func (p *Parser) peekPrecedence() int {
-	if p, ok := precedences[p.peekToken().Kind]; ok {
+	if p, ok := precedences[p.currentToken().Kind]; ok {
 		return p
 	}
 	return LOWEST
@@ -98,7 +99,7 @@ func (p *Parser) nextToken() Token {
 }
 
 // Returns the current token to process, if none, returns the EOF
-func (p *Parser) peekToken() Token {
+func (p *Parser) currentToken() Token {
 	if p.Pos >= len(p.Tokens) {
 		return Token{LiteralToken: LiteralToken{Kind: TokenEOF}}
 	}
@@ -215,7 +216,7 @@ func (p *Parser) error(tok Token, msg string) error {
 
 	errMsg += msg
 	// skip until the next useful line
-	for p.peekToken().Row <= tok.Row {
+	for p.currentToken().Row <= tok.Row {
 		p.nextToken()
 	}
 	return errors.New(errMsg)
@@ -232,8 +233,8 @@ func (p *Parser) Parse() *Program {
 	ast := Program{}
 	ast.Statements = make([]Statement, 0)
 
-	for p.peekToken().Kind != TokenEOF {
-		// tok := p.peekToken()
+	for p.currentToken().Kind != TokenEOF {
+		// tok := p.currentToken()
 
 		// switch tok.Kind {
 		// case TokenLet, TokenVar, TokenReturn:
@@ -255,12 +256,13 @@ func (p *Parser) Parse() *Program {
 }
 
 // TODO: add support for type aliasing, struct and hashmaps
+// [^^^]
 // TODO: more tests cases to cover
 // TODO: better error handling and targeting
 // TODO: support for loops and while loops
 
 func (p *Parser) parseStatement() (Statement, error) {
-	cmdToken := p.peekToken() // Consume command
+	cmdToken := p.currentToken() // Consume command
 	switch cmdToken.Kind {
 	case TokenLet, TokenVar:
 		return p.parseLetStatement()
@@ -268,6 +270,8 @@ func (p *Parser) parseStatement() (Statement, error) {
 		return p.parseReturnStatement()
 	case TokenFn:
 		return p.parseFunctionStatement()
+	case TokenType:
+		return p.parseTypeStatement()
 	case TokenIdentifier:
 		if slices.Index(p.internalFlags, "-as") != -1 {
 			return p.parseExpressionStatement()
@@ -279,7 +283,7 @@ func (p *Parser) parseStatement() (Statement, error) {
 }
 
 func (p *Parser) parseLetStatement() (*LetStatement, error) {
-	stmt := &LetStatement{Token: p.peekToken()}
+	stmt := &LetStatement{Token: p.currentToken()}
 	p.nextToken()
 	identifier := p.parseIdentifier()
 	if identifier == nil {
@@ -293,9 +297,8 @@ func (p *Parser) parseLetStatement() (*LetStatement, error) {
 		return nil, p.error(tok, "ERROR: expected colon (:), got shit")
 	}
 
-	stmt.ExplicitType = p.parseType()
-
-	tok = p.peekToken()
+	stmt.ExplicitType = p.parseType().(*NodeType)
+	tok = p.currentToken()
 
 	if tok.Kind != TokenAssign {
 		return nil, p.error(tok, "ERROR: expected assign (=), got shit")
@@ -308,14 +311,14 @@ func (p *Parser) parseLetStatement() (*LetStatement, error) {
 }
 
 func (p *Parser) parseReturnStatement() (*ReturnStatement, error) {
-	stmt := &ReturnStatement{Token: p.peekToken()}
+	stmt := &ReturnStatement{Token: p.currentToken()}
 	p.nextToken()
 	stmt.ReturnValue = p.parseExpression(LOWEST)
 	return stmt, nil
 }
 
 func (p *Parser) parseExpressionStatement() (*ExpressionStatement, error) {
-	stmt := &ExpressionStatement{Token: p.peekToken()}
+	stmt := &ExpressionStatement{Token: p.currentToken()}
 	expr := p.parseExpression(LOWEST)
 	if expr == nil {
 		return nil, fmt.Errorf("ERROR: on the expression stmt")
@@ -324,15 +327,32 @@ func (p *Parser) parseExpressionStatement() (*ExpressionStatement, error) {
 	return stmt, nil
 }
 
+func (p *Parser) parseTypeStatement() (*TypeStatement, error) {
+	stmt := &TypeStatement{Token: p.currentToken()}
+	p.nextToken()
+
+	stmt.Name = p.parseIdentifier().(*Identifier)
+
+	tok := p.nextToken()
+
+	if tok.Kind != TokenAssign {
+		return nil, p.error(tok, "ERROR: expected assign ( = ), got shit")
+	}
+
+	stmt.Value = p.parseExpression(LOWEST)
+
+	return stmt, nil
+}
+
 func (p *Parser) parseAssignmentStatement() (*AssignmentStatement, error) {
-	stmt := &AssignmentStatement{Token: p.peekToken()}
+	stmt := &AssignmentStatement{Token: p.currentToken()}
 
 	stmt.Name = p.parseExpression(LOWEST)
 
 	// if !p.expect([]TokenKind{TokenIdentifier}) {
 	// 	p.Pos--
 	// 	errMsg := fmt.Sprintf("ERROR: expected identifier, got shit")
-	// 	tok := p.peekToken()
+	// 	tok := p.currentToken()
 	// 	p.Pos++
 	// 	return nil, p.error(tok, errMsg)
 	// }
@@ -353,59 +373,44 @@ func (p *Parser) parseAssignmentStatement() (*AssignmentStatement, error) {
 	return stmt, nil
 }
 
-func (p *Parser) parseType() NodeType {
+func (p *Parser) parseType() Expression {
+	nodeType := &NodeType{}
+
 	tok := p.nextToken()
+
 	switch tok.Kind {
 	case TokenIdentifier:
-		switch tok.Text {
-		case "array":
-			tok = p.nextToken() // consume (
-			for p.peekToken().Kind != TokenIdentifier {
-				tok = p.nextToken()
-			}
-			tok = p.nextToken()
-			if _, isMatching := atomicTypes[tok.Text]; isMatching {
-				returnedType := p.typeMapper(tok.Text)
-				p.nextToken()
-				for p.peekToken().Kind == TokenBraceClose {
-					p.nextToken()
-				}
-				return NodeType{
-					Type: "array",
-					ChildType: &NodeType{
-						Type: returnedType,
-					},
-					Size: "",
-				}
-			} else {
-				p.Pos--
-				childType := p.parseType()
-				return NodeType{
-					Type:      "array",
-					ChildType: &childType,
-					Size:      "",
-				}
-			}
-		default:
-			p.Pos--
-			tok = p.peekToken()
-			p.Pos++
-		}
-		return NodeType{
-			Type: p.typeMapper(tok.Text),
-			Size: "",
-		}
-	case TokenBracketOpen:
-		tok = p.peekToken()
+		tok = p.currentToken()
+		nodeType.Type = p.typeMapper(tok.Text)
+	case TokenArray:
+		tok = p.nextToken() // consume (
 
+		if p.currentToken().Kind != TokenArray {
+			childType := p.parseType()
+			return &NodeType{
+				Type:      "array",
+				ChildType: childType.(*NodeType),
+			}
+		}
+
+		for p.currentToken().Kind == TokenArray {
+			childType := p.parseType()
+			return &NodeType{
+				Type:      "array",
+				ChildType: childType.(*NodeType),
+			}
+		}
+
+	case TokenBracketOpen:
+		tok = p.currentToken()
 		for tok.Kind != TokenIdentifier {
 			if tok.Kind == TokenInt {
 				p.nextToken()
 				p.nextToken()
 				childType := p.parseType()
-				return NodeType{
+				return &NodeType{
 					Type:      "array",
-					ChildType: &childType,
+					ChildType: childType.(*NodeType),
 					Size:      tok.Text,
 				}
 			}
@@ -415,7 +420,15 @@ func (p *Parser) parseType() NodeType {
 		panic(errMsg)
 	}
 
-	return NodeType{}
+	if p.nextToken().Kind == TokenBraceClose {
+		for p.currentToken().Kind == TokenBraceClose {
+			p.nextToken()
+		}
+	} else {
+		p.Pos--
+	}
+
+	return nodeType
 }
 
 func (p *Parser) typeMapper(typ string) TYPE {
@@ -430,9 +443,9 @@ func (p *Parser) typeMapper(typ string) TYPE {
 		return BoolType
 	case "void":
 		return VoidType
+	default:
+		return typ
 	}
-
-	panic(fmt.Sprintf("ERROR: type ain't supported (%v)", typ))
 }
 
 func (p *Parser) parseIdentifier() Expression {
@@ -492,14 +505,14 @@ func (p *Parser) parseBooleanLiteral() Expression {
 }
 
 func (p *Parser) parseArrayLiteral() Expression {
-	prev := p.peekToken()
+	prev := p.currentToken()
 	if !p.expect([]TokenKind{TokenBracketOpen}) {
 		p.Errors = append(p.Errors, p.error(prev, "ERROR: expected open bracket [, got shit"))
 		return nil
 	}
 	elements := make([]Expression, 0)
 
-	tok := p.peekToken()
+	tok := p.currentToken()
 
 	if tok.Kind == TokenBracketClose {
 		p.nextToken()
@@ -511,7 +524,7 @@ func (p *Parser) parseArrayLiteral() Expression {
 
 	elements = append(elements, p.parseExpression(LOWEST))
 
-	for p.peekToken().Kind == TokenComma {
+	for p.currentToken().Kind == TokenComma {
 		p.nextToken()
 		elements = append(elements, p.parseExpression(LOWEST))
 	}
@@ -537,7 +550,7 @@ func (p *Parser) parseGroupedExpression() Expression {
 }
 
 func (p *Parser) parseIfExpression() Expression {
-	prev := p.peekToken()
+	prev := p.currentToken()
 	p.nextToken()
 
 	condition := p.parseExpression(LOWEST)
@@ -569,14 +582,14 @@ func (p *Parser) parseIfExpression() Expression {
 }
 
 func (p *Parser) parseFunctionStatement() (*FunctionStatement, error) {
-	prev := p.peekToken()
+	prev := p.currentToken()
 	p.nextToken()
 
 	if !p.expect([]TokenKind{TokenIdentifier}) {
 		return nil, fmt.Errorf("ERROR: expected identifier, got shit")
 	}
 	p.Pos--
-	name := p.peekToken().Text
+	name := p.currentToken().Text
 	p.nextToken()
 	if !p.expect([]TokenKind{TokenBraceOpen}) {
 		return nil, fmt.Errorf("ERROR: expected brace open ( ( ), got shit")
@@ -588,7 +601,7 @@ func (p *Parser) parseFunctionStatement() (*FunctionStatement, error) {
 		return nil, fmt.Errorf("ERROR: expected colon ( : ), got shit")
 	}
 
-	returnType := p.parseType()
+	returnType := p.parseType().(*NodeType)
 
 	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
 		return nil, fmt.Errorf("ERROR: expected curly brace open ( { ), got shit")
@@ -608,14 +621,14 @@ func (p *Parser) parseFunctionStatement() (*FunctionStatement, error) {
 func (p *Parser) parseArguments() []*Identifier {
 	args := make([]*Identifier, 0)
 
-	if p.peekToken().Kind == TokenBraceClose {
+	if p.currentToken().Kind == TokenBraceClose {
 		p.nextToken()
 		return args
 	}
 
 	args = append(args, &Identifier{
-		Token: p.peekToken(),
-		Value: p.peekToken().Text,
+		Token: p.currentToken(),
+		Value: p.currentToken().Text,
 	})
 
 	p.nextToken()
@@ -627,11 +640,11 @@ func (p *Parser) parseArguments() []*Identifier {
 		return nil
 	}
 
-	for p.peekToken().Kind == TokenComma {
+	for p.currentToken().Kind == TokenComma {
 		p.nextToken()
 		args = append(args, &Identifier{
-			Token: p.peekToken(),
-			Value: p.peekToken().Text,
+			Token: p.currentToken(),
+			Value: p.currentToken().Text,
 		})
 
 		p.nextToken()
@@ -652,9 +665,9 @@ func (p *Parser) parseArguments() []*Identifier {
 }
 
 func (p *Parser) parseBlockStatement() Expression {
-	block := BlockStatement{Token: p.peekToken()}
+	block := BlockStatement{Token: p.currentToken()}
 	block.Body = make([]Statement, 0)
-	for p.peekToken().Kind != TokenCurlyBraceClose && p.peekToken().Kind != TokenEOF {
+	for p.currentToken().Kind != TokenCurlyBraceClose && p.currentToken().Kind != TokenEOF {
 		// parse body expressions and statements
 		stmt, err := p.parseStatement()
 		if err != nil {
@@ -675,11 +688,11 @@ func (p *Parser) parseCallExpression(left Expression) Expression {
 	switch left.(type) {
 	case *Identifier:
 	default:
-		p.Errors = append(p.Errors, p.error(p.peekToken(), "ERROR: only call are allowed, bounding function into a variable ain't allowed"))
+		p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: only call are allowed, bounding function into a variable ain't allowed"))
 		return nil
 	}
 
-	exp := CallExpression{Token: p.peekToken(), Function: *(left.(*Identifier))}
+	exp := CallExpression{Token: p.currentToken(), Function: *(left.(*Identifier))}
 	exp.Args = p.parseCallArguments()
 	return &exp
 }
@@ -690,14 +703,14 @@ func (p *Parser) parseCallArguments() []Expression {
 		return nil
 	}
 
-	if p.peekToken().Kind == TokenBraceClose {
+	if p.currentToken().Kind == TokenBraceClose {
 		p.nextToken()
 		return args
 	}
 
 	args = append(args, p.parseExpression(LOWEST))
 
-	for p.peekToken().Kind == TokenComma {
+	for p.currentToken().Kind == TokenComma {
 		p.nextToken()
 		args = append(args, p.parseExpression(LOWEST))
 	}
@@ -710,7 +723,7 @@ func (p *Parser) parseCallArguments() []Expression {
 }
 
 func (p *Parser) parseIndexExpression(left Expression) Expression {
-	exp := &IndexExpression{Token: p.peekToken(), Left: left}
+	exp := &IndexExpression{Token: p.currentToken(), Left: left}
 
 	p.nextToken()
 
@@ -741,7 +754,7 @@ func (p *Parser) parsePrefixExpression() Expression {
 }
 
 func (p *Parser) parseInfixExpression(left Expression) Expression {
-	tok := p.peekToken()
+	tok := p.currentToken()
 
 	if _, ok := binOperators[tok.Kind]; !ok {
 		p.Errors = append(p.Errors, p.error(tok, "ERROR: expected a binary operator (== | > | < | ...), got shut"))
@@ -761,17 +774,17 @@ func (p *Parser) parseInfixExpression(left Expression) Expression {
 }
 
 func (p *Parser) parseExpression(precedence int) Expression {
-	prefix := p.prefixParseFns[p.peekToken().Kind]
+	prefix := p.prefixParseFns[p.currentToken().Kind]
 	if prefix == nil {
-		p.Errors = append(p.Errors, fmt.Errorf("ERROR: %v kind ain't supported", p.peekToken().Kind))
+		p.Errors = append(p.Errors, fmt.Errorf("ERROR: %v kind ain't supported", p.currentToken().Kind))
 		return nil
 	}
 
 	leftExp := prefix()
 
-	cur := p.peekToken()
-	for p.peekToken().Row <= cur.Row && precedence < p.peekPrecedence() {
-		infix := p.infixParseFns[p.peekToken().Kind]
+	cur := p.currentToken()
+	for p.currentToken().Row <= cur.Row && precedence < p.peekPrecedence() {
+		infix := p.infixParseFns[p.currentToken().Kind]
 		if infix == nil {
 			return leftExp
 		}

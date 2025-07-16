@@ -49,15 +49,21 @@ func (p *Program) String() string {
 }
 
 type NodeType struct {
+	Token     Token
 	Type      TYPE
 	ChildType *NodeType
 	Size      string
 }
 
+func (nt *NodeType) expressionNode()      {}
+func (nt *NodeType) TokenLiteral() string { return nt.Token.Text }
+
+func (nt *NodeType) String() string { return nt.Type }
+
 type LetStatement struct {
 	Token        Token // the token.LET token
 	Name         *Identifier
-	ExplicitType NodeType
+	ExplicitType *NodeType
 	Value        Expression
 }
 
@@ -71,6 +77,26 @@ func (ls *LetStatement) String() string {
 	out.WriteString(" = ")
 	if ls.Value != nil {
 		out.WriteString(ls.Value.String())
+	}
+	return out.String()
+}
+
+type TypeStatement struct {
+	Token Token // the token.LET token
+	Name  *Identifier
+	Value Expression
+}
+
+func (ts *TypeStatement) statementNode()       {}
+func (ts *TypeStatement) TokenLiteral() string { return ts.Token.Text }
+
+func (ts *TypeStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString(ts.TokenLiteral() + " ")
+	out.WriteString(ts.Name.String())
+	out.WriteString(" = ")
+	if ts.Value != nil {
+		out.WriteString(ts.Value.String())
 	}
 	return out.String()
 }
@@ -260,7 +286,7 @@ type FunctionStatement struct {
 	Token      Token
 	Name       string
 	Args       []*Identifier
-	ReturnType NodeType
+	ReturnType *NodeType
 	Body       *BlockStatement
 }
 
