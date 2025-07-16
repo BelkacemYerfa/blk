@@ -24,9 +24,11 @@ const (
 	PREFIX      // -X or !X
 	CALL        // myFunction(X)
 	INDEX       // arr[i]
+	STRUCT      // myStruct { }
 )
 
 var precedences = map[TokenKind]int{
+	TokenCurlyBraceOpen: EQUALS,
 	TokenEquals:         EQUALS,
 	TokenNotEquals:      EQUALS,
 	TokenLess:           LESSGREATER,
@@ -39,6 +41,7 @@ var precedences = map[TokenKind]int{
 	TokenMultiply:       PRODUCT,
 	TokenBraceOpen:      CALL,
 	TokenBracketOpen:    INDEX,
+	TokenDot:            STRUCT,
 }
 
 func NewParser(tokens []Token, filepath string, internalFlags []string) *Parser {
@@ -79,6 +82,8 @@ func NewParser(tokens []Token, filepath string, internalFlags []string) *Parser 
 	p.registerInfix(TokenGreaterOrEqual, p.parseInfixExpression)
 	p.registerInfix(TokenBraceOpen, p.parseCallExpression)
 	p.registerInfix(TokenBracketOpen, p.parseIndexExpression)
+	p.registerInfix(TokenCurlyBraceOpen, p.parseStructInstanceExpression)
+	p.registerInfix(TokenDot, p.parseMemberShipAccess)
 	return &p
 }
 
@@ -255,7 +260,7 @@ func (p *Parser) Parse() *Program {
 	return &ast
 }
 
-// TODO: add support for type aliasing, struct and hashmaps
+// TODO: add support  struct and hashmaps
 // [^^^]
 // TODO: more tests cases to cover
 // TODO: better error handling and targeting
@@ -272,6 +277,8 @@ func (p *Parser) parseStatement() (Statement, error) {
 		return p.parseFunctionStatement()
 	case TokenType:
 		return p.parseTypeStatement()
+	case TokenStruct:
+		return p.parseStructStatement()
 	case TokenIdentifier:
 		if slices.Index(p.internalFlags, "-as") != -1 {
 			return p.parseExpressionStatement()
@@ -344,6 +351,52 @@ func (p *Parser) parseTypeStatement() (*TypeStatement, error) {
 	return stmt, nil
 }
 
+func (p *Parser) parseStructStatement() (*StructStatement, error) {
+	stmt := &StructStatement{Token: p.currentToken()}
+	p.nextToken()
+
+	stmt.Name = p.parseIdentifier().(*Identifier)
+
+	tok := p.nextToken()
+
+	if tok.Kind != TokenCurlyBraceOpen {
+		return nil, p.error(tok, "ERROR: expected assign ( = ), got shit")
+	}
+
+	stmt.Body = p.parseFields()
+
+	return stmt, nil
+}
+
+func (p *Parser) parseFields() []Field {
+	fields := make([]Field, 0)
+
+	for p.currentToken().Kind != TokenCurlyBraceClose {
+		identifier := p.parseIdentifier().(*Identifier)
+
+		tok := p.nextToken()
+
+		if tok.Kind != TokenColon {
+			return []Field{}
+		}
+
+		nodeType := p.parseType().(*NodeType)
+
+		fields = append(fields, Field{
+			Key:   identifier,
+			Value: nodeType,
+		})
+	}
+
+	tok := p.nextToken()
+
+	if tok.Kind != TokenCurlyBraceClose {
+		return []Field{}
+	}
+
+	return fields
+}
+
 func (p *Parser) parseAssignmentStatement() (*AssignmentStatement, error) {
 	stmt := &AssignmentStatement{Token: p.currentToken()}
 
@@ -380,7 +433,6 @@ func (p *Parser) parseType() Expression {
 
 	switch tok.Kind {
 	case TokenIdentifier:
-		tok = p.currentToken()
 		nodeType.Type = p.typeMapper(tok.Text)
 	case TokenArray:
 		tok = p.nextToken() // consume (
@@ -553,17 +605,19 @@ func (p *Parser) parseIfExpression() Expression {
 	prev := p.currentToken()
 	p.nextToken()
 
-	condition := p.parseExpression(LOWEST)
+	fmt.Println(p.currentToken())
+	condition := p.parseExpression(EQUALS)
 
 	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
 		return nil
 	}
-
 	consequence := p.parseBlockStatement().(*BlockStatement)
 
 	// check if there is an else stmt
 	tok := p.nextToken()
 	alternative := &BlockStatement{}
+
+	// support for else if
 	if tok.Kind == TokenElse {
 		if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
 			return nil
@@ -667,6 +721,8 @@ func (p *Parser) parseArguments() []*Identifier {
 func (p *Parser) parseBlockStatement() Expression {
 	block := BlockStatement{Token: p.currentToken()}
 	block.Body = make([]Statement, 0)
+	p.nextToken()
+	fmt.Println(p.currentToken())
 	for p.currentToken().Kind != TokenCurlyBraceClose && p.currentToken().Kind != TokenEOF {
 		// parse body expressions and statements
 		stmt, err := p.parseStatement()
@@ -674,9 +730,9 @@ func (p *Parser) parseBlockStatement() Expression {
 			p.Errors = append(p.Errors, err)
 		} else {
 			block.Body = append(block.Body, stmt)
+			fmt.Println(block)
 		}
 	}
-
 	if !p.expect([]TokenKind{TokenCurlyBraceClose}) {
 		return nil
 	}
@@ -736,6 +792,58 @@ func (p *Parser) parseIndexExpression(left Expression) Expression {
 	return exp
 }
 
+func (p *Parser) parseStructInstanceExpression(left Expression) Expression {
+	expr := &StructInstanceExpression{Token: p.currentToken(), Left: left}
+
+	expr.Body = p.parseFieldValues()
+
+	return expr
+}
+
+func (p *Parser) parseFieldValues() []FieldInstance {
+	fields := make([]FieldInstance, 0)
+	p.nextToken()
+	for p.currentToken().Kind != TokenCurlyBraceClose {
+		identifier, ok := p.parseIdentifier().(*Identifier)
+
+		if !ok {
+			return []FieldInstance{}
+		}
+		tok := p.nextToken()
+
+		if tok.Kind != TokenColon {
+			return []FieldInstance{}
+		}
+
+		value := p.parseExpression(LOWEST)
+
+		fields = append(fields, FieldInstance{
+			Key:   identifier,
+			Value: value,
+		})
+	}
+
+	tok := p.nextToken()
+
+	if tok.Kind != TokenCurlyBraceClose {
+		return []FieldInstance{}
+	}
+
+	return fields
+}
+
+func (p *Parser) parseMemberShipAccess(left Expression) Expression {
+	expr := &MemberShipExpression{Token: p.currentToken(), Object: left}
+
+	if !p.expect([]TokenKind{TokenDot}) {
+		return nil
+	}
+
+	expr.Property = p.parseExpression(LOWEST)
+
+	return expr
+}
+
 func (p *Parser) parsePrefixExpression() Expression {
 	tok := p.nextToken()
 
@@ -776,7 +884,7 @@ func (p *Parser) parseInfixExpression(left Expression) Expression {
 func (p *Parser) parseExpression(precedence int) Expression {
 	prefix := p.prefixParseFns[p.currentToken().Kind]
 	if prefix == nil {
-		p.Errors = append(p.Errors, fmt.Errorf("ERROR: %v kind ain't supported", p.currentToken().Kind))
+		p.Errors = append(p.Errors, fmt.Errorf("ERROR: %v ain't an expression, it is a statement", p.currentToken().Kind))
 		return nil
 	}
 
@@ -784,6 +892,7 @@ func (p *Parser) parseExpression(precedence int) Expression {
 
 	cur := p.currentToken()
 	for p.currentToken().Row <= cur.Row && precedence < p.peekPrecedence() {
+		fmt.Println(p.currentToken())
 		infix := p.infixParseFns[p.currentToken().Kind]
 		if infix == nil {
 			return leftExp

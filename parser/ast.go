@@ -2,6 +2,7 @@ package parser
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 )
 
@@ -98,6 +99,36 @@ func (ts *TypeStatement) String() string {
 	if ts.Value != nil {
 		out.WriteString(ts.Value.String())
 	}
+	return out.String()
+}
+
+type Field struct {
+	Key   *Identifier
+	Value *NodeType // any value type
+}
+
+type StructStatement struct {
+	Token Token // the token.LET token
+	Name  *Identifier
+	Body  []Field
+}
+
+func (ss *StructStatement) statementNode()       {}
+func (ss *StructStatement) TokenLiteral() string { return ss.Token.Text }
+
+func (ss *StructStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString(ss.TokenLiteral() + " ")
+	out.WriteString(ss.Name.String())
+	out.WriteString(" { ")
+	if ss.Body != nil {
+		for _, field := range ss.Body {
+			out.WriteString(field.Key.Value)
+			out.WriteString(":")
+			out.WriteString(fmt.Sprintf("%v", field.Value))
+		}
+	}
+	out.WriteString(" } ")
 	return out.String()
 }
 
@@ -341,6 +372,54 @@ func (ie *IndexExpression) String() string {
 	out.WriteString(ie.Left.String())
 	out.WriteString("[")
 	out.WriteString(ie.Index.String())
+	out.WriteString("])")
+	return out.String()
+}
+
+type MemberShipExpression struct {
+	Token    Token // The [ token
+	Object   Expression
+	Property Expression
+}
+
+func (me *MemberShipExpression) expressionNode()      {}
+func (me *MemberShipExpression) TokenLiteral() string { return me.Token.Text }
+func (me *MemberShipExpression) String() string {
+	var out bytes.Buffer
+	// TODO: update this method
+	out.WriteString("(")
+	out.WriteString(me.Object.String())
+	out.WriteString("[")
+	out.WriteString(me.Property.String())
+	out.WriteString("])")
+	return out.String()
+}
+
+type FieldInstance struct {
+	Key   *Identifier
+	Value Expression // any value type
+}
+
+type StructInstanceExpression struct {
+	Token Token // The [ token
+	Left  Expression
+	Body  []FieldInstance
+}
+
+func (sie *StructInstanceExpression) expressionNode()      {}
+func (sie *StructInstanceExpression) TokenLiteral() string { return sie.Token.Text }
+func (sie *StructInstanceExpression) String() string {
+	var out bytes.Buffer
+	out.WriteString("(")
+	out.WriteString(sie.Left.String())
+	out.WriteString("[")
+	if sie.Body != nil {
+		for _, field := range sie.Body {
+			out.WriteString(field.Key.Value)
+			out.WriteString(":")
+			out.WriteString(fmt.Sprintf("%v", field.Value))
+		}
+	}
 	out.WriteString("])")
 	return out.String()
 }
