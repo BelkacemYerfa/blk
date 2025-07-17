@@ -104,6 +104,14 @@ func (p *Parser) nextToken() Token {
 	return tok
 }
 
+func (p *Parser) peekToken() Token {
+	peekPos := p.Pos + 1
+	if peekPos >= len(p.Tokens) {
+		return Token{LiteralToken: LiteralToken{Kind: TokenEOF}}
+	}
+	return p.Tokens[peekPos]
+}
+
 // Returns the current token to process, if none, returns the EOF
 func (p *Parser) currentToken() Token {
 	if p.Pos >= len(p.Tokens) {
@@ -261,7 +269,7 @@ func (p *Parser) Parse() *Program {
 	return &ast
 }
 
-// TODO: support for else if stmt
+// TODO: fix a bug of built in function and call
 // [^^^]
 // TODO: fix the string debugging way for the program
 // TODO: more tests cases to cover
@@ -286,7 +294,14 @@ func (p *Parser) parseStatement() (Statement, error) {
 		if slices.Index(p.internalFlags, "-as") != -1 {
 			return p.parseExpressionStatement()
 		}
-		return p.parseAssignmentStatement()
+
+		peek := p.peekToken()
+		fmt.Println(peek)
+		if peek.Kind == TokenBraceOpen {
+			return p.parseExpressionStatement()
+		} else {
+			return p.parseAssignmentStatement()
+		}
 	default:
 		return p.parseExpressionStatement()
 	}
