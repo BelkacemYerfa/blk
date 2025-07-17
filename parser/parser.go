@@ -58,6 +58,7 @@ func NewParser(tokens []Token, filepath string, internalFlags []string) *Parser 
 	// prefix/unary operators
 	p.registerPrefix(TokenIdentifier, p.parseIdentifier)
 	p.registerPrefix(TokenArray, p.parseType)
+	p.registerPrefix(TokenMap, p.parseType)
 	p.registerPrefix(TokenInt, p.parseIntLiteral)
 	p.registerPrefix(TokenFloat, p.parseFloatLiteral)
 	p.registerPrefix(TokenString, p.parseStringLiteral)
@@ -269,9 +270,8 @@ func (p *Parser) Parse() *Program {
 	return &ast
 }
 
-// TODO: fix a bug of built in function and call
-// [^^^]
 // TODO: fix the string debugging way for the program
+// [^^^]
 // TODO: more tests cases to cover
 // TODO: better error handling and targeting
 // TODO: support for loops and while loops
