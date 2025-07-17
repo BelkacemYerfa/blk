@@ -68,6 +68,15 @@ var dynamicNumbers: array(int) = [10, 20, 30]
 var dynamicNames: array(string) = ["Alice", "Bob", "Charlie"]
 ```
 
+- Hashmaps using `map(key_type, value_type)`:
+
+```blk
+var settings: map(string, int) = {
+    "volume": 100,
+    "brightness": 80
+}
+```
+
 - Import system using `import "file"`. No aliasing. Always use namespace prefix:
 
 ```blk
@@ -107,6 +116,22 @@ while i < 10 {
         skip
     }
     print(i)
+}
+```
+
+- Switch statement:
+
+```blk
+switch x {
+    case 1 {
+        print("One")
+    }
+    case 2, 3 {
+        print("Two or Three")
+    }
+    else {
+        print("Default")
+    }
 }
 ```
 
@@ -153,6 +178,15 @@ let numbers: [int] = [10, 20, 30]
 let first: int = numbers[0]
 ```
 
+### Maps
+
+```blk
+var config: map(string, int) = map {
+    "width": 1280,
+    "height": 720
+}
+```
+
 ### Conditionals
 
 ```blk
@@ -170,6 +204,22 @@ var i: int = 0
 while i < 10 {
     print(i)
     i = i + 1
+}
+```
+
+### Switch Statements
+
+```blk
+switch x {
+    case 1 {
+        print("One")
+    }
+    case 2, 3 {
+        print("Two or Three")
+    }
+    else {
+        print("Default")
+    }
 }
 ```
 

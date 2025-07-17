@@ -324,7 +324,7 @@ type IfExpression struct {
 	Token       Token
 	Condition   Expression
 	Consequence *BlockStatement
-	Alternative *BlockStatement
+	Alternative Expression
 }
 
 func (ie *IfExpression) expressionNode()      {}

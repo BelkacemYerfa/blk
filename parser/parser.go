@@ -261,17 +261,16 @@ func (p *Parser) Parse() *Program {
 	return &ast
 }
 
-// TODO: add support hashmaps
+// TODO: support for else if stmt
 // [^^^]
+// TODO: fix the string debugging way for the program
 // TODO: more tests cases to cover
 // TODO: better error handling and targeting
 // TODO: support for loops and while loops
+// TODO: support for a switch stmt
 
 func (p *Parser) parseStatement() (Statement, error) {
 	cmdToken := p.currentToken() // Consume command
-
-	fmt.Println(cmdToken)
-
 	switch cmdToken.Kind {
 	case TokenLet, TokenVar:
 		return p.parseLetStatement()
@@ -690,37 +689,36 @@ func (p *Parser) parseGroupedExpression() Expression {
 }
 
 func (p *Parser) parseIfExpression() Expression {
-	prev := p.currentToken()
+	expr := &IfExpression{Token: p.currentToken()}
 	p.nextToken()
 
-	condition := p.parseExpression(EQUALS)
+	expr.Condition = p.parseExpression(EQUALS)
 
 	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
 		return nil
 	}
 
-	consequence := p.parseBlockStatement().(*BlockStatement)
+	expr.Consequence = p.parseBlockStatement().(*BlockStatement)
 
 	// check if there is an else stmt
 	tok := p.nextToken()
-	alternative := &BlockStatement{}
 
 	// support for else if
 	if tok.Kind == TokenElse {
-		if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
-			return nil
+		tok = p.currentToken()
+		if tok.Kind == TokenIf {
+			expr.Alternative = p.parseIfExpression()
+		} else {
+			if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
+				return nil
+			}
+			expr.Alternative = p.parseBlockStatement()
 		}
-		alternative = p.parseBlockStatement().(*BlockStatement)
 	} else {
 		p.Pos--
 	}
 
-	return &IfExpression{
-		Token:       prev,
-		Condition:   condition,
-		Consequence: consequence,
-		Alternative: alternative,
-	}
+	return expr
 }
 
 func (p *Parser) parseFunctionStatement() (*FunctionStatement, error) {
@@ -813,15 +811,13 @@ func (p *Parser) parseBlockStatement() Expression {
 	for p.currentToken().Kind != TokenCurlyBraceClose && p.currentToken().Kind != TokenEOF {
 		// parse body expressions and statements
 		stmt, err := p.parseStatement()
-		fmt.Println(stmt)
+
 		if err != nil {
 			p.Errors = append(p.Errors, err)
-			fmt.Println(err)
 		} else {
 			block.Body = append(block.Body, stmt)
 		}
 	}
-	fmt.Println(block.Body)
 
 	if !p.expect([]TokenKind{TokenCurlyBraceClose}) {
 		return nil
