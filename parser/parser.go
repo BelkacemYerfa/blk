@@ -269,6 +269,9 @@ func (p *Parser) Parse() *Program {
 
 func (p *Parser) parseStatement() (Statement, error) {
 	cmdToken := p.currentToken() // Consume command
+
+	fmt.Println(cmdToken)
+
 	switch cmdToken.Kind {
 	case TokenLet, TokenVar:
 		return p.parseLetStatement()
@@ -381,7 +384,7 @@ func (p *Parser) parseFields() []Field {
 			return []Field{}
 		}
 
-		nodeType := p.parseType().(*NodeType)
+		nodeType := p.parseType()
 
 		fields = append(fields, Field{
 			Key:   identifier,
@@ -695,6 +698,7 @@ func (p *Parser) parseIfExpression() Expression {
 	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
 		return nil
 	}
+
 	consequence := p.parseBlockStatement().(*BlockStatement)
 
 	// check if there is an else stmt
@@ -739,7 +743,7 @@ func (p *Parser) parseFunctionStatement() (*FunctionStatement, error) {
 		return nil, fmt.Errorf("ERROR: expected colon ( : ), got shit")
 	}
 
-	returnType := p.parseType().(*NodeType)
+	returnType := p.parseType()
 
 	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
 		return nil, fmt.Errorf("ERROR: expected curly brace open ( { ), got shit")
@@ -805,17 +809,20 @@ func (p *Parser) parseArguments() []*Identifier {
 func (p *Parser) parseBlockStatement() Expression {
 	block := BlockStatement{Token: p.currentToken()}
 	block.Body = make([]Statement, 0)
-	p.nextToken()
 
 	for p.currentToken().Kind != TokenCurlyBraceClose && p.currentToken().Kind != TokenEOF {
 		// parse body expressions and statements
 		stmt, err := p.parseStatement()
+		fmt.Println(stmt)
 		if err != nil {
 			p.Errors = append(p.Errors, err)
+			fmt.Println(err)
 		} else {
 			block.Body = append(block.Body, stmt)
 		}
 	}
+	fmt.Println(block.Body)
+
 	if !p.expect([]TokenKind{TokenCurlyBraceClose}) {
 		return nil
 	}
@@ -968,6 +975,7 @@ func (p *Parser) parseInfixExpression(left Expression) Expression {
 
 func (p *Parser) parseExpression(precedence int) Expression {
 	prefix := p.prefixParseFns[p.currentToken().Kind]
+
 	if prefix == nil {
 		p.Errors = append(p.Errors, fmt.Errorf("ERROR: %v ain't an expression, it is a statement", p.currentToken().Kind))
 		return nil

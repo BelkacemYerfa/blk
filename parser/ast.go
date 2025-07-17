@@ -114,7 +114,7 @@ func (ts *TypeStatement) String() string {
 
 type Field struct {
 	Key   *Identifier
-	Value *NodeType // any value type
+	Value Expression // any value type
 }
 
 type StructStatement struct {
@@ -346,7 +346,7 @@ type FunctionStatement struct {
 	Token      Token
 	Name       string
 	Args       []*Identifier
-	ReturnType *NodeType
+	ReturnType Expression
 	Body       *BlockStatement
 }
 
