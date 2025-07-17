@@ -38,12 +38,15 @@ fn add(a: int, b: int): int {
 - Static types: `int`, `float`, `bool`, `string`, `[]type` (arrays), structs via `type`
 - Functions with explicit return types and parameters
 - Variables using `let` (immutable) and `var` (mutable)
-- Custom types with `type`, including aliases and structs:
+- Custom types with `type` for aliasing
+- Structs using `struct` keyword:
 
 ```blk
+# type aliasing
 type ID = int
 
-type Person {
+# structs
+struct Person {
     name: string
     age: int
 }
@@ -65,7 +68,7 @@ var dynamicNumbers: array(int) = [10, 20, 30]
 var dynamicNames: array(string) = ["Alice", "Bob", "Charlie"]
 ```
 
-- Import system using `import "file"`. No `.blk` extension. No aliasing. Always use namespace prefix:
+- Import system using `import "file"`. No aliasing. Always use namespace prefix:
 
 ```blk
 import "math"

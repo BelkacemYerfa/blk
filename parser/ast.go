@@ -58,13 +58,23 @@ type NodeType struct {
 
 func (nt *NodeType) expressionNode()      {}
 func (nt *NodeType) TokenLiteral() string { return nt.Token.Text }
+func (nt *NodeType) String() string       { return nt.Type }
 
-func (nt *NodeType) String() string { return nt.Type }
+type MapType struct {
+	Token Token
+	Type  TYPE
+	Left  Expression
+	Right Expression
+}
+
+func (mt *MapType) expressionNode()      {}
+func (mt *MapType) TokenLiteral() string { return mt.Token.Text }
+func (mt *MapType) String() string       { return mt.Type }
 
 type LetStatement struct {
 	Token        Token // the token.LET token
 	Name         *Identifier
-	ExplicitType *NodeType
+	ExplicitType Expression
 	Value        Expression
 }
 
@@ -239,6 +249,25 @@ type ArrayLiteral struct {
 func (al *ArrayLiteral) expressionNode()      {}
 func (al *ArrayLiteral) TokenLiteral() string { return al.Token.Text }
 func (al *ArrayLiteral) String() string       { return al.Token.Text }
+
+type MapLiteral struct {
+	Token Token
+	Pairs map[Expression]Expression
+}
+
+func (ml *MapLiteral) expressionNode()      {}
+func (ml *MapLiteral) TokenLiteral() string { return ml.Token.Text }
+func (ml *MapLiteral) String() string {
+	var out bytes.Buffer
+	pairs := []string{}
+	for key, value := range ml.Pairs {
+		pairs = append(pairs, key.String()+":"+value.String())
+	}
+	out.WriteString("{")
+	out.WriteString(strings.Join(pairs, ", "))
+	out.WriteString("}")
+	return out.String()
+}
 
 type UnaryExpression struct {
 	Token    Token // the token.IDENT token
