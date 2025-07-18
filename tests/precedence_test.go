@@ -101,7 +101,7 @@ func TestOperatorPrecedenceParsing(t *testing.T) {
 	}
 	for _, tt := range tests {
 		l := parser.NewLexer("", tt.input)
-		p := parser.NewParser(l.Tokenize(), "", []string{})
+		p := parser.NewParser(l.Tokenize(), "")
 		program := p.Parse()
 		actual := program.String()
 		if actual != tt.expected {

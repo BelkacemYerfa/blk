@@ -51,7 +51,7 @@ var precedences = map[TokenKind]int{
 	TokenDot:            STRUCT,
 }
 
-func NewParser(tokens []Token, filepath string, internalFlags []string) *Parser {
+func NewParser(tokens []Token, filepath string) *Parser {
 	p := Parser{
 		Tokens:         tokens,
 		FilePath:       filepath,
@@ -59,7 +59,7 @@ func NewParser(tokens []Token, filepath string, internalFlags []string) *Parser 
 		prefixParseFns: make(map[TokenKind]prefixParseFn),
 		infixParseFns:  make(map[TokenKind]infixParseFn),
 		Pos:            0,
-		internalFlags:  internalFlags,
+		internalFlags:  []string{},
 	}
 
 	// prefix/unary operators
@@ -290,6 +290,8 @@ func (p *Parser) parseStatement() (Statement, error) {
 		return p.parseTypeStatement()
 	case TokenStruct:
 		return p.parseStructStatement()
+	case TokenWhile:
+		return p.parseWhileStatement()
 	default:
 		return p.parseExpressionStatement()
 	}
@@ -402,6 +404,20 @@ func (p *Parser) parseFields() []Field {
 	}
 
 	return fields
+}
+
+func (p *Parser) parseWhileStatement() (*WhileStatement, error) {
+	stmt := &WhileStatement{Token: p.currentToken()}
+	p.nextToken()
+
+	stmt.Condition = p.parseExpression(ASSIGN)
+
+	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
+		return nil, fmt.Errorf("ERROR: expected curly brace open ( { ), got shit")
+	}
+
+	stmt.Body = p.parseBlockStatement().(*BlockStatement)
+	return stmt, nil
 }
 
 func (p *Parser) parseType() Expression {
