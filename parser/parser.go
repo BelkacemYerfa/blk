@@ -272,10 +272,9 @@ func (p *Parser) Parse() *Program {
 	return &ast
 }
 
-// TODO: more tests cases to cover
+// TODO: support for and while loops
 // [^^^]
 // TODO: better error handling and targeting
-// TODO: support for loops and while loops
 // TODO: support for a switch stmt
 
 func (p *Parser) parseStatement() (Statement, error) {

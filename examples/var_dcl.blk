@@ -1,5 +1,20 @@
 let x: int = 10
 let pi: float = 3.14
 let greeting: string = "Hello, blk!"
-var names: [[string]] = ["Alice", "Bob", "Charlie" , ["Dave", "Eve"]]
+var names: array([2]string) = [["Dave", "Eve"]]
 let is_done: bool = true
+
+struct Person {
+  Name : string
+  Age : int
+}
+
+var hashMap : map(string, Person) = {
+  "1125" : Person {
+    Name:"John"
+    age:34
+  },
+  "1256" : Person {
+    Name:"Amy" age:30
+  }
+}

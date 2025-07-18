@@ -1,8 +1,8 @@
-import "math.blk"
-import "utils.blk" as utils
+import "math"
+import "utils"
 
 fn main(): int {
-    let value: int = utils.double(21)
+    let value: int = utils::double(21)
     print(value)
     return 0
 }
