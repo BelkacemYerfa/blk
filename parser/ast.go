@@ -342,8 +342,8 @@ type BlockStatement struct {
 	Body  []Statement
 }
 
-func (bk *BlockStatement) expressionNode()      {}
-func (bk *BlockStatement) TokenLiteral() string { return bk.Token.Text }
+func (bs *BlockStatement) expressionNode()      {}
+func (bs *BlockStatement) TokenLiteral() string { return bs.Token.Text }
 func (bs *BlockStatement) String() string {
 	var out bytes.Buffer
 	for _, s := range bs.Body {
