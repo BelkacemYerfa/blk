@@ -666,7 +666,7 @@ func (p *Parser) parseIfExpression() Expression {
 	expr := &IfExpression{Token: p.currentToken()}
 	p.nextToken()
 
-	expr.Condition = p.parseExpression(EQUALS)
+	expr.Condition = p.parseExpression(ASSIGN)
 
 	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
 		return nil

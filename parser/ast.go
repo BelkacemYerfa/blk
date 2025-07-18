@@ -192,7 +192,6 @@ func (rs *ReturnStatement) String() string {
 	if rs.ReturnValue != nil {
 		out.WriteString(rs.ReturnValue.String())
 	}
-	out.WriteString(";")
 	return out.String()
 }
 
@@ -364,13 +363,25 @@ func (ie *IfExpression) expressionNode()      {}
 func (ie *IfExpression) TokenLiteral() string { return ie.Token.Text }
 func (ie *IfExpression) String() string {
 	var out bytes.Buffer
-	out.WriteString("if")
+	out.WriteString("if ")
 	out.WriteString(ie.Condition.String())
-	out.WriteString(" ")
+	out.WriteString(" { ")
 	out.WriteString(ie.Consequence.String())
+	out.WriteString(" }")
 	if ie.Alternative != nil {
-		out.WriteString("else ")
-		out.WriteString(ie.Alternative.String())
+		out.WriteString(" else ")
+		alternative , ok := ie.Alternative.(*IfExpression)
+		if !ok {
+			out.WriteString("{ ")
+		}
+		if ok {
+			out.WriteString(alternative.String())
+		} else {
+			out.WriteString(ie.Alternative.String())
+		}
+		if !ok {
+			out.WriteString(" }")
+		}
 	}
 	return out.String()
 }

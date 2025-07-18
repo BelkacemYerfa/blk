@@ -35,7 +35,7 @@ func TestAtomicLetStatementDCL(t *testing.T) {
 				"hello" : [1 , 2],
 				"there" : [3 , 4]
 			}`,
-			`var hash = {"hello": [1, 2], "there	": [3, 4]}`,
+			`var hash = {"hello": [1, 2], "there": [3, 4]}`,
 		},
 	}
 
@@ -116,8 +116,3 @@ func TestTypeStatementDCL(t *testing.T) {
 		}
 	}
 }
-
-
-
-
-
