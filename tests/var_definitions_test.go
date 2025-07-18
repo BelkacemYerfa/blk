@@ -116,3 +116,33 @@ func TestTypeStatementDCL(t *testing.T) {
 		}
 	}
 }
+
+func TestMemberShipAccessStatementDCL(t *testing.T) {
+  tests := []struct {
+		input    string
+		expected string
+	}{
+		{
+			"result.Code = 200",
+			"result.(Code = 200)",
+		},
+		{
+			"file.meta.size = 2048",
+			"file.meta.(size = 2048)",
+		},
+		{
+			`response.body.userInfo.username = "John Doe"`,
+			`response.body.userInfo.(username = "John Doe")`,
+		},
+	}
+
+	for _, tt := range tests {
+		l := parser.NewLexer("", tt.input)
+		p := parser.NewParser(l.Tokenize(), "", []string{})
+		program := p.Parse()
+		actual := program.String()
+		if actual != tt.expected {
+			t.Errorf("expected=%q, got=%q", tt.expected, actual)
+		}
+	}
+}

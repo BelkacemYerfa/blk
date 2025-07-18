@@ -459,12 +459,9 @@ func (me *MemberShipExpression) expressionNode()      {}
 func (me *MemberShipExpression) TokenLiteral() string { return me.Token.Text }
 func (me *MemberShipExpression) String() string {
 	var out bytes.Buffer
-	// TODO: update this method
-	out.WriteString("(")
 	out.WriteString(me.Object.String())
-	out.WriteString("[")
+	out.WriteString(".")
 	out.WriteString(me.Property.String())
-	out.WriteString("])")
 	return out.String()
 }
 
