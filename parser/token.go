@@ -36,6 +36,7 @@ const (
 	TokenPlus           TokenKind = "+"
 	TokenMultiply       TokenKind = "*"
 	TokenSlash          TokenKind = "/"
+	TokenModule         TokenKind = "%"
 	TokenAssign         TokenKind = "="
 	TokenEquals         TokenKind = "=="
 	TokenNotEquals      TokenKind = "!="
@@ -43,7 +44,6 @@ const (
 	TokenLess           TokenKind = "<"
 	TokenGreaterOrEqual TokenKind = ">="
 	TokenLessOrEqual    TokenKind = "<="
-
 	// Logical Operators
 	TokenAnd         TokenKind = "&&"
 	TokenOr          TokenKind = "||"

@@ -17,6 +17,9 @@ type (
 const (
 	_ int = iota
 	LOWEST
+	ASSIGN
+	OR
+	AND
 	EQUALS      // == !=
 	LESSGREATER // > < >= <=
 	SUM         // +
@@ -28,7 +31,10 @@ const (
 )
 
 var precedences = map[TokenKind]int{
-	TokenCurlyBraceOpen: EQUALS,
+	TokenCurlyBraceOpen: ASSIGN,
+	TokenAssign:         ASSIGN,
+	TokenOr:             OR,
+	TokenAnd:            AND,
 	TokenEquals:         EQUALS,
 	TokenNotEquals:      EQUALS,
 	TokenLess:           LESSGREATER,
@@ -39,6 +45,7 @@ var precedences = map[TokenKind]int{
 	TokenMinus:          SUM,
 	TokenSlash:          PRODUCT,
 	TokenMultiply:       PRODUCT,
+	TokenModule:         PRODUCT,
 	TokenBraceOpen:      CALL,
 	TokenBracketOpen:    INDEX,
 	TokenDot:            STRUCT,
@@ -76,6 +83,10 @@ func NewParser(tokens []Token, filepath string, internalFlags []string) *Parser 
 	p.registerInfix(TokenMinus, p.parseInfixExpression)
 	p.registerInfix(TokenSlash, p.parseInfixExpression)
 	p.registerInfix(TokenMultiply, p.parseInfixExpression)
+	p.registerInfix(TokenModule, p.parseInfixExpression)
+	p.registerInfix(TokenAssign, p.parseInfixExpression)
+	p.registerInfix(TokenAnd, p.parseInfixExpression)
+	p.registerInfix(TokenOr, p.parseInfixExpression)
 	p.registerInfix(TokenEquals, p.parseInfixExpression)
 	p.registerInfix(TokenNotEquals, p.parseInfixExpression)
 	p.registerInfix(TokenLess, p.parseInfixExpression)
@@ -249,28 +260,19 @@ func (p *Parser) Parse() *Program {
 	ast.Statements = make([]Statement, 0)
 
 	for p.currentToken().Kind != TokenEOF {
-		// tok := p.currentToken()
-
-		// switch tok.Kind {
-		// case TokenLet, TokenVar, TokenReturn:
 		stmt, err := p.parseStatement()
-
 		if err != nil {
 			p.Errors = append(p.Errors, err)
 			return nil
 		} else {
 			ast.Statements = append(ast.Statements, stmt)
 		}
-		// default:
-		// 	p.Errors = append(p.Errors, p.error(tok, "ERROR: expected a stmt, got shit"))
-		// 	return nil
-		// }
 	}
 
 	return &ast
 }
 
-// TODO: fix the string debugging way for the program
+// TODO: add support for the % , && , || operators
 // [^^^]
 // TODO: more tests cases to cover
 // TODO: better error handling and targeting
@@ -278,8 +280,8 @@ func (p *Parser) Parse() *Program {
 // TODO: support for a switch stmt
 
 func (p *Parser) parseStatement() (Statement, error) {
-	cmdToken := p.currentToken() // Consume command
-	switch cmdToken.Kind {
+	stmtToken := p.currentToken() // Consume stmt
+	switch stmtToken.Kind {
 	case TokenLet, TokenVar:
 		return p.parseLetStatement()
 	case TokenReturn:
@@ -290,18 +292,6 @@ func (p *Parser) parseStatement() (Statement, error) {
 		return p.parseTypeStatement()
 	case TokenStruct:
 		return p.parseStructStatement()
-	case TokenIdentifier:
-		if slices.Index(p.internalFlags, "-as") != -1 {
-			return p.parseExpressionStatement()
-		}
-
-		peek := p.peekToken()
-		fmt.Println(peek)
-		if peek.Kind == TokenBraceOpen {
-			return p.parseExpressionStatement()
-		} else {
-			return p.parseAssignmentStatement()
-		}
 	default:
 		return p.parseExpressionStatement()
 	}
@@ -413,35 +403,6 @@ func (p *Parser) parseFields() []Field {
 	}
 
 	return fields
-}
-
-func (p *Parser) parseAssignmentStatement() (*AssignmentStatement, error) {
-	stmt := &AssignmentStatement{Token: p.currentToken()}
-
-	stmt.Name = p.parseExpression(LOWEST)
-
-	// if !p.expect([]TokenKind{TokenIdentifier}) {
-	// 	p.Pos--
-	// 	errMsg := fmt.Sprintf("ERROR: expected identifier, got shit")
-	// 	tok := p.currentToken()
-	// 	p.Pos++
-	// 	return nil, p.error(tok, errMsg)
-	// }
-
-	tok := p.nextToken()
-
-	if tok.Kind != TokenAssign {
-		return nil, p.error(tok, "ERROR: expected assignment (=), got shit")
-	}
-
-	value := p.parseExpression(LOWEST)
-
-	if value == nil {
-		return nil, fmt.Errorf("ERROR: on the expression stmt")
-	}
-
-	stmt.Value = value
-	return stmt, nil
 }
 
 func (p *Parser) parseType() Expression {

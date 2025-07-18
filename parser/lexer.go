@@ -137,6 +137,12 @@ func (l *Lexer) NextToken() Token {
 			Kind: TokenMultiply,
 			Text: "*",
 		}
+	case TokenModule:
+		l.readChar()
+		token.LiteralToken = LiteralToken {
+			Kind: TokenModule,
+			Text: "%",
+		}
 	case TokenSlash:
 		l.readChar()
 		token.LiteralToken = LiteralToken{
@@ -209,6 +215,36 @@ func (l *Lexer) NextToken() Token {
 			token.LiteralToken = LiteralToken{
 				Kind: TokenLess,
 				Text: "<",
+			}
+		}
+	case "&":
+		l.readChar()
+		nextChar := string(l.Content[l.Cur])
+		if nextChar == "&" {
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenAnd,
+				Text: "&&",
+			}
+		} else {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenError,
+				Text: nextChar,
+			}
+		}
+	case "|":
+		l.readChar()
+		nextChar := string(l.Content[l.Cur])
+		if nextChar == "|" {
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenOr,
+				Text: "||",
+			}
+		} else {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenError,
+				Text: nextChar,
 			}
 		}
 	case TokenQuote:

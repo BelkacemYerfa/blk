@@ -38,8 +38,12 @@ var (
 		TokenNotEquals:      "!=",
 		TokenMultiply:       "*",
 		TokenSlash:          "/",
+		TokenModule:         "%",
 		TokenPlus:           "+",
 		TokenMinus:          "-",
+		TokenAssign:         "=",
+		TokenAnd:            "&&",
+		TokenOr:             "||",
 	}
 
 	unaryOperators = map[TokenKind]Operator{

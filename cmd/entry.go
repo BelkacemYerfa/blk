@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"blk/parser"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -147,8 +148,18 @@ func Run(args []string) {
 	}
 
 	fmt.Println("Parsed successfully")
-
 	fmt.Println(ast)
+	jsonData, err := json.Marshal(ast)
+	if err != nil {
+		fmt.Printf("ERROR: failed to marshal AST to JSON: %v\n", err)
+		return
+	}
+
+	err = os.WriteFile(filepath.Join(osPath, "/internal_examples/main_ast.json"), jsonData, 0644)
+	if err != nil {
+		fmt.Printf("ERROR: failed to write AST to file: %v\n", err)
+		return
+	}
 
 	fmt.Println("AST written to main_ast.json")
 }

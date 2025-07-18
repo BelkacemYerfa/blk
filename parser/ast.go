@@ -175,26 +175,6 @@ func (es *ExpressionStatement) String() string {
 	return ""
 }
 
-type AssignmentStatement struct {
-	Token Token // the first token of the expression
-	Name  Expression
-	Value Expression
-}
-
-func (ae *AssignmentStatement) statementNode()       {}
-func (ae *AssignmentStatement) TokenLiteral() string { return ae.Token.Text }
-
-func (ae *AssignmentStatement) String() string {
-	var out bytes.Buffer
-	out.WriteString(ae.TokenLiteral() + " ")
-	out.WriteString(ae.Name.String())
-	out.WriteString(" = ")
-	if ae.Value != nil {
-		out.WriteString(ae.Value.String())
-	}
-	return out.String()
-}
-
 type Identifier struct {
 	Token Token // the token.IDENT token
 	Value string
