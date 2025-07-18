@@ -272,9 +272,8 @@ func (p *Parser) Parse() *Program {
 	return &ast
 }
 
-// TODO: add support for the % , && , || operators
-// [^^^]
 // TODO: more tests cases to cover
+// [^^^]
 // TODO: better error handling and targeting
 // TODO: support for loops and while loops
 // TODO: support for a switch stmt
@@ -381,19 +380,18 @@ func (p *Parser) parseFields() []Field {
 
 	for p.currentToken().Kind != TokenCurlyBraceClose {
 		identifier := p.parseIdentifier().(*Identifier)
-
 		tok := p.nextToken()
 
 		if tok.Kind != TokenColon {
 			return []Field{}
 		}
-
 		nodeType := p.parseType()
 
 		fields = append(fields, Field{
 			Key:   identifier,
 			Value: nodeType,
 		})
+
 	}
 
 	tok := p.nextToken()
@@ -481,8 +479,6 @@ func (p *Parser) parseType() Expression {
 		for p.currentToken().Kind == TokenBraceClose {
 			p.nextToken()
 		}
-	} else if p.currentToken().Kind == TokenColon {
-		p.nextToken()
 	} else {
 		p.Pos--
 	}
@@ -491,18 +487,10 @@ func (p *Parser) parseType() Expression {
 }
 
 func (p *Parser) typeMapper(typ string) TYPE {
-	switch typ {
-	case "int":
-		return IntType
-	case "float":
-		return FloatType
-	case "string":
-		return StringType
-	case "bool":
-		return BoolType
-	case "void":
-		return VoidType
-	default:
+
+	if mappedType, isMatching := atomicTypes[typ]; isMatching {
+		return mappedType
+	} else {
 		return typ
 	}
 }
@@ -572,6 +560,11 @@ func (p *Parser) parseArrayLiteral() Expression {
 	elements := make([]Expression, 0)
 
 	tok := p.currentToken()
+
+	if tok.Kind == TokenInt {
+		p.Pos -= 1
+		return p.parseType()
+	}
 
 	if tok.Kind == TokenBracketClose {
 		p.nextToken()

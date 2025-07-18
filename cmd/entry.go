@@ -149,7 +149,7 @@ func Run(args []string) {
 
 	fmt.Println("Parsed successfully")
 	fmt.Println(ast)
-	jsonData, err := json.Marshal(ast)
+	jsonData, err := json.MarshalIndent(ast, " ", " ")
 	if err != nil {
 		fmt.Printf("ERROR: failed to marshal AST to JSON: %v\n", err)
 		return

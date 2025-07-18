@@ -6,7 +6,6 @@ import (
 )
 
 func TestOperatorPrecedenceParsing(t *testing.T) {
-	// TODO: update the tests, because of the new support for assignment statements, for now enable flag -as
 	tests := []struct {
 		input    string
 		expected string
@@ -98,7 +97,7 @@ func TestOperatorPrecedenceParsing(t *testing.T) {
 	}
 	for _, tt := range tests {
 		l := parser.NewLexer("", tt.input)
-		p := parser.NewParser(l.Tokenize(), "", []string{"-as"})
+		p := parser.NewParser(l.Tokenize(), "", []string{})
 		program := p.Parse()
 		actual := program.String()
 		if actual != tt.expected {

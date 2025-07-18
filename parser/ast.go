@@ -58,7 +58,27 @@ type NodeType struct {
 
 func (nt *NodeType) expressionNode()      {}
 func (nt *NodeType) TokenLiteral() string { return nt.Token.Text }
-func (nt *NodeType) String() string       { return nt.Type }
+func (nt *NodeType) String() string       {
+	var out bytes.Buffer
+
+	if len(nt.Size) > 0 {
+		out.WriteString("[")
+		out.WriteString(nt.Size)
+		out.WriteString("]")
+		out.WriteString(nt.ChildType.String())
+
+		return out.String()
+	}
+	if nt.ChildType == nil {
+		out.WriteString(nt.Type)
+	} else {
+		out.WriteString(nt.Type)
+		out.WriteString("(")
+		out.WriteString(nt.ChildType.String())
+		out.WriteString(")")
+	}
+	return out.String()
+}
 
 type MapType struct {
 	Token Token
@@ -69,7 +89,20 @@ type MapType struct {
 
 func (mt *MapType) expressionNode()      {}
 func (mt *MapType) TokenLiteral() string { return mt.Token.Text }
-func (mt *MapType) String() string       { return mt.Type }
+func (mt *MapType) String() string       {
+	var out bytes.Buffer
+	out.WriteString(mt.Type)
+	out.WriteString("(")
+	if mt.Left != nil {
+		out.WriteString(mt.Left.String())
+	}
+	if mt.Right != nil {
+	  out.WriteString(", ")
+		out.WriteString(mt.Right.String())
+	}
+	out.WriteString(")")
+	return out.String()
+}
 
 type LetStatement struct {
 	Token        Token // the token.LET token
@@ -132,13 +165,16 @@ func (ss *StructStatement) String() string {
 	out.WriteString(ss.Name.String())
 	out.WriteString(" { ")
 	if ss.Body != nil {
-		for _, field := range ss.Body {
+		for idx , field := range ss.Body {
 			out.WriteString(field.Key.Value)
 			out.WriteString(":")
 			out.WriteString(fmt.Sprintf("%v", field.Value))
+			if idx + 1 <= len(ss.Body) - 1 {
+				out.WriteString(", ")
+			}
 		}
 	}
-	out.WriteString(" } ")
+	out.WriteString(" }")
 	return out.String()
 }
 

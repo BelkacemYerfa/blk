@@ -22,11 +22,12 @@ var (
 		"false":  TokenFalse,
 	}
 
-	atomicTypes = map[string]TokenKind{
-		"int":    TokenInt,
-		"float":  TokenFloat,
-		"string": TokenString,
-		"bool":   TokenIdentifier,
+	atomicTypes = map[string]TYPE{
+		"int":    IntType,
+		"float":  FloatType,
+		"string": StringType,
+		"bool":   BoolType,
+		"void":   VoidType,
 	}
 
 	binOperators = map[TokenKind]Operator{
