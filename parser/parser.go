@@ -69,7 +69,7 @@ func NewParser(tokens []Token, filepath string, internalFlags []string) *Parser 
 	p.registerPrefix(TokenInt, p.parseIntLiteral)
 	p.registerPrefix(TokenFloat, p.parseFloatLiteral)
 	p.registerPrefix(TokenString, p.parseStringLiteral)
-	p.registerPrefix(TokenBracketOpen, p.parseArrayLiteral)
+	p.registerPrefix(TokenBracketOpen, p.parseBracketOpen)
 	p.registerPrefix(TokenCurlyBraceOpen, p.parseMapLiteral)
 	p.registerPrefix(TokenExclamation, p.parsePrefixExpression)
 	p.registerPrefix(TokenMinus, p.parsePrefixExpression)
@@ -312,6 +312,7 @@ func (p *Parser) parseLetStatement() (*LetStatement, error) {
 	}
 
 	stmt.ExplicitType = p.parseType()
+
 	tok = p.currentToken()
 
 	if tok.Kind != TokenAssign {
@@ -352,9 +353,10 @@ func (p *Parser) parseTypeStatement() (*TypeStatement, error) {
 	if tok.Kind != TokenAssign {
 		return nil, p.error(tok, "ERROR: expected assign ( = ), got shit")
 	}
-
+	p.internalFlags = append(p.internalFlags, "type")
 	stmt.Value = p.parseExpression(LOWEST)
-
+	idx := slices.Index(p.internalFlags, "type")
+	p.internalFlags = slices.Delete(p.internalFlags, 0 , idx)
 	return stmt, nil
 }
 
@@ -551,6 +553,14 @@ func (p *Parser) parseBooleanLiteral() Expression {
 	}
 }
 
+func (p *Parser) parseBracketOpen() Expression {
+    if slices.Index(p.internalFlags , "type") != -1 {
+        return p.parseType()
+    } else {
+        return p.parseArrayLiteral()
+    }
+}
+
 func (p *Parser) parseArrayLiteral() Expression {
 	prev := p.currentToken()
 	if !p.expect([]TokenKind{TokenBracketOpen}) {
@@ -560,11 +570,6 @@ func (p *Parser) parseArrayLiteral() Expression {
 	elements := make([]Expression, 0)
 
 	tok := p.currentToken()
-
-	if tok.Kind == TokenInt {
-		p.Pos -= 1
-		return p.parseType()
-	}
 
 	if tok.Kind == TokenBracketClose {
 		p.nextToken()

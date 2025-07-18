@@ -246,7 +246,13 @@ type StringLiteral struct {
 
 func (sl *StringLiteral) expressionNode()      {}
 func (sl *StringLiteral) TokenLiteral() string { return sl.Token.Text }
-func (sl *StringLiteral) String() string       { return sl.Token.Text }
+func (sl *StringLiteral) String() string       {
+	var out bytes.Buffer
+	out.WriteString(`"`)
+	out.WriteString(sl.Value)
+	out.WriteString(`"`)
+	return out.String()
+}
 
 type BooleanLiteral struct {
 	Token Token
@@ -264,7 +270,18 @@ type ArrayLiteral struct {
 
 func (al *ArrayLiteral) expressionNode()      {}
 func (al *ArrayLiteral) TokenLiteral() string { return al.Token.Text }
-func (al *ArrayLiteral) String() string       { return al.Token.Text }
+func (al *ArrayLiteral) String() string       {
+	var out bytes.Buffer
+	out.WriteString("[")
+	for idx , elem := range al.Elements {
+		out.WriteString(elem.String())
+		if idx + 1 <= len(al.Elements) - 1 {
+			out.WriteString(", ")
+		}
+	}
+	out.WriteString("]")
+	return out.String()
+}
 
 type MapLiteral struct {
 	Token Token
@@ -277,7 +294,7 @@ func (ml *MapLiteral) String() string {
 	var out bytes.Buffer
 	pairs := []string{}
 	for key, value := range ml.Pairs {
-		pairs = append(pairs, key.String()+":"+value.String())
+		pairs = append(pairs, key.String()+": "+value.String())
 	}
 	out.WriteString("{")
 	out.WriteString(strings.Join(pairs, ", "))

@@ -16,7 +16,7 @@ func TestAtomicLetStatementDCL(t *testing.T) {
 		},
 		{
 			`let result: string = "Hello from " + "blk" `,
-			"let result = (Hello from + blk)",
+			`let result = ("Hello from" + "blk")`,
 		},
 		{
 			"let result: float = 3.14 * 2.36 / 6.3",
@@ -25,6 +25,17 @@ func TestAtomicLetStatementDCL(t *testing.T) {
 		{
 			"let result: int = 5 + 6 % 32",
 			"let result = (5 + (6 % 32))",
+		},
+		{
+			`var hash: map(string, array(int)) = {}`,
+			`var hash = {}`,
+		},
+		{
+			`var hash: map(string, array(int)) = {
+				"hello" : [1 , 2],
+				"there" : [3 , 4]
+			}`,
+			`var hash = {"hello": [1, 2], "there	": [3, 4]}`,
 		},
 	}
 
@@ -88,6 +99,10 @@ func TestTypeStatementDCL(t *testing.T) {
 		{
 			"type FullName = [2]string",
 			"type FullName = [2]string",
+		},
+		{
+			"type WhoCreatesTypesLikeThis = [2]array([1]int)",
+			"type WhoCreatesTypesLikeThis = [2]array([1]int)",
 		},
 	}
 
