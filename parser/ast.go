@@ -228,6 +228,34 @@ func (ws *WhileStatement) String() string {
 	return out.String()
 }
 
+type ForStatement struct {
+	Token       Token
+	Identifiers []*Identifier
+	Target      Expression
+	Body        *BlockStatement
+}
+
+func (fs *ForStatement) statementNode()       {}
+func (fs *ForStatement) TokenLiteral() string { return fs.Token.Text }
+
+func (fs *ForStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString("for ")
+	for idx , iden := range fs.Identifiers {
+		out.WriteString(iden.String())
+		if idx + 1 <= len(fs.Identifiers) - 1 {
+			out.WriteString(", ")
+		}
+	}
+	out.WriteString(" in ")
+	out.WriteString(fs.Target.String())
+	out.WriteString(" { ")
+	out.WriteString(fs.Body.String())
+	out.WriteString(" }")
+	return out.String()
+}
+
+
 type Identifier struct {
 	Token Token // the token.IDENT token
 	Value string

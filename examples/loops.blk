@@ -9,7 +9,7 @@ fn sum_to(n: int): int {
 }
 
 fn print_numbers() {
-    for i in 0..10 {
+    for i, val in arr {
         print(i)
     }
 }

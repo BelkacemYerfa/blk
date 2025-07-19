@@ -292,6 +292,8 @@ func (p *Parser) parseStatement() (Statement, error) {
 		return p.parseStructStatement()
 	case TokenWhile:
 		return p.parseWhileStatement()
+	case TokenFor:
+		return p.parseForStatement()
 	default:
 		return p.parseExpressionStatement()
 	}
@@ -414,6 +416,39 @@ func (p *Parser) parseWhileStatement() (*WhileStatement, error) {
 
 	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
 		return nil, fmt.Errorf("ERROR: expected curly brace open ( { ), got shit")
+	}
+
+	stmt.Body = p.parseBlockStatement().(*BlockStatement)
+	return stmt, nil
+}
+
+func (p *Parser) parseForStatement() (*ForStatement, error) {
+	stmt := &ForStatement{ Token: p.currentToken() }
+	p.nextToken()
+
+	tok := p.currentToken()
+
+	if tok.Kind != TokenIdentifier {
+		return nil, p.error(tok, "ERROR: expected at least one identifier, got shit")
+	}
+
+	stmt.Identifiers = append(stmt.Identifiers, p.parseIdentifier().(*Identifier))
+
+	tok = p.nextToken()
+
+	if tok.Kind == TokenComma {
+		stmt.Identifiers = append(stmt.Identifiers, p.parseIdentifier().(*Identifier))
+	}
+
+	tok = p.nextToken()
+	if tok.Kind != TokenIn {
+		return nil, p.error(tok, "ERROR: expected in, got shit")
+	}
+
+	stmt.Target = p.parseExpression(OR)
+
+	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
+		return nil, p.error(p.currentToken(), "ERROR: expected curly brace open ( { ), got shit")
 	}
 
 	stmt.Body = p.parseBlockStatement().(*BlockStatement)

@@ -11,6 +11,7 @@ const (
 	TokenStruct TokenKind = "struct"
 	TokenFn     TokenKind = "fn"
 	TokenFor    TokenKind = "for"
+	TokenIn     TokenKind = "in"
 	TokenWhile  TokenKind = "while"
 	TokenSkip   TokenKind = "skip"
 	TokenIf     TokenKind = "if"

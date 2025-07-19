@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestWhileLoopsStatments(t *testing.T) {
+func TestLoopsStatments(t *testing.T) {
 	tests := []struct {
 		input          string
 		expected       string
@@ -25,6 +25,18 @@ func TestWhileLoopsStatments(t *testing.T) {
 				i = i + 1
 			}`,
 			expected: "while (i <= n) { if (i > 10) { print(i) }(i = (i + 1)) }",
+		},
+		{
+			input: `for i, val in ["hi", "hello"] {
+				print(i)
+			}`,
+			expected: `for i, val in ["hi", "hello"] { print(i) }`,
+		},
+		{
+			input: `for key, value in Users {
+				print(key, value)
+			}`,
+			expected: `for key, value in Users { print(key, value) }`,
 		},
 	}
 	for _, tt := range tests {
