@@ -6,7 +6,7 @@ import (
 )
 
 func TestAtomicLetStatementDCL(t *testing.T) {
-  tests := []struct {
+	tests := []struct {
 		input    string
 		expected string
 	}{
@@ -51,7 +51,7 @@ func TestAtomicLetStatementDCL(t *testing.T) {
 }
 
 func TestStructLetStatementDCL(t *testing.T) {
-  tests := []struct {
+	tests := []struct {
 		input    string
 		expected string
 	}{
@@ -84,7 +84,7 @@ func TestStructLetStatementDCL(t *testing.T) {
 }
 
 func TestTypeStatementDCL(t *testing.T) {
-  tests := []struct {
+	tests := []struct {
 		input    string
 		expected string
 	}{
@@ -118,7 +118,7 @@ func TestTypeStatementDCL(t *testing.T) {
 }
 
 func TestMemberShipAccessStatementDCL(t *testing.T) {
-  tests := []struct {
+	tests := []struct {
 		input    string
 		expected string
 	}{

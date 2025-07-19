@@ -7,8 +7,8 @@ import (
 
 func TestLoopsStatments(t *testing.T) {
 	tests := []struct {
-		input          string
-		expected       string
+		input    string
+		expected string
 	}{
 		{
 			input: `while i <= n {

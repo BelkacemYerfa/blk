@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"blk/parser"
+	"blk/compiler"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -134,7 +135,7 @@ func Run(args []string) {
 	lexer := parser.NewLexer(targetFile, content)
 	tokens := lexer.Tokenize()
 
-	fmt.Println(tokens)
+	// fmt.Println(tokens)
 
 	filename, _ := os.Stat(targetFile)
 	p := parser.NewParser(tokens, filename.Name())
@@ -148,7 +149,6 @@ func Run(args []string) {
 	}
 
 	fmt.Println("Parsed successfully")
-	fmt.Println(ast)
 	jsonData, err := json.MarshalIndent(ast, " ", " ")
 	if err != nil {
 		fmt.Printf("ERROR: failed to marshal AST to JSON: %v\n", err)
@@ -161,7 +161,9 @@ func Run(args []string) {
 		return
 	}
 
-	fmt.Println("AST written to main_ast.json")
+	symTab := compiler.NewSymbolTable()
+	symTab.SymboleBuilder(ast)
+	fmt.Println(symTab.Store)
 }
 
 func Execute() {
