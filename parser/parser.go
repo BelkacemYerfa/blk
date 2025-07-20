@@ -272,10 +272,7 @@ func (p *Parser) Parse() *Program {
 	return &ast
 }
 
-// TODO: support for and while loops
-// [^^^]
 // TODO: better error handling and targeting
-// TODO: support for a switch stmt
 
 func (p *Parser) parseStatement() (Statement, error) {
 	stmtToken := p.currentToken() // Consume stmt
@@ -359,7 +356,7 @@ func (p *Parser) parseTypeStatement() (*TypeStatement, error) {
 	p.internalFlags = append(p.internalFlags, "type")
 	stmt.Value = p.parseExpression(LOWEST)
 	idx := slices.Index(p.internalFlags, "type")
-	p.internalFlags = slices.Delete(p.internalFlags, 0 , idx)
+	p.internalFlags = slices.Delete(p.internalFlags, 0, idx)
 	return stmt, nil
 }
 
@@ -423,7 +420,7 @@ func (p *Parser) parseWhileStatement() (*WhileStatement, error) {
 }
 
 func (p *Parser) parseForStatement() (*ForStatement, error) {
-	stmt := &ForStatement{ Token: p.currentToken() }
+	stmt := &ForStatement{Token: p.currentToken()}
 	p.nextToken()
 
 	tok := p.currentToken()
@@ -604,11 +601,11 @@ func (p *Parser) parseBooleanLiteral() Expression {
 }
 
 func (p *Parser) parseBracketOpen() Expression {
-    if slices.Index(p.internalFlags , "type") != -1 {
-        return p.parseType()
-    } else {
-        return p.parseArrayLiteral()
-    }
+	if slices.Index(p.internalFlags, "type") != -1 {
+		return p.parseType()
+	} else {
+		return p.parseArrayLiteral()
+	}
 }
 
 func (p *Parser) parseArrayLiteral() Expression {

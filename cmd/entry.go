@@ -148,7 +148,6 @@ func Run(args []string) {
 		return
 	}
 
-	fmt.Println("Parsed successfully")
 	jsonData, err := json.MarshalIndent(ast, " ", " ")
 	if err != nil {
 		fmt.Printf("ERROR: failed to marshal AST to JSON: %v\n", err)
@@ -163,7 +162,6 @@ func Run(args []string) {
 
 	symTab := compiler.NewSymbolTable()
 	symTab.SymbolBuilder(ast)
-	fmt.Println(symTab.Store)
 }
 
 func Execute() {
