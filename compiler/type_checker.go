@@ -24,7 +24,7 @@ func (tc *TypeChecker) StmtChecker(ast *parser.Program) {
 			fmt.Println(node)
 		default:
 		}
-		
+
 	}
 }
 

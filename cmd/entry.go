@@ -162,7 +162,7 @@ func Run(args []string) {
 	}
 
 	symTab := compiler.NewSymbolTable()
-	symTab.SymboleBuilder(ast)
+	symTab.SymbolBuilder(ast)
 	fmt.Println(symTab.Store)
 }
 

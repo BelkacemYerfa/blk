@@ -15,19 +15,12 @@ const (
 	SymbolType   SymbolKind = "type"
 )
 
-type SymbolScope string
-
-const (
-	GlobalScope SymbolScope = "Global"
-	LocalScope  SymbolScope = "Local"
-)
-
 type Position struct {
 	Row int
 	Col int
 }
 
-type Type interface {}
+type Type interface{}
 
 type SymbolInfo struct {
 	Type
@@ -35,15 +28,14 @@ type SymbolInfo struct {
 	DeclPos   Position   // where declared
 	Kind      SymbolKind // func, var, param, let...
 	IsMutable bool
-	Scope     SymbolScope
-	Index     int
+	Depth     int
 }
 
 type SymbolTable struct {
 	Parent         *SymbolTable          // for nested scopes
 	Store          map[string]SymbolInfo // current scope's entries
-	NumDefinitions int
-	Errors []error
+	DepthIndicator int
+	Errors         []error
 }
 
 func NewSymbolTable() *SymbolTable {
@@ -52,54 +44,89 @@ func NewSymbolTable() *SymbolTable {
 	}
 }
 
-
-func (s *SymbolTable) Define(name string) SymbolInfo {
-	symbol := SymbolInfo{Name: name, Index: s.NumDefinitions, Scope: GlobalScope}
-	s.Store[name] = symbol
-	s.NumDefinitions++
-	return symbol
+func (s *SymbolTable) Define(name string, sym *SymbolInfo) {
+	s.Store[name] = *sym
 }
 
-func (s *SymbolTable) Lookup(name string) (*SymbolInfo, bool) {
+func (s *SymbolTable) Resolve(name string) (*SymbolInfo, bool) {
 	curr := s
-	for curr != nil {
-		if sym, ok := curr.Store[name]; ok {
-			return &sym, true
+	if sym, ok := curr.Store[name]; ok {
+		return &sym, true
+	}
+	if curr.Parent != nil {
+		sym, _ := curr.Parent.Resolve(name)
+		if sym != nil {
+			if sym.Depth == s.DepthIndicator {
+				return sym, true
+			}
 		}
-		curr = curr.Parent
 	}
 	return nil, false
 }
 
-func (s *SymbolTable) Resolve(name string) (SymbolInfo, bool) {
-	result, ok := s.Store[name]
-	return result, ok
-}
-
-func (s *SymbolTable) SymboleBuilder(ast *parser.Program) {
+func (s *SymbolTable) SymbolBuilder(ast *parser.Program) {
 	for _, node := range ast.Statements {
-
-		switch node.(type) {
-		case *parser.LetStatement:
-			s.visitVarDCL(node.(*parser.LetStatement))
-		default:
-		}
-
+		s.symbolReader(node)
 	}
 }
 
+func (s *SymbolTable) symbolReader(node parser.Statement) {
+	switch node.(type) {
+	case *parser.LetStatement:
+		s.visitVarDCL(node.(*parser.LetStatement))
+	case *parser.FunctionStatement:
+		s.visitFuncDCL(node.(*parser.FunctionStatement))
+	default:
+	}
+}
 
-func (s *SymbolTable) visitVarDCL(node *parser.LetStatement) {
+func (s *SymbolTable) visitFuncDCL(node *parser.FunctionStatement) {
 	sym := &SymbolInfo{
-		Name: node.Name.Value,
-		Kind: SymbolLet,
-		Type: nil, // Placeholder
+		Name:  node.Name,
+		Kind:  SymbolFunc,
+		Depth: s.DepthIndicator,
+		Type:  nil, // Placeholder
 	}
 	_, ok := s.Resolve(sym.Name)
 	if ok {
 		errMsg := fmt.Errorf("ERROR: %v identifer is already declared", sym.Name)
-		s.Errors = append(s.Errors, errMsg)
+		fmt.Println(errMsg)
+		return
+	}
+
+	if node.Body != nil {
+		nwTab := NewSymbolTable()
+		nwTab.Parent = s
+		nwTab.DepthIndicator = s.DepthIndicator + 1
+		for _, nd := range node.Body.Body {
+			nwTab.symbolReader(nd)
+		}
+	}
+
+	s.Define(sym.Name, sym)
+}
+
+func (s *SymbolTable) visitVarDCL(node *parser.LetStatement) {
+	kind := SymbolLet
+
+	if node.Token.Text == "var" {
+		kind = SymbolVar
+	}
+
+	sym := &SymbolInfo{
+		Name:  node.Name.Value,
+		Kind:  kind,
+		Depth: s.DepthIndicator,
+		Type:  nil, // Placeholder
+	}
+
+	_, ok := s.Resolve(sym.Name)
+
+	if ok {
+		errMsg := fmt.Errorf("ERROR: %v identifer is already declared", sym.Name)
+		fmt.Println(errMsg)
+		return
 	} else {
-		s.Define(sym.Name)
+		s.Define(sym.Name, sym)
 	}
 }
