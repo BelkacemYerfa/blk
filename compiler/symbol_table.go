@@ -268,6 +268,7 @@ func (s *SymbolTable) visitStructDCL(node *parser.StructStatement) {
 		nwTab.Parent = s
 		nwTab.DepthIndicator++
 		for _, field := range node.Body {
+			// check for field redundancy
 			fieldName := field.Key.Value
 			_, ok := nwTab.Resolve(fieldName)
 			if ok {
@@ -346,15 +347,121 @@ func (s *SymbolTable) visitScopeDCL(node *parser.ScopeStatement) {
 func (s *SymbolTable) visitCallExpression(expr *parser.CallExpression) {
 	functionName := expr.Function.Value
 
-	_, isMatched := s.Resolve(functionName)
+	function, isMatched := s.Resolve(functionName)
 
 	if !isMatched {
 		errMsg := fmt.Sprintf("ERROR: (%v) function, needs to be declared before it get called", expr)
 		s.Collector.Add(s.Error(expr.Token, errMsg))
+		return
 	}
 
 	// check if same number of the args provided is the same
 	args := expr.Args
+
+	dclNode := function.DeclNode.(*parser.FunctionStatement)
+	if len(args) < len(dclNode.Args) {
+		errMsg := "ERROR: need to pass all the args into the function call"
+		tok := dclNode.Args[len(args)].Token
+		expr.Token.Col = expr.Token.Col + len(expr.Token.Text)
+		expr.Token.Text = tok.Text
+		s.Collector.Add(s.Error(expr.Token, errMsg))
+		return
+	}
+
+	if len(args) > len(dclNode.Args) {
+		errMsg := "ERROR: function call is receiving more args than it should"
+		tok := parser.Token{}
+		startIdx := len(dclNode.Args)
+
+		for idx, arg := range args[startIdx:] {
+			switch expr := arg.(type) {
+			case *parser.CallExpression:
+				tok.Text += expr.String()
+				tok.Row = expr.Token.Row
+				if idx == 0 {
+					tok.Col = expr.Token.Col
+				}
+			case *parser.MemberShipExpression:
+				tok.Text += expr.String()
+				tok.Row = expr.Token.Row
+				if idx == 0 {
+					tok.Col = expr.Token.Col
+				}
+
+			case *parser.ArrayLiteral:
+				tok.Text += expr.String()
+				tok.Row = expr.Token.Row
+				if idx == 0 {
+					tok.Col = expr.Token.Col
+				}
+
+			case *parser.MapLiteral:
+				tok.Text += expr.String()
+				tok.Row = expr.Token.Row
+				if idx == 0 {
+					tok.Col = expr.Token.Col
+				}
+
+			case *parser.BooleanLiteral:
+				tok.Text += expr.String()
+				tok.Row = expr.Token.Row
+				if idx == 0 {
+					tok.Col = expr.Token.Col
+				}
+
+			case *parser.StringLiteral:
+				tok.Text += expr.String()
+				tok.Row = expr.Token.Row
+				if idx == 0 {
+					tok.Col = expr.Token.Col
+				}
+
+			case *parser.FloatLiteral:
+				tok.Text += expr.String()
+				tok.Row = expr.Token.Row
+				if idx == 0 {
+					tok.Col = expr.Token.Col
+				}
+
+			case *parser.IntegerLiteral:
+				tok.Text += expr.String()
+				tok.Row = expr.Token.Row
+				if idx == 0 {
+					tok.Col = expr.Token.Col
+				}
+
+			case *parser.Identifier:
+				tok.Text += expr.String()
+				tok.Row = expr.Token.Row
+				if idx == 0 {
+					tok.Col = expr.Token.Col
+				}
+
+			case *parser.BinaryExpression:
+				tok.Text += expr.String()
+				tok.Row = expr.Token.Row
+				if idx == 0 {
+					tok.Col = expr.Token.Col
+				}
+
+			case *parser.UnaryExpression:
+				tok.Text += expr.String()
+				tok.Row = expr.Token.Row
+				if idx == 0 {
+					tok.Col = expr.Token.Col
+				}
+
+			default:
+			}
+			if idx+1 <= len(args)-startIdx-1 {
+				tok.Text += ", "
+			}
+		}
+		fmt.Println(tok.Text)
+		s.Collector.Add(s.Error(tok, errMsg))
+		return
+	}
+
 	// check if the args of the call expr, if they already exist
 
 	for _, arg := range args {
