@@ -1,6 +1,7 @@
 package compiler
 
 import (
+	"blk/internals"
 	"blk/parser"
 	"fmt"
 )
@@ -12,7 +13,7 @@ type TypeChecker struct {
 
 func NewTypeChecker() *TypeChecker {
 	return &TypeChecker{
-		Symbols: NewSymbolTable([]parser.Token{}),
+		Symbols: NewSymbolTable([]parser.Token{}, *internals.NewErrorCollector()),
 	}
 }
 

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"blk/compiler"
+	"blk/internals"
 	"blk/parser"
 	"encoding/json"
 	"fmt"
@@ -160,14 +161,15 @@ func Run(args []string) {
 		return
 	}
 
-	symTab := compiler.NewSymbolTable(tokens)
+	fmt.Println(ast)
+
+	errCollector := internals.NewErrorCollector()
+
+	symTab := compiler.NewSymbolTable(tokens, *errCollector)
 	symTab.SymbolBuilder(ast)
 
-	if len(symTab.Errors) > 0 {
-		for _, err := range symTab.Errors {
-			fmt.Println(err)
-		}
-		return
+	for _, err := range symTab.Collector.Errors {
+		fmt.Println(err)
 	}
 }
 

@@ -1,6 +1,7 @@
 package compiler
 
 import (
+	"blk/internals"
 	"blk/parser"
 	"errors"
 	"fmt"
@@ -33,14 +34,15 @@ type SymbolTable struct {
 	Parent         *SymbolTable          // for nested scopes
 	Store          map[string]SymbolInfo // current scope's entries
 	DepthIndicator int
-	Errors         []error
+	Collector      internals.ErrorCollector
 	Tokens         []parser.Token
 }
 
-func NewSymbolTable(tokens []parser.Token) *SymbolTable {
+func NewSymbolTable(tokens []parser.Token, errCollector internals.ErrorCollector) *SymbolTable {
 	return &SymbolTable{
-		Store:  make(map[string]SymbolInfo),
-		Tokens: tokens,
+		Store:     make(map[string]SymbolInfo),
+		Tokens:    tokens,
+		Collector: errCollector,
 	}
 }
 
@@ -173,6 +175,8 @@ func (s *SymbolTable) symbolReader(node parser.Statement) {
 		s.visitBlockDCL(node.Body)
 	case *parser.ReturnStatement:
 		s.visitReturnDCL(node)
+	case *parser.ScopeStatement:
+		s.visitScopeDCL(node)
 	default:
 		// type is an expression statement
 		stmt := node.(*parser.ExpressionStatement)
@@ -207,8 +211,7 @@ func (s *SymbolTable) visitFuncDCL(node *parser.FunctionStatement) {
 
 	if ok {
 		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", sym.Name)
-		s.Errors = append(s.Errors, s.Error(node.Token, errMsg))
-		return
+		s.Collector.Add(s.Error(node.Token, errMsg))
 	}
 
 	if node.Body != nil {
@@ -235,11 +238,9 @@ func (s *SymbolTable) visitVarDCL(node *parser.LetStatement) {
 	}
 
 	_, ok := s.Resolve(sym.Name)
-
 	if ok {
 		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", sym.Name)
-		s.Errors = append(s.Errors, s.Error(node.Token, errMsg))
-		return
+		s.Collector.Add(s.Error(node.Token, errMsg))
 	} else {
 		s.Define(sym.Name, sym)
 	}
@@ -258,13 +259,12 @@ func (s *SymbolTable) visitStructDCL(node *parser.StructStatement) {
 
 	if ok {
 		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", sym.Name)
-		s.Errors = append(s.Errors, s.Error(node.Token, errMsg))
-		return
+		s.Collector.Add(s.Error(node.Token, errMsg))
 	}
 
 	if len(node.Body) > 0 {
 		// check fields
-		nwTab := NewSymbolTable(s.Tokens)
+		nwTab := NewSymbolTable(s.Tokens, s.Collector)
 		nwTab.Parent = s
 		nwTab.DepthIndicator++
 		for _, field := range node.Body {
@@ -272,7 +272,7 @@ func (s *SymbolTable) visitStructDCL(node *parser.StructStatement) {
 			_, ok := nwTab.Resolve(fieldName)
 			if ok {
 				errMsg := fmt.Sprintf("ERROR: ( %v ) key is already declared, attempt to re-declare", fieldName)
-				s.Errors = append(s.Errors, s.Error(field.Key.Token, errMsg))
+				s.Collector.Add(s.Error(field.Key.Token, errMsg))
 				return
 			} else {
 				nwTab.Define(fieldName, &SymbolInfo{
@@ -301,16 +301,14 @@ func (s *SymbolTable) visitTypeDCL(node *parser.TypeStatement) {
 	if ok {
 		tok := node.Name.Token
 		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", node.Name.Value)
-		s.Errors = append(s.Errors, s.Error(tok, errMsg))
-		return
+		s.Collector.Add(s.Error(tok, errMsg))
 	} else {
 		s.Define(sym.Name, sym)
 	}
 }
-
 func (s *SymbolTable) visitBlockDCL(block *parser.BlockStatement) {
 	if len(block.Body) > 0 {
-		nwTab := NewSymbolTable(s.Tokens)
+		nwTab := NewSymbolTable(s.Tokens, s.Collector)
 		nwTab.Parent = s
 		nwTab.DepthIndicator = s.DepthIndicator + 1
 		for _, nd := range block.Body {
@@ -323,8 +321,7 @@ func (s *SymbolTable) visitReturnDCL(node *parser.ReturnStatement) {
 	if s.DepthIndicator == 0 {
 		// means it is on the global scope not in a function
 		errMsg := "ERROR: return statement, can't be on the global scope, needs to be inside of a function"
-		s.Errors = append(s.Errors, s.Error(node.Token, errMsg))
-		return
+		s.Collector.Add(s.Error(node.Token, errMsg))
 	}
 
 	identifier, ok := node.ReturnValue.(*parser.Identifier)
@@ -335,11 +332,15 @@ func (s *SymbolTable) visitReturnDCL(node *parser.ReturnStatement) {
 
 		if !isMatched {
 			errMsg := ("ERROR: identifier, needs to be declared before it gets returned")
-			s.Errors = append(s.Errors, s.Error(node.Token, errMsg))
-			return
+			s.Collector.Add(s.Error(node.Token, errMsg))
 		}
 	}
+}
 
+func (s *SymbolTable) visitScopeDCL(node *parser.ScopeStatement) {
+	if node.Body != nil {
+		s.visitBlockDCL(node.Body)
+	}
 }
 
 func (s *SymbolTable) visitCallExpression(expr *parser.CallExpression) {
@@ -349,8 +350,23 @@ func (s *SymbolTable) visitCallExpression(expr *parser.CallExpression) {
 
 	if !isMatched {
 		errMsg := fmt.Sprintf("ERROR: (%v) function, needs to be declared before it get called", expr)
-		s.Errors = append(s.Errors, s.Error(expr.Token, errMsg))
-		return
+		s.Collector.Add(s.Error(expr.Token, errMsg))
+	}
+
+	// check if same number of the args provided is the same
+	args := expr.Args
+	// check if the args of the call expr, if they already exist
+
+	for _, arg := range args {
+		identifier, ok := arg.(*parser.Identifier)
+		if ok {
+			_, isMatched := s.Resolve(identifier.Value)
+
+			if !isMatched {
+				errMsg := "ERROR: identifier, needs to be declared before it gets used in a function call"
+				s.Collector.Add(s.Error(identifier.Token, errMsg))
+			}
+		}
 	}
 }
 
@@ -363,8 +379,7 @@ func (s *SymbolTable) visitUnaryExpression(expr *parser.UnaryExpression) {
 
 		if !isMatched {
 			errMsg := ("ERROR: identifier, needs to be declared before it gets checked")
-			s.Errors = append(s.Errors, s.Error(expr.Token, errMsg))
-			return
+			s.Collector.Add(s.Error(expr.Token, errMsg))
 		}
 	}
 }
@@ -377,8 +392,7 @@ func (s *SymbolTable) visitBinaryExpression(expr *parser.BinaryExpression) {
 
 		if !isMatched {
 			errMsg := fmt.Sprintf("ERROR: (%v) left identifier, needs to be declared before it gets checked", lExpr.Value)
-			s.Errors = append(s.Errors, s.Error(expr.Token, errMsg))
-			return
+			s.Collector.Add(s.Error(lExpr.Token, errMsg))
 		}
 	case *parser.BinaryExpression:
 		s.visitBinaryExpression(lExpr)
@@ -394,8 +408,7 @@ func (s *SymbolTable) visitBinaryExpression(expr *parser.BinaryExpression) {
 
 		if !isMatched {
 			errMsg := fmt.Sprintf("ERROR: (%v) right identifier, needs to be declared before it gets checked", rExpr.Value)
-			s.Errors = append(s.Errors, s.Error(expr.Token, errMsg))
-			return
+			s.Collector.Add(s.Error(expr.Token, errMsg))
 		}
 	case *parser.BinaryExpression:
 		s.visitBinaryExpression(rExpr)
