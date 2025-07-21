@@ -855,7 +855,8 @@ func (p *Parser) parseCallExpression(left Expression) Expression {
 		return nil
 	}
 
-	exp := CallExpression{Token: p.currentToken(), Function: *(left.(*Identifier))}
+	exp := CallExpression{Token: left.(*Identifier).Token, Function: *(left.(*Identifier))}
+
 	exp.Args = p.parseCallArguments()
 	return &exp
 }

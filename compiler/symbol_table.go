@@ -2,7 +2,10 @@ package compiler
 
 import (
 	"blk/parser"
+	"errors"
 	"fmt"
+	"sort"
+	"strings"
 )
 
 type SymbolKind = string
@@ -31,11 +34,13 @@ type SymbolTable struct {
 	Store          map[string]SymbolInfo // current scope's entries
 	DepthIndicator int
 	Errors         []error
+	Tokens         []parser.Token
 }
 
-func NewSymbolTable() *SymbolTable {
+func NewSymbolTable(tokens []parser.Token) *SymbolTable {
 	return &SymbolTable{
-		Store: make(map[string]SymbolInfo),
+		Store:  make(map[string]SymbolInfo),
+		Tokens: tokens,
 	}
 }
 
@@ -57,6 +62,93 @@ func (s *SymbolTable) Resolve(name string) (*SymbolInfo, bool) {
 		}
 	}
 	return nil, false
+}
+
+func (s *SymbolTable) Error(tok parser.Token, msg string) error {
+	errMsg := fmt.Sprintf("\033[1;90m%s:%d:%d:\033[0m\n\n", "main.blk", tok.Row, tok.Col)
+
+	// Build row set map
+	rowSet := make(map[int][]parser.Token)
+	for _, t := range s.Tokens {
+		rowSet[t.Row] = append(rowSet[t.Row], t)
+	}
+
+	// Collect sorted rows
+	rows := []int{}
+	for row := range rowSet {
+		rows = append(rows, row)
+	}
+	sort.Ints(rows)
+
+	// Find closest previous and next row
+	var prevRow, nextRow int
+	prevRow, nextRow = -1, -1
+	for _, row := range rows {
+		if row < tok.Row {
+			prevRow = row
+		} else if row > tok.Row && nextRow == -1 {
+			nextRow = row
+		}
+	}
+
+	// Build rowMap with only prevRow, tok.Row, nextRow
+	rowMap := make(map[int][]parser.Token)
+	if prevRow != -1 {
+		rowMap[prevRow] = rowSet[prevRow]
+	}
+	rowMap[tok.Row] = rowSet[tok.Row]
+	if nextRow != -1 {
+		rowMap[nextRow] = rowSet[nextRow]
+	}
+
+	// Format rows
+	formattedRows := []int{}
+	for row := range rowMap {
+		formattedRows = append(formattedRows, row)
+	}
+	sort.Ints(formattedRows)
+
+	for _, row := range formattedRows {
+		currentLine := rowMap[row]
+		lineContent := ""
+		lastCol := 0
+
+		for _, t := range currentLine {
+			if t.Col > lastCol {
+				lineContent += strings.Repeat(" ", t.Col-lastCol)
+			}
+			if t.Kind == parser.TokenString {
+				t.Text = fmt.Sprintf(`"%s"`, t.Text)
+			}
+			lineContent += t.Text
+			lastCol = t.Col + len(t.Text)
+		}
+
+		lineNumStr := fmt.Sprintf("%d", row)
+		errMsg += fmt.Sprintf("%s    %s\n", lineNumStr, lineContent)
+
+		if row == tok.Row {
+			spacesBeforeLineNum := len(lineNumStr)
+			spacesAfterLineNum := 4
+			spacesBeforeToken := tok.Col
+
+			totalSpaces := spacesBeforeLineNum + spacesAfterLineNum + spacesBeforeToken
+
+			errorIndicator := strings.Repeat(" ", totalSpaces)
+			errMsg += errorIndicator + "\033[1;31m"
+			repeat := len(tok.Text)
+			if repeat == 0 {
+				repeat = 1
+			}
+			errMsg += strings.Repeat("^", repeat)
+			errMsg += "\033[0m\n"
+		}
+	}
+
+	errMsg += msg
+	// skip until the next useful line
+
+	return errors.New(errMsg)
 }
 
 func (s *SymbolTable) SymbolBuilder(ast *parser.Program) {
@@ -114,8 +206,8 @@ func (s *SymbolTable) visitFuncDCL(node *parser.FunctionStatement) {
 	_, ok := s.Resolve(sym.Name)
 
 	if ok {
-		errMsg := fmt.Errorf("ERROR: %v identifier is already declared", sym.Name)
-		fmt.Println(errMsg)
+		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", sym.Name)
+		s.Errors = append(s.Errors, s.Error(node.Token, errMsg))
 		return
 	}
 
@@ -145,8 +237,8 @@ func (s *SymbolTable) visitVarDCL(node *parser.LetStatement) {
 	_, ok := s.Resolve(sym.Name)
 
 	if ok {
-		errMsg := fmt.Errorf("ERROR: %v identifier is already declared", sym.Name)
-		fmt.Println(errMsg)
+		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", sym.Name)
+		s.Errors = append(s.Errors, s.Error(node.Token, errMsg))
 		return
 	} else {
 		s.Define(sym.Name, sym)
@@ -165,26 +257,29 @@ func (s *SymbolTable) visitStructDCL(node *parser.StructStatement) {
 	_, ok := s.Resolve(sym.Name)
 
 	if ok {
-		errMsg := fmt.Errorf("ERROR: %v identifier is already declared", sym.Name)
-		fmt.Println(errMsg)
+		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", sym.Name)
+		s.Errors = append(s.Errors, s.Error(node.Token, errMsg))
 		return
 	}
 
 	if len(node.Body) > 0 {
 		// check fields
+		nwTab := NewSymbolTable(s.Tokens)
+		nwTab.Parent = s
+		nwTab.DepthIndicator++
 		for _, field := range node.Body {
 			fieldName := field.Key.Value
-			_, ok := s.Resolve(fieldName)
+			_, ok := nwTab.Resolve(fieldName)
 			if ok {
-				errMsg := fmt.Errorf("ERROR: ( %v ) key is already declared, attempt to re-declare", fieldName)
-				fmt.Println(errMsg)
+				errMsg := fmt.Sprintf("ERROR: ( %v ) key is already declared, attempt to re-declare", fieldName)
+				s.Errors = append(s.Errors, s.Error(field.Key.Token, errMsg))
 				return
 			} else {
-				s.Define(fieldName, &SymbolInfo{
-					Name:     node.Name.Value,
+				nwTab.Define(fieldName, &SymbolInfo{
+					Name:     field.Key.Value,
 					Kind:     SymbolIdentifier,
-					Depth:    s.DepthIndicator + 1,
-					DeclNode: node,
+					Depth:    nwTab.DepthIndicator,
+					DeclNode: field.Key,
 				})
 			}
 		}
@@ -204,8 +299,9 @@ func (s *SymbolTable) visitTypeDCL(node *parser.TypeStatement) {
 	_, ok := s.Resolve(sym.Name)
 
 	if ok {
-		errMsg := fmt.Errorf("ERROR: %v identifier is already declared", sym.Name)
-		fmt.Println(errMsg)
+		tok := node.Name.Token
+		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", node.Name.Value)
+		s.Errors = append(s.Errors, s.Error(tok, errMsg))
 		return
 	} else {
 		s.Define(sym.Name, sym)
@@ -214,7 +310,7 @@ func (s *SymbolTable) visitTypeDCL(node *parser.TypeStatement) {
 
 func (s *SymbolTable) visitBlockDCL(block *parser.BlockStatement) {
 	if len(block.Body) > 0 {
-		nwTab := NewSymbolTable()
+		nwTab := NewSymbolTable(s.Tokens)
 		nwTab.Parent = s
 		nwTab.DepthIndicator = s.DepthIndicator + 1
 		for _, nd := range block.Body {
@@ -226,8 +322,8 @@ func (s *SymbolTable) visitBlockDCL(block *parser.BlockStatement) {
 func (s *SymbolTable) visitReturnDCL(node *parser.ReturnStatement) {
 	if s.DepthIndicator == 0 {
 		// means it is on the global scope not in a function
-		errMsg := fmt.Errorf("ERROR: return statement, can't be on the global scope, needs to be inside of a function")
-		fmt.Println(errMsg)
+		errMsg := "ERROR: return statement, can't be on the global scope, needs to be inside of a function"
+		s.Errors = append(s.Errors, s.Error(node.Token, errMsg))
 		return
 	}
 
@@ -238,8 +334,8 @@ func (s *SymbolTable) visitReturnDCL(node *parser.ReturnStatement) {
 		_, isMatched := s.Resolve(identifier.Value)
 
 		if !isMatched {
-			errMsg := fmt.Errorf("ERROR: identifier, needs to be declared before it gets returned")
-			fmt.Println(errMsg)
+			errMsg := ("ERROR: identifier, needs to be declared before it gets returned")
+			s.Errors = append(s.Errors, s.Error(node.Token, errMsg))
 			return
 		}
 	}
@@ -252,8 +348,8 @@ func (s *SymbolTable) visitCallExpression(expr *parser.CallExpression) {
 	_, isMatched := s.Resolve(functionName)
 
 	if !isMatched {
-		errMsg := fmt.Errorf("ERROR: (%v) function, needs to be declared before it get called", expr)
-		fmt.Println(errMsg)
+		errMsg := fmt.Sprintf("ERROR: (%v) function, needs to be declared before it get called", expr)
+		s.Errors = append(s.Errors, s.Error(expr.Token, errMsg))
 		return
 	}
 }
@@ -266,8 +362,8 @@ func (s *SymbolTable) visitUnaryExpression(expr *parser.UnaryExpression) {
 		_, isMatched := s.Resolve(identifier.Value)
 
 		if !isMatched {
-			errMsg := fmt.Errorf("ERROR: identifier, needs to be declared before it gets checked")
-			fmt.Println(errMsg)
+			errMsg := ("ERROR: identifier, needs to be declared before it gets checked")
+			s.Errors = append(s.Errors, s.Error(expr.Token, errMsg))
 			return
 		}
 	}
@@ -280,8 +376,8 @@ func (s *SymbolTable) visitBinaryExpression(expr *parser.BinaryExpression) {
 		_, isMatched := s.Resolve(lExpr.Value)
 
 		if !isMatched {
-			errMsg := fmt.Errorf("ERROR: (%v) left identifier, needs to be declared before it gets checked", lExpr.Value)
-			fmt.Println(errMsg)
+			errMsg := fmt.Sprintf("ERROR: (%v) left identifier, needs to be declared before it gets checked", lExpr.Value)
+			s.Errors = append(s.Errors, s.Error(expr.Token, errMsg))
 			return
 		}
 	case *parser.BinaryExpression:
@@ -297,8 +393,8 @@ func (s *SymbolTable) visitBinaryExpression(expr *parser.BinaryExpression) {
 		_, isMatched := s.Resolve(rExpr.Value)
 
 		if !isMatched {
-			errMsg := fmt.Errorf("ERROR: (%v) right identifier, needs to be declared before it gets checked", rExpr.Value)
-			fmt.Println(errMsg)
+			errMsg := fmt.Sprintf("ERROR: (%v) right identifier, needs to be declared before it gets checked", rExpr.Value)
+			s.Errors = append(s.Errors, s.Error(expr.Token, errMsg))
 			return
 		}
 	case *parser.BinaryExpression:

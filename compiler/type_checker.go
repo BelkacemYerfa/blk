@@ -12,7 +12,7 @@ type TypeChecker struct {
 
 func NewTypeChecker() *TypeChecker {
 	return &TypeChecker{
-		Symbols: NewSymbolTable(),
+		Symbols: NewSymbolTable([]parser.Token{}),
 	}
 }
 

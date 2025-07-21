@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"blk/parser"
 	"blk/compiler"
+	"blk/parser"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -160,8 +160,15 @@ func Run(args []string) {
 		return
 	}
 
-	symTab := compiler.NewSymbolTable()
+	symTab := compiler.NewSymbolTable(tokens)
 	symTab.SymbolBuilder(ast)
+
+	if len(symTab.Errors) > 0 {
+		for _, err := range symTab.Errors {
+			fmt.Println(err)
+		}
+		return
+	}
 }
 
 func Execute() {
