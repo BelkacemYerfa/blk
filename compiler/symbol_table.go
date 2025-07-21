@@ -218,6 +218,13 @@ func (s *SymbolTable) visitFuncDCL(node *parser.FunctionStatement) {
 		s.visitBlockDCL(node.Body)
 	}
 
+	// TODO: associate the arg with a given type during the parse phase
+	// for _ , arg := range node.Args {
+	// 	argType := arg.(get arg type)
+	// 	s.visitFieldType(argType)
+	// }
+
+	s.visitFieldType(node.ReturnType)
 	s.Define(sym.Name, sym)
 }
 
@@ -241,9 +248,10 @@ func (s *SymbolTable) visitVarDCL(node *parser.LetStatement) {
 	if ok {
 		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", sym.Name)
 		s.Collector.Add(s.Error(node.Token, errMsg))
-	} else {
-		s.Define(sym.Name, sym)
 	}
+
+	s.visitFieldType(node.ExplicitType)
+	s.Define(sym.Name, sym)
 }
 
 func (s *SymbolTable) visitStructDCL(node *parser.StructStatement) {
@@ -262,8 +270,9 @@ func (s *SymbolTable) visitStructDCL(node *parser.StructStatement) {
 		s.Collector.Add(s.Error(node.Token, errMsg))
 	}
 
+	s.Define(sym.Name, sym)
+
 	if len(node.Body) > 0 {
-		// check fields
 		nwTab := NewSymbolTable(s.Tokens, s.Collector)
 		nwTab.Parent = s
 		nwTab.DepthIndicator++
@@ -283,10 +292,58 @@ func (s *SymbolTable) visitStructDCL(node *parser.StructStatement) {
 					DeclNode: field.Key,
 				})
 			}
+
+			// check for if the type is custom type
+			// and if it is check if it already in the table or not
+			fieldType := field.Value
+			s.visitFieldType(fieldType)
 		}
 	}
 
-	s.Define(sym.Name, sym)
+}
+
+func (s *SymbolTable) visitFieldType(fieldType parser.Expression) {
+
+	switch tp := fieldType.(type) {
+	case *parser.NodeType:
+		if _, ok := parser.AtomicTypes[tp.Type]; !ok {
+			if tp.Type != "array" {
+				_, exist := s.Resolve(tp.Type)
+				if !exist {
+					errMsg := fmt.Sprintf("ERROR: type ( %v ) needs to be declared before it gets used", tp.Type)
+					s.Collector.Add(s.Error(tp.Token, errMsg))
+				}
+			}
+		}
+
+		// check for this in a recursive manner if the tp.ChildNode != nil
+		if tp.ChildType != nil {
+			s.visitFieldType(tp.ChildType)
+		}
+
+	case *parser.MapType:
+		if _, ok := parser.AtomicTypes[tp.Type]; !ok {
+			if tp.Type != "map" {
+				_, exist := s.Resolve(tp.Type)
+				if !exist {
+					errMsg := fmt.Sprintf("ERROR: type ( %v ) needs to be declared before it gets used", tp.Type)
+					s.Collector.Add(s.Error(tp.Token, errMsg))
+				}
+			}
+		}
+
+		// check for this in a recursive manner if the tp.(Left | Right) != nil
+		if tp.Left != nil {
+			s.visitFieldType(tp.Left)
+		}
+
+		if tp.Right != nil {
+			s.visitFieldType(tp.Right)
+		}
+
+	default:
+		// nothing
+	}
 }
 
 func (s *SymbolTable) visitTypeDCL(node *parser.TypeStatement) {
@@ -303,10 +360,12 @@ func (s *SymbolTable) visitTypeDCL(node *parser.TypeStatement) {
 		tok := node.Name.Token
 		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", node.Name.Value)
 		s.Collector.Add(s.Error(tok, errMsg))
-	} else {
-		s.Define(sym.Name, sym)
 	}
+
+	s.visitFieldType(node.Value)
+	s.Define(sym.Name, sym)
 }
+
 func (s *SymbolTable) visitBlockDCL(block *parser.BlockStatement) {
 	if len(block.Body) > 0 {
 		nwTab := NewSymbolTable(s.Tokens, s.Collector)

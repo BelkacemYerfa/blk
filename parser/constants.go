@@ -23,7 +23,7 @@ var (
 		"false":  TokenFalse,
 	}
 
-	atomicTypes = map[string]TYPE{
+	AtomicTypes = map[string]TYPE{
 		"int":    IntType,
 		"float":  FloatType,
 		"string": StringType,

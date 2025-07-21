@@ -455,20 +455,20 @@ func (p *Parser) parseForStatement() (*ForStatement, error) {
 }
 
 func (p *Parser) parseType() Expression {
-	nodeType := &NodeType{}
+	nodeType := &NodeType{Token: p.currentToken()}
 
 	tok := p.nextToken()
 
 	switch tok.Kind {
 	case TokenIdentifier:
 		nodeType.Type = p.typeMapper(tok.Text)
-
 	case TokenArray:
 		tok = p.nextToken() // consume (
 
 		if p.currentToken().Kind != TokenArray {
 			childType := p.parseType()
 			return &NodeType{
+				Token:     p.currentToken(),
 				Type:      "array",
 				ChildType: childType.(*NodeType),
 			}
@@ -477,6 +477,7 @@ func (p *Parser) parseType() Expression {
 		for p.currentToken().Kind == TokenArray {
 			childType := p.parseType()
 			return &NodeType{
+				Token:     p.currentToken(),
 				Type:      "array",
 				ChildType: childType.(*NodeType),
 			}
@@ -490,6 +491,7 @@ func (p *Parser) parseType() Expression {
 			p.nextToken()
 			valueType := p.parseType()
 			return &MapType{
+				Token: p.currentToken(),
 				Type:  "map",
 				Left:  keyType,
 				Right: valueType,
@@ -501,6 +503,7 @@ func (p *Parser) parseType() Expression {
 			p.nextToken()
 			valueType := p.parseType()
 			return &MapType{
+				Token: p.currentToken(),
 				Type:  "map",
 				Left:  keyType,
 				Right: valueType,
@@ -515,6 +518,7 @@ func (p *Parser) parseType() Expression {
 				p.nextToken()
 				childType := p.parseType()
 				return &NodeType{
+					Token:     p.currentToken(),
 					Type:      "array",
 					ChildType: childType.(*NodeType),
 					Size:      tok.Text,
@@ -539,7 +543,7 @@ func (p *Parser) parseType() Expression {
 
 func (p *Parser) typeMapper(typ string) TYPE {
 
-	if mappedType, isMatching := atomicTypes[typ]; isMatching {
+	if mappedType, isMatching := AtomicTypes[typ]; isMatching {
 		return mappedType
 	} else {
 		return typ

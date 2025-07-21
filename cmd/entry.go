@@ -152,7 +152,6 @@ func Run(args []string) {
 	jsonData, err := json.MarshalIndent(ast, " ", " ")
 	if err != nil {
 		fmt.Printf("ERROR: failed to marshal AST to JSON: %v\n", err)
-		return
 	}
 
 	err = os.WriteFile(filepath.Join(osPath, "/internal_examples/main_ast.json"), jsonData, 0644)
