@@ -218,11 +218,11 @@ func (s *SymbolTable) visitFuncDCL(node *parser.FunctionStatement) {
 		s.visitBlockDCL(node.Body)
 	}
 
-	// TODO: associate the arg with a given type during the parse phase
-	// for _ , arg := range node.Args {
-	// 	argType := arg.(get arg type)
-	// 	s.visitFieldType(argType)
-	// }
+	// checks if the arg type is declared or not
+	for _, arg := range node.Args {
+		argType := arg.Type
+		s.visitFieldType(argType)
+	}
 
 	s.visitFieldType(node.ReturnType)
 	s.Define(sym.Name, sym)

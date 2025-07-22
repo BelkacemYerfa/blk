@@ -357,8 +357,11 @@ func (p *Parser) parseTypeStatement() (*TypeStatement, error) {
 	}
 	p.internalFlags = append(p.internalFlags, "type")
 	stmt.Value = p.parseExpression(LOWEST)
-	idx := slices.Index(p.internalFlags, "type")
-	p.internalFlags = slices.Delete(p.internalFlags, 0, idx)
+
+	p.internalFlags = slices.DeleteFunc(p.internalFlags, func(elem string) bool {
+		return elem == "type"
+	})
+
 	return stmt, nil
 }
 
@@ -616,10 +619,12 @@ func (p *Parser) parseBracketOpen() Expression {
 
 func (p *Parser) parseArrayLiteral() Expression {
 	prev := p.currentToken()
+
 	if !p.expect([]TokenKind{TokenBracketOpen}) {
 		p.Errors = append(p.Errors, p.error(prev, "ERROR: expected open bracket [, got shit"))
 		return nil
 	}
+
 	elements := make([]Expression, 0)
 
 	tok := p.currentToken()
@@ -792,18 +797,17 @@ func (p *Parser) parseFunctionStatement() (*FunctionStatement, error) {
 	}, nil
 }
 
-func (p *Parser) parseArguments() []*Identifier {
-	args := make([]*Identifier, 0)
+func (p *Parser) parseArguments() []*ArgExpression {
+	args := make([]*ArgExpression, 0)
 
 	if p.currentToken().Kind == TokenBraceClose {
 		p.nextToken()
 		return args
 	}
-
-	args = append(args, &Identifier{
+	ident := &Identifier{
 		Token: p.currentToken(),
 		Value: p.currentToken().Text,
-	})
+	}
 
 	p.nextToken()
 	if !p.expect([]TokenKind{TokenColon}) {
@@ -814,12 +818,18 @@ func (p *Parser) parseArguments() []*Identifier {
 		return nil
 	}
 
+	p.Pos--
+	args = append(args, &ArgExpression{
+		Identifier: ident,
+		Type:       p.parseType(),
+	})
+
 	for p.currentToken().Kind == TokenComma {
 		p.nextToken()
-		args = append(args, &Identifier{
+		ident := &Identifier{
 			Token: p.currentToken(),
 			Value: p.currentToken().Text,
-		})
+		}
 
 		p.nextToken()
 		if !p.expect([]TokenKind{TokenColon}) {
@@ -829,8 +839,14 @@ func (p *Parser) parseArguments() []*Identifier {
 		if !p.expect([]TokenKind{TokenIdentifier}) {
 			return nil
 		}
+		p.Pos--
+		args = append(args, &ArgExpression{
+			Identifier: ident,
+			Type:       p.parseType(),
+		})
 	}
 
+	p.Pos--
 	if !p.expect([]TokenKind{TokenBraceClose}) {
 		return nil
 	}
@@ -917,7 +933,7 @@ func (p *Parser) parseStructInstanceExpression(left Expression) Expression {
 	expr := &StructInstanceExpression{Token: p.currentToken(), Left: left}
 
 	expr.Body = p.parseFieldValues()
-
+	fmt.Println(expr)
 	return expr
 }
 

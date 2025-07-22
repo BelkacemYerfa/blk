@@ -258,7 +258,7 @@ func (fs *ForStatement) String() string {
 type FunctionStatement struct {
 	Token      Token
 	Name       string
-	Args       []*Identifier
+	Args       []*ArgExpression
 	ReturnType Expression
 	Body       *BlockStatement
 }
@@ -306,6 +306,15 @@ func (i *Identifier) expressionNode()      {}
 func (i *Identifier) TokenLiteral() string { return i.Token.Text }
 
 func (i *Identifier) String() string { return i.Value }
+
+type ArgExpression struct {
+	*Identifier
+	Type Expression
+}
+
+func (i *ArgExpression) expressionNode()      {}
+func (i *ArgExpression) TokenLiteral() string { return i.Token.Text }
+func (i *ArgExpression) String() string       { return i.Value }
 
 type IntegerLiteral struct {
 	Token Token
