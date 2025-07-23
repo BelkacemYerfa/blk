@@ -768,8 +768,8 @@ func (p *Parser) parseFunctionStatement() (*FunctionStatement, error) {
 		return nil, fmt.Errorf("ERROR: expected identifier, got shit")
 	}
 	p.Pos--
-	name := p.currentToken().Text
-	p.nextToken()
+	name := p.parseIdentifier().(*Identifier)
+
 	if !p.expect([]TokenKind{TokenBraceOpen}) {
 		return nil, fmt.Errorf("ERROR: expected brace open ( ( ), got shit")
 	}

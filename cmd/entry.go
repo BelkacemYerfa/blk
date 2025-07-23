@@ -160,14 +160,12 @@ func Run(args []string) {
 		return
 	}
 
-	fmt.Println(ast)
-
 	errCollector := internals.NewErrorCollector()
 
-	symTab := compiler.NewSymbolTable(tokens, *errCollector)
-	symTab.SymbolBuilder(ast)
+	typeChecker := compiler.NewTypeChecker(tokens, *errCollector)
+	typeChecker.SymbolBuilder(ast)
 
-	for _, err := range symTab.Collector.Errors {
+	for _, err := range typeChecker.Collector.Errors {
 		fmt.Println(err)
 	}
 }

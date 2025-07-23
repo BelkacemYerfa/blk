@@ -261,7 +261,7 @@ func (fs *ForStatement) String() string {
 
 type FunctionStatement struct {
 	Token      Token
-	Name       string
+	Name       *Identifier
 	Args       []*ArgExpression
 	ReturnType Expression
 	Body       *BlockStatement

@@ -32,18 +32,16 @@ type SymbolInfo struct {
 }
 
 type SymbolTable struct {
-	Parent         *SymbolTable          // for nested scopes
-	Store          map[string]SymbolInfo // current scope's entries
-	DepthIndicator int
-	Collector      internals.ErrorCollector
-	Tokens         []parser.Token
+	Parent           *SymbolTable          // for nested scopes
+	Store            map[string]SymbolInfo // current scope's entries
+	EmbeddedSymTable []*SymbolTable
+	DepthIndicator   int
 }
 
-func NewSymbolTable(tokens []parser.Token, errCollector internals.ErrorCollector) *SymbolTable {
+func NewSymbolTable() *SymbolTable {
 	return &SymbolTable{
-		Store:     make(map[string]SymbolInfo),
-		Tokens:    tokens,
-		Collector: errCollector,
+		Store:            make(map[string]SymbolInfo),
+		EmbeddedSymTable: make([]*SymbolTable, 0),
 	}
 }
 
@@ -59,15 +57,27 @@ func (s *SymbolTable) Resolve(name string) (*SymbolInfo, bool) {
 	if curr.Parent != nil {
 		sym, _ := curr.Parent.Resolve(name)
 		if sym != nil {
-			if sym.Depth == s.DepthIndicator {
-				return sym, true
-			}
+			return sym, true
 		}
 	}
 	return nil, false
 }
 
-func (s *SymbolTable) Error(tok parser.Token, msg string) error {
+type TypeChecker struct {
+	Symbols   *SymbolTable
+	Collector internals.ErrorCollector
+	Tokens    []parser.Token
+}
+
+func NewTypeChecker(tokens []parser.Token, errCollector internals.ErrorCollector) *TypeChecker {
+	return &TypeChecker{
+		Tokens:    tokens,
+		Symbols:   NewSymbolTable(),
+		Collector: errCollector,
+	}
+}
+
+func (s *TypeChecker) Error(tok parser.Token, msg string) error {
 	errMsg := fmt.Sprintf("\033[1;90m%s:%d:%d:\033[0m\n\n", "main.blk", tok.Row, tok.Col)
 
 	// Build row set map
@@ -154,13 +164,25 @@ func (s *SymbolTable) Error(tok parser.Token, msg string) error {
 	return errors.New(errMsg)
 }
 
-func (s *SymbolTable) SymbolBuilder(ast *parser.Program) {
+func (s *TypeChecker) SymbolBuilder(ast *parser.Program) {
+
+	// insert prebuilt func later on
+
 	for _, node := range ast.Statements {
 		s.symbolReader(node)
 	}
+
+	// check if the entry point is a main function
+	// access to the main
+	mainFn := s.Symbols.Store["main"]
+	if mainFn.Name != "main" {
+		errMsg := ("ERROR: no entry point found, consider creating an entry point called main")
+		fmt.Println(errMsg)
+		return
+	}
 }
 
-func (s *SymbolTable) symbolReader(node parser.Statement) {
+func (s *TypeChecker) symbolReader(node parser.Statement) {
 	switch node := node.(type) {
 	case *parser.LetStatement:
 		s.visitVarDCL(node)
@@ -185,7 +207,7 @@ func (s *SymbolTable) symbolReader(node parser.Statement) {
 	}
 }
 
-func (s *SymbolTable) symbolReaderExpression(node parser.Expression) {
+func (s *TypeChecker) symbolReaderExpression(node parser.Expression) {
 	switch expr := node.(type) {
 	case *parser.CallExpression:
 		s.visitCallExpression(expr)
@@ -210,18 +232,24 @@ func (s *SymbolTable) symbolReaderExpression(node parser.Expression) {
 	}
 }
 
-func (s *SymbolTable) visitFuncDCL(node *parser.FunctionStatement) {
+func (s *TypeChecker) visitFuncDCL(node *parser.FunctionStatement) {
 	sym := &SymbolInfo{
-		Name:     node.Name,
+		Name:     node.Name.Value,
 		Kind:     SymbolFunc,
-		Depth:    s.DepthIndicator,
+		Depth:    s.Symbols.DepthIndicator,
 		DeclNode: node,
 	}
 
-	_, ok := s.Resolve(sym.Name)
+	// check if the name doesn't collide with pre-built function
+	if _, isMatching := builtInFunctions[sym.Name]; isMatching {
+		errMsg := fmt.Sprintf("ERROR: fn %v is a pre-built function, consider renaming your function to something else", sym.Name)
+		s.Collector.Add(s.Error(node.Name.Token, errMsg))
+	}
+
+	_, ok := s.Symbols.Resolve(sym.Name)
 
 	if ok {
-		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", sym.Name)
+		errMsg := fmt.Sprintf("ERROR:fn %v is already declared, consider removing the duplicate", sym.Name)
 		s.Collector.Add(s.Error(node.Token, errMsg))
 	}
 
@@ -236,10 +264,10 @@ func (s *SymbolTable) visitFuncDCL(node *parser.FunctionStatement) {
 	}
 
 	s.visitFieldType(node.ReturnType)
-	s.Define(sym.Name, sym)
+	s.Symbols.Define(sym.Name, sym)
 }
 
-func (s *SymbolTable) visitVarDCL(node *parser.LetStatement) {
+func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 	kind := SymbolLet
 	isMutable := false
 	if node.Token.Text == "var" {
@@ -250,12 +278,12 @@ func (s *SymbolTable) visitVarDCL(node *parser.LetStatement) {
 	sym := &SymbolInfo{
 		Name:      node.Name.Value,
 		Kind:      kind,
-		Depth:     s.DepthIndicator,
+		Depth:     s.Symbols.DepthIndicator,
 		IsMutable: isMutable,
 		DeclNode:  node,
 	}
 
-	_, ok := s.Resolve(sym.Name)
+	_, ok := s.Symbols.Resolve(sym.Name)
 	if ok {
 		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", sym.Name)
 		s.Collector.Add(s.Error(node.Token, errMsg))
@@ -266,30 +294,31 @@ func (s *SymbolTable) visitVarDCL(node *parser.LetStatement) {
 	// check for the associated expression
 	s.symbolReaderExpression(node.Value)
 
-	s.Define(sym.Name, sym)
+	s.Symbols.Define(sym.Name, sym)
 }
 
-func (s *SymbolTable) visitStructDCL(node *parser.StructStatement) {
+func (s *TypeChecker) visitStructDCL(node *parser.StructStatement) {
 
 	sym := &SymbolInfo{
 		Name:     node.Name.Value,
 		Kind:     SymbolStruct,
-		Depth:    s.DepthIndicator,
+		Depth:    s.Symbols.DepthIndicator,
 		DeclNode: node,
 	}
 
-	_, ok := s.Resolve(sym.Name)
+	_, ok := s.Symbols.Resolve(sym.Name)
 
 	if ok {
 		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", sym.Name)
 		s.Collector.Add(s.Error(node.Token, errMsg))
 	}
 
-	s.Define(sym.Name, sym)
+	s.Symbols.Define(sym.Name, sym)
 
 	if len(node.Body) > 0 {
-		nwTab := NewSymbolTable(s.Tokens, s.Collector)
-		nwTab.Parent = s
+		nwTab := NewSymbolTable()
+		s.Symbols.EmbeddedSymTable = append(s.Symbols.EmbeddedSymTable, nwTab)
+		nwTab.Parent = s.Symbols
 		nwTab.DepthIndicator++
 		for _, field := range node.Body {
 			// check for field redundancy
@@ -317,13 +346,13 @@ func (s *SymbolTable) visitStructDCL(node *parser.StructStatement) {
 
 }
 
-func (s *SymbolTable) visitFieldType(fieldType parser.Expression) {
+func (s *TypeChecker) visitFieldType(fieldType parser.Expression) {
 
 	switch tp := fieldType.(type) {
 	case *parser.NodeType:
 		if _, ok := parser.AtomicTypes[tp.Type]; !ok {
 			if tp.Type != "array" {
-				_, exist := s.Resolve(tp.Type)
+				_, exist := s.Symbols.Resolve(tp.Type)
 				if !exist {
 					errMsg := fmt.Sprintf("ERROR: type ( %v ) needs to be declared before it gets used", tp.Type)
 					s.Collector.Add(s.Error(tp.Token, errMsg))
@@ -339,7 +368,7 @@ func (s *SymbolTable) visitFieldType(fieldType parser.Expression) {
 	case *parser.MapType:
 		if _, ok := parser.AtomicTypes[tp.Type]; !ok {
 			if tp.Type != "map" {
-				_, exist := s.Resolve(tp.Type)
+				_, exist := s.Symbols.Resolve(tp.Type)
 				if !exist {
 					errMsg := fmt.Sprintf("ERROR: type ( %v ) needs to be declared before it gets used", tp.Type)
 					s.Collector.Add(s.Error(tp.Token, errMsg))
@@ -361,15 +390,15 @@ func (s *SymbolTable) visitFieldType(fieldType parser.Expression) {
 	}
 }
 
-func (s *SymbolTable) visitTypeDCL(node *parser.TypeStatement) {
+func (s *TypeChecker) visitTypeDCL(node *parser.TypeStatement) {
 	sym := &SymbolInfo{
 		Name:     node.Name.Value,
 		Kind:     SymbolType,
-		Depth:    s.DepthIndicator,
+		Depth:    s.Symbols.DepthIndicator,
 		DeclNode: node,
 	}
 
-	_, ok := s.Resolve(sym.Name)
+	_, ok := s.Symbols.Resolve(sym.Name)
 
 	if ok {
 		tok := node.Name.Token
@@ -378,22 +407,24 @@ func (s *SymbolTable) visitTypeDCL(node *parser.TypeStatement) {
 	}
 
 	s.visitFieldType(node.Value)
-	s.Define(sym.Name, sym)
+	s.Symbols.Define(sym.Name, sym)
 }
 
-func (s *SymbolTable) visitBlockDCL(block *parser.BlockStatement) {
+func (s *TypeChecker) visitBlockDCL(block *parser.BlockStatement) {
 	if len(block.Body) > 0 {
-		nwTab := NewSymbolTable(s.Tokens, s.Collector)
-		nwTab.Parent = s
-		nwTab.DepthIndicator = s.DepthIndicator + 1
+		nwTab := NewSymbolTable()
+		nwTab.Parent = s.Symbols
+		nwTab.DepthIndicator++
+		s.Symbols = nwTab
 		for _, nd := range block.Body {
-			nwTab.symbolReader(nd)
+			s.symbolReader(nd)
 		}
+		s.Symbols = s.Symbols.Parent
 	}
 }
 
-func (s *SymbolTable) visitReturnDCL(node *parser.ReturnStatement) {
-	if s.DepthIndicator == 0 {
+func (s *TypeChecker) visitReturnDCL(node *parser.ReturnStatement) {
+	if s.Symbols.DepthIndicator == 0 {
 		// means it is on the global scope not in a function
 		errMsg := "ERROR: return statement, can't be on the global scope, needs to be inside of a function"
 		s.Collector.Add(s.Error(node.Token, errMsg))
@@ -407,19 +438,21 @@ func (s *SymbolTable) visitReturnDCL(node *parser.ReturnStatement) {
 	}
 }
 
-func (s *SymbolTable) visitScopeDCL(node *parser.ScopeStatement) {
+func (s *TypeChecker) visitScopeDCL(node *parser.ScopeStatement) {
 	if node.Body != nil {
 		s.visitBlockDCL(node.Body)
 	}
 }
 
-func (s *SymbolTable) visitCallExpression(expr *parser.CallExpression) {
+func (s *TypeChecker) visitCallExpression(expr *parser.CallExpression) {
 	functionName := expr.Function.Value
 
-	function, isMatched := s.Resolve(functionName)
+	function, isMatched := s.Symbols.Resolve(functionName)
 
-	if !isMatched {
-		errMsg := fmt.Sprintf("ERROR: (%v) function, needs to be declared before it get called", expr)
+	_, isBuiltInFunc := builtInFunctions[functionName]
+
+	if !isMatched && !isBuiltInFunc {
+		errMsg := fmt.Sprintf("ERROR: (%v) function, needs to be declared before it get called", expr.Function.Value)
 		s.Collector.Add(s.Error(expr.Token, errMsg))
 		return
 	}
@@ -456,7 +489,6 @@ func (s *SymbolTable) visitCallExpression(expr *parser.CallExpression) {
 				tok.Text += ", "
 			}
 		}
-		fmt.Println(tok.Text)
 		s.Collector.Add(s.Error(tok, errMsg))
 		return
 	}
@@ -471,7 +503,7 @@ func (s *SymbolTable) visitCallExpression(expr *parser.CallExpression) {
 	}
 }
 
-func (s *SymbolTable) visitUnaryExpression(expr *parser.UnaryExpression) {
+func (s *TypeChecker) visitUnaryExpression(expr *parser.UnaryExpression) {
 	identifier, ok := expr.Right.(*parser.Identifier)
 
 	if ok {
@@ -479,12 +511,12 @@ func (s *SymbolTable) visitUnaryExpression(expr *parser.UnaryExpression) {
 	}
 }
 
-func (s *SymbolTable) visitBinaryExpression(expr *parser.BinaryExpression) {
+func (s *TypeChecker) visitBinaryExpression(expr *parser.BinaryExpression) {
 	s.symbolReaderExpression(expr.Left)
 	s.symbolReaderExpression(expr.Right)
 }
 
-func (s *SymbolTable) visitIfExpression(expr *parser.IfExpression) {
+func (s *TypeChecker) visitIfExpression(expr *parser.IfExpression) {
 	conditionExpression := expr.Condition
 
 	switch cExpr := conditionExpression.(type) {
@@ -514,9 +546,9 @@ func (s *SymbolTable) visitIfExpression(expr *parser.IfExpression) {
 	}
 }
 
-func (s *SymbolTable) visitIdentifier(expr *parser.Identifier) {
+func (s *TypeChecker) visitIdentifier(expr *parser.Identifier) {
 	// if (identifier) check if it declared or not
-	_, isMatched := s.Resolve(expr.Value)
+	_, isMatched := s.Symbols.Resolve(expr.Value)
 
 	if !isMatched {
 		errMsg := ("ERROR: identifier, needs to be declared before it gets used")
@@ -524,12 +556,12 @@ func (s *SymbolTable) visitIdentifier(expr *parser.Identifier) {
 	}
 }
 
-func (s *SymbolTable) visitStructInstanceExpression(expr *parser.StructInstanceExpression) {
+func (s *TypeChecker) visitStructInstanceExpression(expr *parser.StructInstanceExpression) {
 
 	identifier, ok := expr.Left.(*parser.Identifier)
 
 	if ok {
-		structDef, isMatched := s.Resolve(identifier.Value)
+		structDef, isMatched := s.Symbols.Resolve(identifier.Value)
 
 		if !isMatched {
 			errMsg := fmt.Sprintf("ERROR: struct (%v) needs to be defined, before creating instances of it", identifier.Value)
@@ -567,7 +599,7 @@ func (s *SymbolTable) visitStructInstanceExpression(expr *parser.StructInstanceE
 	}
 }
 
-func (s *SymbolTable) visitArrayLiteral(expr *parser.ArrayLiteral) {
+func (s *TypeChecker) visitArrayLiteral(expr *parser.ArrayLiteral) {
 	elements := expr.Elements
 
 	for _, elem := range elements {
@@ -575,7 +607,7 @@ func (s *SymbolTable) visitArrayLiteral(expr *parser.ArrayLiteral) {
 	}
 }
 
-func (s *SymbolTable) visitMapLiteral(expr *parser.MapLiteral) {
+func (s *TypeChecker) visitMapLiteral(expr *parser.MapLiteral) {
 
 	pairs := expr.Pairs
 
@@ -595,7 +627,7 @@ func (s *SymbolTable) visitMapLiteral(expr *parser.MapLiteral) {
 	}
 }
 
-func (s *SymbolTable) visitIndexExpression(expr *parser.IndexExpression) {
+func (s *TypeChecker) visitIndexExpression(expr *parser.IndexExpression) {
 	// check if the lest side is a valid
 	tok := parser.Token{}
 	errMsg := ""
