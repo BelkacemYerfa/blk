@@ -916,6 +916,7 @@ func (p *Parser) parseCallArguments() []Expression {
 }
 
 func (p *Parser) parseIndexExpression(left Expression) Expression {
+	// TODO: if left expr is nil return an error
 	exp := &IndexExpression{Token: p.currentToken(), Left: left}
 
 	p.nextToken()
@@ -933,7 +934,7 @@ func (p *Parser) parseStructInstanceExpression(left Expression) Expression {
 	expr := &StructInstanceExpression{Token: p.currentToken(), Left: left}
 
 	expr.Body = p.parseFieldValues()
-	fmt.Println(expr)
+
 	return expr
 }
 

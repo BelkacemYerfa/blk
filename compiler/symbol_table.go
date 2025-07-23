@@ -5,6 +5,7 @@ import (
 	"blk/parser"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -180,12 +181,12 @@ func (s *SymbolTable) symbolReader(node parser.Statement) {
 	default:
 		// type is an expression statement
 		stmt := node.(*parser.ExpressionStatement)
-		s.symbolReaderExpression(stmt)
+		s.symbolReaderExpression(stmt.Expression)
 	}
 }
 
-func (s *SymbolTable) symbolReaderExpression(node *parser.ExpressionStatement) {
-	switch expr := node.Expression.(type) {
+func (s *SymbolTable) symbolReaderExpression(node parser.Expression) {
+	switch expr := node.(type) {
 	case *parser.CallExpression:
 		s.visitCallExpression(expr)
 	case *parser.UnaryExpression:
@@ -194,6 +195,16 @@ func (s *SymbolTable) symbolReaderExpression(node *parser.ExpressionStatement) {
 		s.visitIfExpression(expr)
 	case *parser.BinaryExpression:
 		s.visitBinaryExpression(expr)
+	case *parser.StructInstanceExpression:
+		s.visitStructInstanceExpression(expr)
+	case *parser.ArrayLiteral:
+		s.visitArrayLiteral(expr)
+	case *parser.MapLiteral:
+		s.visitMapLiteral(expr)
+	case *parser.IndexExpression:
+		s.visitIndexExpression(expr)
+
+	// TODO: add the membership access express
 	default:
 
 	}
@@ -251,6 +262,10 @@ func (s *SymbolTable) visitVarDCL(node *parser.LetStatement) {
 	}
 
 	s.visitFieldType(node.ExplicitType)
+
+	// check for the associated expression
+	s.symbolReaderExpression(node.Value)
+
 	s.Define(sym.Name, sym)
 }
 
@@ -388,12 +403,7 @@ func (s *SymbolTable) visitReturnDCL(node *parser.ReturnStatement) {
 
 	if ok {
 		// if (identifier) check if it declared or not
-		_, isMatched := s.Resolve(identifier.Value)
-
-		if !isMatched {
-			errMsg := ("ERROR: identifier, needs to be declared before it gets returned")
-			s.Collector.Add(s.Error(node.Token, errMsg))
-		}
+		s.visitIdentifier(identifier)
 	}
 }
 
@@ -428,90 +438,20 @@ func (s *SymbolTable) visitCallExpression(expr *parser.CallExpression) {
 	}
 
 	if len(args) > len(dclNode.Args) {
-		errMsg := "ERROR: function call is receiving more args than it should"
+		errMsg := "ERROR: function call is receiving more args than it should, consider removing them, or add them into the function signature"
 		tok := parser.Token{}
 		startIdx := len(dclNode.Args)
 
 		for idx, arg := range args[startIdx:] {
-			switch expr := arg.(type) {
-			case *parser.CallExpression:
-				tok.Text += expr.String()
-				tok.Row = expr.Token.Row
-				if idx == 0 {
-					tok.Col = expr.Token.Col
-				}
-			case *parser.MemberShipExpression:
-				tok.Text += expr.String()
-				tok.Row = expr.Token.Row
-				if idx == 0 {
-					tok.Col = expr.Token.Col
-				}
 
-			case *parser.ArrayLiteral:
+			if expr, ok := arg.(parser.Node); ok {
 				tok.Text += expr.String()
-				tok.Row = expr.Token.Row
+				tok.Row = expr.GetToken().Row
 				if idx == 0 {
-					tok.Col = expr.Token.Col
+					tok.Col = expr.GetToken().Col
 				}
-
-			case *parser.MapLiteral:
-				tok.Text += expr.String()
-				tok.Row = expr.Token.Row
-				if idx == 0 {
-					tok.Col = expr.Token.Col
-				}
-
-			case *parser.BooleanLiteral:
-				tok.Text += expr.String()
-				tok.Row = expr.Token.Row
-				if idx == 0 {
-					tok.Col = expr.Token.Col
-				}
-
-			case *parser.StringLiteral:
-				tok.Text += expr.String()
-				tok.Row = expr.Token.Row
-				if idx == 0 {
-					tok.Col = expr.Token.Col
-				}
-
-			case *parser.FloatLiteral:
-				tok.Text += expr.String()
-				tok.Row = expr.Token.Row
-				if idx == 0 {
-					tok.Col = expr.Token.Col
-				}
-
-			case *parser.IntegerLiteral:
-				tok.Text += expr.String()
-				tok.Row = expr.Token.Row
-				if idx == 0 {
-					tok.Col = expr.Token.Col
-				}
-
-			case *parser.Identifier:
-				tok.Text += expr.String()
-				tok.Row = expr.Token.Row
-				if idx == 0 {
-					tok.Col = expr.Token.Col
-				}
-
-			case *parser.BinaryExpression:
-				tok.Text += expr.String()
-				tok.Row = expr.Token.Row
-				if idx == 0 {
-					tok.Col = expr.Token.Col
-				}
-
-			case *parser.UnaryExpression:
-				tok.Text += expr.String()
-				tok.Row = expr.Token.Row
-				if idx == 0 {
-					tok.Col = expr.Token.Col
-				}
-
-			default:
 			}
+
 			if idx+1 <= len(args)-startIdx-1 {
 				tok.Text += ", "
 			}
@@ -526,12 +466,7 @@ func (s *SymbolTable) visitCallExpression(expr *parser.CallExpression) {
 	for _, arg := range args {
 		identifier, ok := arg.(*parser.Identifier)
 		if ok {
-			_, isMatched := s.Resolve(identifier.Value)
-
-			if !isMatched {
-				errMsg := "ERROR: identifier, needs to be declared before it gets used in a function call"
-				s.Collector.Add(s.Error(identifier.Token, errMsg))
-			}
+			s.visitIdentifier(identifier)
 		}
 	}
 }
@@ -540,50 +475,13 @@ func (s *SymbolTable) visitUnaryExpression(expr *parser.UnaryExpression) {
 	identifier, ok := expr.Right.(*parser.Identifier)
 
 	if ok {
-		// if (identifier) check if it declared or not
-		_, isMatched := s.Resolve(identifier.Value)
-
-		if !isMatched {
-			errMsg := ("ERROR: identifier, needs to be declared before it gets checked")
-			s.Collector.Add(s.Error(expr.Token, errMsg))
-		}
+		s.visitIdentifier(identifier)
 	}
 }
 
 func (s *SymbolTable) visitBinaryExpression(expr *parser.BinaryExpression) {
-
-	switch lExpr := expr.Left.(type) {
-	case *parser.Identifier:
-		_, isMatched := s.Resolve(lExpr.Value)
-
-		if !isMatched {
-			errMsg := fmt.Sprintf("ERROR: (%v) left identifier, needs to be declared before it gets checked", lExpr.Value)
-			s.Collector.Add(s.Error(lExpr.Token, errMsg))
-		}
-	case *parser.BinaryExpression:
-		s.visitBinaryExpression(lExpr)
-	case *parser.CallExpression:
-		s.visitCallExpression(lExpr)
-	default:
-
-	}
-
-	switch rExpr := expr.Right.(type) {
-	case *parser.Identifier:
-		_, isMatched := s.Resolve(rExpr.Value)
-
-		if !isMatched {
-			errMsg := fmt.Sprintf("ERROR: (%v) right identifier, needs to be declared before it gets checked", rExpr.Value)
-			s.Collector.Add(s.Error(expr.Token, errMsg))
-		}
-	case *parser.BinaryExpression:
-		s.visitBinaryExpression(rExpr)
-	case *parser.CallExpression:
-		s.visitCallExpression(rExpr)
-	default:
-
-	}
-
+	s.symbolReaderExpression(expr.Left)
+	s.symbolReaderExpression(expr.Right)
 }
 
 func (s *SymbolTable) visitIfExpression(expr *parser.IfExpression) {
@@ -594,7 +492,184 @@ func (s *SymbolTable) visitIfExpression(expr *parser.IfExpression) {
 		s.visitUnaryExpression(cExpr)
 	case *parser.BinaryExpression:
 		s.visitBinaryExpression(cExpr)
+	case *parser.Identifier:
+		s.visitIdentifier(cExpr)
+	case *parser.IndexExpression:
+		s.visitIndexExpression(cExpr)
 	default:
 		//
+	}
+
+	// check the body of if
+	s.visitBlockDCL(expr.Consequence)
+
+	// check the body of the else, if it exists
+	switch alt := expr.Alternative.(type) {
+	case *parser.BlockStatement:
+		s.visitBlockDCL(alt)
+	case *parser.IfExpression:
+		s.visitIfExpression(alt)
+	default:
+		// Do nothing
+	}
+}
+
+func (s *SymbolTable) visitIdentifier(expr *parser.Identifier) {
+	// if (identifier) check if it declared or not
+	_, isMatched := s.Resolve(expr.Value)
+
+	if !isMatched {
+		errMsg := ("ERROR: identifier, needs to be declared before it gets used")
+		s.Collector.Add(s.Error(expr.Token, errMsg))
+	}
+}
+
+func (s *SymbolTable) visitStructInstanceExpression(expr *parser.StructInstanceExpression) {
+
+	identifier, ok := expr.Left.(*parser.Identifier)
+
+	if ok {
+		structDef, isMatched := s.Resolve(identifier.Value)
+
+		if !isMatched {
+			errMsg := fmt.Sprintf("ERROR: struct (%v) needs to be defined, before creating instances of it", identifier.Value)
+			s.Collector.Add(s.Error(identifier.Token, errMsg))
+			return
+		}
+
+		body := expr.Body
+		keys := structDef.DeclNode.(*parser.StructStatement)
+
+		// means that some fields are left out of the having an associated value
+		for _, field := range keys.Body {
+			// find the key in the struct instance
+			idx := slices.IndexFunc(body, func(f parser.FieldInstance) bool {
+				return f.Key.Value == field.Key.Value
+			})
+
+			if idx == -1 {
+				errMsg := fmt.Sprintf("ERROR: field (%v) needs to be instantiated with a value, cause it exists on the struct definition", field.Key.Value)
+				s.Collector.Add(s.Error(field.Key.Token, errMsg))
+			}
+		}
+
+		for _, field := range body {
+			// find the key in the struct instance
+			idx := slices.IndexFunc(keys.Body, func(f parser.Field) bool {
+				return f.Key.Value == field.Key.Value
+			})
+
+			if idx == -1 {
+				errMsg := fmt.Sprintf("ERROR: field (%v) doesn't exist on the struct definition, either add it to the definition or remove the field from the instance", field.Key.Value)
+				s.Collector.Add(s.Error(field.Key.Token, errMsg))
+			}
+		}
+	}
+}
+
+func (s *SymbolTable) visitArrayLiteral(expr *parser.ArrayLiteral) {
+	elements := expr.Elements
+
+	for _, elem := range elements {
+		s.symbolReaderExpression(elem)
+	}
+}
+
+func (s *SymbolTable) visitMapLiteral(expr *parser.MapLiteral) {
+
+	pairs := expr.Pairs
+
+	for key, value := range pairs {
+		switch k := key.(type) {
+		case *parser.Identifier:
+			s.visitIdentifier(k)
+		case *parser.CallExpression:
+			s.visitCallExpression(k)
+		case *parser.IndexExpression:
+			s.visitIndexExpression(k)
+
+		default:
+			// panic(fmt.Sprintf("ERROR: %v ain't supported in map literal (key check)", k))
+		}
+		s.symbolReaderExpression(value)
+	}
+}
+
+func (s *SymbolTable) visitIndexExpression(expr *parser.IndexExpression) {
+	// check if the lest side is a valid
+	tok := parser.Token{}
+	errMsg := ""
+	switch lf := expr.Left.(type) {
+	case *parser.Identifier:
+		s.visitIdentifier(lf)
+	case *parser.ArrayLiteral:
+		s.visitArrayLiteral(lf)
+	case *parser.CallExpression:
+		s.visitCallExpression(lf)
+	case *parser.IfExpression:
+		errMsg = "ERROR: can't use an if expression as left side of index expression"
+		tok = lf.Token
+		tok.Text = lf.String()
+	case *parser.BinaryExpression:
+		errMsg = "ERROR: can't use a binary expression as left side of index expression, cause it evaluates to a boolean"
+		// construct the token
+		tok = lf.Token
+		lf.Token.Col -= 1
+		tok.Text = lf.String()
+	case *parser.UnaryExpression:
+		errMsg = "ERROR: can't use a unary expression as left side of index expression, cause it evaluates to a boolean"
+		tok = lf.Token
+		tok.Text = lf.String()
+	case *parser.StructInstanceExpression:
+		errMsg = "ERROR: can't use a struct instance as left side of index expression"
+		tok = lf.Token
+		tok.Text = lf.String()
+	default:
+		// nothing
+	}
+
+	if len(tok.Text) > 0 {
+		s.Collector.Add(s.Error(tok, errMsg))
+	}
+
+	switch rf := expr.Index.(type) {
+	case *parser.Identifier:
+		s.visitIdentifier(rf)
+	case *parser.CallExpression:
+		s.visitCallExpression(rf)
+	case *parser.IndexExpression:
+		s.visitIndexExpression(rf)
+	case *parser.BinaryExpression:
+		errMsg = "ERROR: can't use a binary expression, cause it evaluates to a boolean"
+		// construct the token
+		rf.Token.Text = rf.String()
+		tok = rf.Token
+		tok.Text = rf.String()
+	case *parser.UnaryExpression:
+		errMsg = "ERROR: can't use a unary expression, cause it evaluates to a boolean"
+		tok = rf.Token
+		tok.Text = rf.String()
+	case *parser.IfExpression:
+		errMsg = "ERROR: can't use an if expression as index, index can only be an int"
+		tok = rf.Token
+		tok.Text = rf.String()
+	case *parser.BooleanLiteral:
+		errMsg = "ERROR: can't use a boolean as an index, index can only be an int"
+		tok = rf.Token
+		tok.Text = rf.String()
+	case *parser.StringLiteral:
+		errMsg = "ERROR: can't use a string as an index, index can only be an int"
+		tok = rf.Token
+		tok.Text = rf.String()
+	case *parser.FloatLiteral:
+		errMsg = "ERROR: can't use a float as an index, index can only be an int"
+		tok = rf.Token
+		tok.Text = rf.String()
+	default:
+
+	}
+
+	if len(tok.Text) > 0 {
+		s.Collector.Add(s.Error(tok, errMsg))
 	}
 }
