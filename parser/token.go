@@ -60,8 +60,7 @@ const (
 	TokenString TokenKind = "string"
 	TokenInt    TokenKind = "int"
 	TokenFloat  TokenKind = "float"
-	TokenTrue   TokenKind = "true"
-	TokenFalse  TokenKind = "false"
+	TokenBool   TokenKind = "bool"
 	TokenArray  TokenKind = "array"
 	TokenMap    TokenKind = "map"
 

@@ -5,6 +5,7 @@ import (
 	"blk/parser"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -27,6 +28,7 @@ type SymbolInfo struct {
 	Name      string
 	DeclNode  any        // pointer to node dcl in AST
 	Kind      SymbolKind // func, var, param, let...
+	Type      any
 	IsMutable bool
 	Depth     int
 }
@@ -36,6 +38,7 @@ type SymbolTable struct {
 	Store            map[string]SymbolInfo // current scope's entries
 	EmbeddedSymTable []*SymbolTable
 	DepthIndicator   int
+	CurrNode         *SymbolInfo
 }
 
 func NewSymbolTable() *SymbolTable {
@@ -193,9 +196,9 @@ func (s *TypeChecker) symbolReader(node parser.Statement) {
 	case *parser.TypeStatement:
 		s.visitTypeDCL(node)
 	case *parser.WhileStatement:
-		s.visitBlockDCL(node.Body)
+		s.visitWhileLoopDCL(node)
 	case *parser.ForStatement:
-		s.visitBlockDCL(node.Body)
+		s.visitForLoopDCL(node)
 	case *parser.ReturnStatement:
 		s.visitReturnDCL(node)
 	case *parser.ScopeStatement:
@@ -209,6 +212,8 @@ func (s *TypeChecker) symbolReader(node parser.Statement) {
 
 func (s *TypeChecker) symbolReaderExpression(node parser.Expression) {
 	switch expr := node.(type) {
+	case *parser.Identifier:
+		s.visitIdentifier(expr)
 	case *parser.CallExpression:
 		s.visitCallExpression(expr)
 	case *parser.UnaryExpression:
@@ -225,10 +230,13 @@ func (s *TypeChecker) symbolReaderExpression(node parser.Expression) {
 		s.visitMapLiteral(expr)
 	case *parser.IndexExpression:
 		s.visitIndexExpression(expr)
+	case *parser.MemberShipExpression:
+		s.visitMemberShitAccess(expr)
 
-	// TODO: add the membership access express
+	case *parser.IntegerLiteral, *parser.StringLiteral, *parser.BooleanLiteral, *parser.FloatLiteral:
+		s.visitAtomicLiteral(expr)
+
 	default:
-
 	}
 }
 
@@ -269,7 +277,9 @@ func (s *TypeChecker) visitFuncDCL(node *parser.FunctionStatement) {
 
 func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 	kind := SymbolLet
+
 	isMutable := false
+
 	if node.Token.Text == "var" {
 		kind = SymbolVar
 		isMutable = true
@@ -281,6 +291,7 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 		Depth:     s.Symbols.DepthIndicator,
 		IsMutable: isMutable,
 		DeclNode:  node,
+		Type:      node.ExplicitType,
 	}
 
 	_, ok := s.Symbols.Resolve(sym.Name)
@@ -291,6 +302,7 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 
 	s.visitFieldType(node.ExplicitType)
 
+	s.Symbols.CurrNode = sym
 	// check for the associated expression
 	s.symbolReaderExpression(node.Value)
 
@@ -423,6 +435,44 @@ func (s *TypeChecker) visitBlockDCL(block *parser.BlockStatement) {
 	}
 }
 
+func (s *TypeChecker) visitWhileLoopDCL(node *parser.WhileStatement) {
+	// check if the condition
+	condition := node.Condition
+
+	switch cnd := condition.(type) {
+	case *parser.Identifier:
+		// later on check if the identifier will get evaluated to a boolean
+		s.visitIdentifier(cnd)
+	case *parser.UnaryExpression:
+		s.visitUnaryExpression(cnd)
+	case *parser.BinaryExpression:
+		s.visitBinaryExpression(cnd)
+	default:
+		// do nothing
+	}
+
+	// check the body
+	s.visitBlockDCL(node.Body)
+}
+
+func (s *TypeChecker) visitForLoopDCL(node *parser.ForStatement) {
+	for _, ident := range node.Identifiers {
+		sym := &SymbolInfo{
+			Name:     ident.Value,
+			DeclNode: ident,
+			Kind:     SymbolIdentifier,
+			Depth:    s.Symbols.DepthIndicator,
+		}
+
+		s.Symbols.Define(sym.Name, sym)
+	}
+
+	// check for the target if it already existing
+	s.symbolReaderExpression(node.Target)
+	// check for the body
+	s.visitBlockDCL(node.Body)
+}
+
 func (s *TypeChecker) visitReturnDCL(node *parser.ReturnStatement) {
 	if s.Symbols.DepthIndicator == 0 {
 		// means it is on the global scope not in a function
@@ -457,10 +507,21 @@ func (s *TypeChecker) visitCallExpression(expr *parser.CallExpression) {
 		return
 	}
 
+	dclNode := function.DeclNode.(*parser.FunctionStatement)
+	returnValue := dclNode.ReturnType
+	s.visitFieldType(returnValue)
+
+	nodeType := s.Symbols.CurrNode.Type.(*parser.NodeType)
+	returnType := returnValue.(*parser.NodeType)
+
+	if nodeType.Type != returnType.Type {
+		errMsg := fmt.Sprintf("ERROR: type mismatch in (%v) call expression, element defined as (%v), returned value from call function is (%v)", functionName, nodeType, returnType)
+		s.Collector.Add(s.Error(expr.Token, errMsg))
+		return
+	}
+
 	// check if same number of the args provided is the same
 	args := expr.Args
-
-	dclNode := function.DeclNode.(*parser.FunctionStatement)
 	if len(args) < len(dclNode.Args) {
 		errMsg := "ERROR: need to pass all the args into the function call"
 		tok := dclNode.Args[len(args)].Token
@@ -493,12 +554,14 @@ func (s *TypeChecker) visitCallExpression(expr *parser.CallExpression) {
 		return
 	}
 
-	// check if the args of the call expr, if they already exist
-
+	// check if the args of the call expr, already exist
+	// TODO: check also if there associated type is the same as the type of args on the function signature
 	for _, arg := range args {
-		identifier, ok := arg.(*parser.Identifier)
-		if ok {
-			s.visitIdentifier(identifier)
+		switch ag := arg.(type) {
+		case *parser.Identifier:
+			s.visitIdentifier(ag)
+		case *parser.MemberShipExpression:
+			s.visitMemberShitAccess(ag)
 		}
 	}
 }
@@ -548,12 +611,30 @@ func (s *TypeChecker) visitIfExpression(expr *parser.IfExpression) {
 
 func (s *TypeChecker) visitIdentifier(expr *parser.Identifier) {
 	// if (identifier) check if it declared or not
-	_, isMatched := s.Symbols.Resolve(expr.Value)
+	ident, isMatched := s.Symbols.Resolve(expr.Value)
 
 	if !isMatched {
 		errMsg := ("ERROR: identifier, needs to be declared before it gets used")
 		s.Collector.Add(s.Error(expr.Token, errMsg))
+		return
 	}
+
+	// we check the associated type of the dcl with this one
+	tgNode := ident.DeclNode.(*parser.LetStatement)
+	nodeType := s.Symbols.CurrNode.Type.(*parser.NodeType)
+	switch tp := tgNode.ExplicitType.(type) {
+	case *parser.NodeType:
+		if tp.Type != nodeType.Type {
+			errMsg := fmt.Sprintf("ERROR: mismatched types, expected %v, got %v", nodeType.Type, tp.String())
+			s.Collector.Add(s.Error(expr.Token, errMsg))
+			return
+		}
+	case *parser.MapType:
+		s.symbolReaderExpression(tgNode.Value)
+
+	default:
+	}
+
 }
 
 func (s *TypeChecker) visitStructInstanceExpression(expr *parser.StructInstanceExpression) {
@@ -601,8 +682,24 @@ func (s *TypeChecker) visitStructInstanceExpression(expr *parser.StructInstanceE
 
 func (s *TypeChecker) visitArrayLiteral(expr *parser.ArrayLiteral) {
 	elements := expr.Elements
+	nodeType := s.Symbols.CurrNode.Type.(*parser.NodeType)
+
+	if nodeType.Type == "array" && nodeType.ChildType != nil {
+		// means that this node is an array
+		s.Symbols.CurrNode.Type = nodeType.ChildType
+		s.visitArrayLiteral(expr)
+		return
+	}
 
 	for _, elem := range elements {
+		switch el := elem.(type) {
+		case *parser.Identifier:
+			if el.Value == s.Symbols.CurrNode.Name {
+				fmt.Println(s.Error(el.Token, "ERROR: can't use the current defined variable, as an element"))
+				os.Exit(1)
+			}
+		default:
+		}
 		s.symbolReaderExpression(elem)
 	}
 }
@@ -610,6 +707,14 @@ func (s *TypeChecker) visitArrayLiteral(expr *parser.ArrayLiteral) {
 func (s *TypeChecker) visitMapLiteral(expr *parser.MapLiteral) {
 
 	pairs := expr.Pairs
+
+	// nodeType := s.Symbols.CurrNode.Type.(*parser.MapType)
+	// if nodeType.Type != "map" {
+	// 	errMsg := fmt.Sprintf("ERROR: type mismatch in (%v) definition, defined as (%v), associated value (%v)", s.Symbols.CurrNode.Name, s.Symbols.CurrNode.Type, "map")
+	// 	expr.Token.Text = expr.String()
+	// 	s.Collector.Add(s.Error(expr.Token, errMsg))
+	// 	return
+	// }
 
 	for key, value := range pairs {
 		switch k := key.(type) {
@@ -702,6 +807,28 @@ func (s *TypeChecker) visitIndexExpression(expr *parser.IndexExpression) {
 	}
 
 	if len(tok.Text) > 0 {
+		s.Collector.Add(s.Error(tok, errMsg))
+	}
+}
+
+func (s *TypeChecker) visitMemberShitAccess(expr *parser.MemberShipExpression) {
+	s.symbolReaderExpression(expr.Object)
+	s.symbolReaderExpression(expr.Property)
+}
+
+func (s *TypeChecker) visitAtomicLiteral(expr parser.Expression) {
+	// check this one
+	tok := expr.GetToken()
+
+	curr := s.Symbols.CurrNode
+
+	nodeType := curr.Type.(*parser.NodeType)
+
+	if nodeType.Type != tok.Kind {
+		errMsg := fmt.Sprintf("ERROR: type mismatch in (%v) definition, element defined as (%v), associated value (%v)", curr.Name, curr.Type, tok.Kind)
+		if nodeType.Type == parser.TokenString {
+			tok.Text = expr.String()
+		}
 		s.Collector.Add(s.Error(tok, errMsg))
 	}
 }

@@ -383,7 +383,7 @@ func (al *ArrayLiteral) String() string {
 	for idx, elem := range al.Elements {
 		out.WriteString(elem.String())
 		if idx+1 <= len(al.Elements)-1 {
-			out.WriteString(", ")
+			out.WriteString(",")
 		}
 	}
 	out.WriteString("]")

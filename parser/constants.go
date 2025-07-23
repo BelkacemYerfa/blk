@@ -19,8 +19,8 @@ var (
 		"skip":   TokenSkip,
 		"array":  TokenArray,
 		"map":    TokenMap,
-		"true":   TokenTrue,
-		"false":  TokenFalse,
+		"true":   TokenBool,
+		"false":  TokenBool,
 	}
 
 	AtomicTypes = map[string]TYPE{

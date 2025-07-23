@@ -7,3 +7,6 @@ test_report.html
 
 # internal tests
 internal_examples/
+
+# internal make files
+Makefile

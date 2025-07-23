@@ -73,8 +73,7 @@ func NewParser(tokens []Token, filepath string) *Parser {
 	p.registerPrefix(TokenCurlyBraceOpen, p.parseMapLiteral)
 	p.registerPrefix(TokenExclamation, p.parsePrefixExpression)
 	p.registerPrefix(TokenMinus, p.parsePrefixExpression)
-	p.registerPrefix(TokenTrue, p.parseBooleanLiteral)
-	p.registerPrefix(TokenFalse, p.parseBooleanLiteral)
+	p.registerPrefix(TokenBool, p.parseBooleanLiteral)
 	p.registerPrefix(TokenBraceOpen, p.parseGroupedExpression)
 	p.registerPrefix(TokenIf, p.parseIfExpression)
 
@@ -151,7 +150,7 @@ func (p *Parser) error(tok Token, msg string) error {
 		tok = p.Tokens[p.Pos-2]
 		tok.Col = tok.Col + len(tok.Text) + 1
 	default:
-		if key, isMatching := keywords[tok.Text]; isMatching && key != TokenFalse && key != TokenTrue {
+		if key, isMatching := keywords[tok.Text]; isMatching && key != TokenBool {
 			prev := p.Tokens[p.Pos-2]
 			if tok.Row >= prev.Row {
 				tok = prev
@@ -545,7 +544,6 @@ func (p *Parser) parseType() Expression {
 }
 
 func (p *Parser) typeMapper(typ string) TYPE {
-
 	if mappedType, isMatching := AtomicTypes[typ]; isMatching {
 		return mappedType
 	} else {
