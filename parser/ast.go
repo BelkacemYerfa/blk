@@ -63,6 +63,11 @@ func (nt *NodeType) GetToken() Token      { return nt.Token }
 func (nt *NodeType) String() string {
 	var out bytes.Buffer
 
+	if nt == nil {
+		out.WriteString("nil")
+		return out.String()
+	}
+
 	if len(nt.Size) > 0 {
 		out.WriteString("[")
 		out.WriteString(nt.Size)
@@ -383,7 +388,7 @@ func (al *ArrayLiteral) String() string {
 	for idx, elem := range al.Elements {
 		out.WriteString(elem.String())
 		if idx+1 <= len(al.Elements)-1 {
-			out.WriteString(",")
+			out.WriteString(", ")
 		}
 	}
 	out.WriteString("]")

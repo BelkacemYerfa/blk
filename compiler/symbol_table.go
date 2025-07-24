@@ -301,10 +301,19 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 	}
 
 	s.visitFieldType(node.ExplicitType)
-
 	s.Symbols.CurrNode = sym
-	// check for the associated expression
-	s.symbolReaderExpression(node.Value)
+	expectedType := node.ExplicitType.String()
+	gotType := s.inferAssociatedValueType(node.Value).(*parser.NodeType).String()
+	if expectedType != gotType {
+		errMsg := ""
+		if gotType == "nil" {
+			errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", expectedType, gotType)
+		} else {
+			errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v", expectedType, gotType)
+		}
+		tok := node.Value.GetToken()
+		s.Collector.Add(s.Error(tok, errMsg))
+	}
 
 	s.Symbols.Define(sym.Name, sym)
 }
@@ -567,14 +576,26 @@ func (s *TypeChecker) visitCallExpression(expr *parser.CallExpression) {
 }
 
 func (s *TypeChecker) visitUnaryExpression(expr *parser.UnaryExpression) {
-	identifier, ok := expr.Right.(*parser.Identifier)
+	// check if the type is boolean or not
+	if s.Symbols.CurrNode.Type.(*parser.NodeType).Type == parser.BoolType && expr.Operator == "-" {
+		errMsg := "ERROR: can't use operator (-) with boolean types, only operator (!) is allowed"
+		s.Collector.Add(s.Error(expr.Token, errMsg))
+		return
+	}
 
-	if ok {
-		s.visitIdentifier(identifier)
+	switch ep := expr.Right.(type) {
+	case *parser.Identifier:
+		s.visitIdentifier(ep)
+	case *parser.BooleanLiteral:
+		s.visitAtomicLiteral(ep)
+	default:
+		fmt.Println("sorry, not supported yet", ep)
 	}
 }
 
 func (s *TypeChecker) visitBinaryExpression(expr *parser.BinaryExpression) {
+	// check for operations allowed to do
+	// if everything is good we're good to go
 	s.symbolReaderExpression(expr.Left)
 	s.symbolReaderExpression(expr.Right)
 }
@@ -609,32 +630,18 @@ func (s *TypeChecker) visitIfExpression(expr *parser.IfExpression) {
 	}
 }
 
-func (s *TypeChecker) visitIdentifier(expr *parser.Identifier) {
+func (s *TypeChecker) visitIdentifier(expr *parser.Identifier) *SymbolInfo {
 	// if (identifier) check if it declared or not
 	ident, isMatched := s.Symbols.Resolve(expr.Value)
 
 	if !isMatched {
 		errMsg := ("ERROR: identifier, needs to be declared before it gets used")
-		s.Collector.Add(s.Error(expr.Token, errMsg))
-		return
+		expr.Token.Col++
+		fmt.Println(s.Error(expr.Token, errMsg))
+		os.Exit(1)
 	}
 
-	// we check the associated type of the dcl with this one
-	tgNode := ident.DeclNode.(*parser.LetStatement)
-	nodeType := s.Symbols.CurrNode.Type.(*parser.NodeType)
-	switch tp := tgNode.ExplicitType.(type) {
-	case *parser.NodeType:
-		if tp.Type != nodeType.Type {
-			errMsg := fmt.Sprintf("ERROR: mismatched types, expected %v, got %v", nodeType.Type, tp.String())
-			s.Collector.Add(s.Error(expr.Token, errMsg))
-			return
-		}
-	case *parser.MapType:
-		s.symbolReaderExpression(tgNode.Value)
-
-	default:
-	}
-
+	return ident
 }
 
 func (s *TypeChecker) visitStructInstanceExpression(expr *parser.StructInstanceExpression) {
@@ -826,9 +833,108 @@ func (s *TypeChecker) visitAtomicLiteral(expr parser.Expression) {
 
 	if nodeType.Type != tok.Kind {
 		errMsg := fmt.Sprintf("ERROR: type mismatch in (%v) definition, element defined as (%v), associated value (%v)", curr.Name, curr.Type, tok.Kind)
-		if nodeType.Type == parser.TokenString {
+		if tok.Kind == parser.TokenString {
 			tok.Text = expr.String()
 		}
 		s.Collector.Add(s.Error(tok, errMsg))
 	}
+}
+
+// TODO: make an infer function to get the type of the associated value
+// Then compare those types in the end result to see if they match or not
+
+// parser expression here is one of 2 types, either parser.NodeType, or parser.MpaType
+func (s *TypeChecker) inferAssociatedValueType(expr parser.Expression) parser.Expression {
+
+	switch ep := expr.(type) {
+	// atomic types
+	case *parser.StringLiteral:
+		return &parser.NodeType{
+			Type: parser.StringType,
+		}
+	case *parser.BooleanLiteral:
+		return &parser.NodeType{
+			Type: parser.BoolType,
+		}
+	case *parser.IntegerLiteral:
+		return &parser.NodeType{
+			Type: parser.IntType,
+		}
+	case *parser.FloatLiteral:
+		return &parser.NodeType{
+			Type: parser.FloatType,
+		}
+
+	case *parser.ArrayLiteral:
+		return s.inferArrayType(ep).(*parser.NodeType)
+	case *parser.Identifier:
+		return s.inferIdentifierType(ep)
+	case *parser.IndexExpression:
+		return s.inferIndexAccessType(ep).(*parser.NodeType)
+
+	}
+
+	return &parser.NodeType{}
+}
+
+func (s *TypeChecker) inferArrayType(expr *parser.ArrayLiteral) parser.Expression {
+
+	if len(expr.Elements) == 0 {
+		return s.Symbols.CurrNode.Type.(*parser.NodeType)
+	}
+
+	firstElem := &parser.NodeType{}
+
+	for idx, elem := range expr.Elements {
+		resType := s.inferAssociatedValueType(elem)
+		if idx == 0 {
+			firstElem = resType.(*parser.NodeType)
+		}
+		if firstElem.Type != resType.(*parser.NodeType).Type {
+			errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", firstElem, resType)
+			expr.Token.Text = expr.String()
+			fmt.Println(s.Error(expr.Token, errMsg))
+			os.Exit(1)
+		}
+	}
+
+	return &parser.NodeType{
+		Type:      "array",
+		ChildType: firstElem,
+	}
+}
+
+func (s *TypeChecker) inferIdentifierType(expr *parser.Identifier) parser.Expression {
+	// call the visitIdentifier
+	sym := s.visitIdentifier(expr)
+
+	if sym == nil {
+		return nil
+	}
+
+	return s.inferAssociatedValueType(sym.DeclNode.(*parser.LetStatement).Value)
+}
+
+func (s *TypeChecker) inferIndexAccessType(expr *parser.IndexExpression) parser.Expression {
+	// check what the left side is
+
+	indexType := s.inferAssociatedValueType(expr.Index)
+
+	if indexType.String() != "int" {
+		errMsg := fmt.Sprintf("ERROR: can't use %v as index, index should be of type int", indexType)
+		expr.Token.Text = expr.String()
+		fmt.Println(s.Error(expr.Token, errMsg))
+		return nil
+	}
+
+	returnType := &parser.NodeType{}
+	switch ep := expr.Left.(type) {
+	case *parser.Identifier:
+		returnType = s.inferIdentifierType(ep).(*parser.NodeType).ChildType
+	case *parser.ArrayLiteral:
+		returnType = s.inferArrayType(ep).(*parser.NodeType).ChildType
+	case *parser.IndexExpression:
+		returnType = s.inferIndexAccessType(ep).(*parser.NodeType).ChildType
+	}
+	return returnType
 }
