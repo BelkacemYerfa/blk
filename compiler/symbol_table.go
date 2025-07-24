@@ -307,22 +307,27 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 	s.Symbols.CurrNode = sym
 	s.symbolReaderExpression(node.Value)
 	expectedType := node.ExplicitType.String()
-	gotType := s.inferAssociatedValueType(node.Value).(*parser.NodeType).String()
-	if expectedType != gotType {
+	gotType := s.inferAssociatedValueType(node.Value)
+
+	if expectedType != gotType.String() {
 		errMsg := ""
-		if gotType == "nil" {
+		if gotType.String() == "nil" {
 			errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", expectedType, gotType)
 		} else {
 			errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v", expectedType, gotType)
 		}
-		tok := node.Value.GetToken()
+		tok := gotType.GetToken()
+		if gotType.GetType() == parser.TokenMap {
+			tok.Text = node.ExplicitType.String()
+			tok.Col = node.ExplicitType.GetToken().Col - len(tok.Text) - 1
+		}
 		s.Collector.Add(s.Error(tok, errMsg))
 	}
 
 	s.Symbols.Define(sym.Name, sym)
 }
 
-func (s *TypeChecker) visitStructDCL(node *parser.StructStatement) {
+func (s *TypeChecker) visitStructDCL(node *parser.StructStatement) *SymbolInfo {
 
 	sym := &SymbolInfo{
 		Name:     node.Name.Value,
@@ -352,7 +357,7 @@ func (s *TypeChecker) visitStructDCL(node *parser.StructStatement) {
 			if ok {
 				errMsg := fmt.Sprintf("ERROR: ( %v ) key is already declared, attempt to re-declare", fieldName)
 				s.Collector.Add(s.Error(field.Key.Token, errMsg))
-				return
+				return nil
 			} else {
 				nwTab.Define(fieldName, &SymbolInfo{
 					Name:     field.Key.Value,
@@ -369,6 +374,7 @@ func (s *TypeChecker) visitStructDCL(node *parser.StructStatement) {
 		}
 	}
 
+	return sym
 }
 
 func (s *TypeChecker) visitFieldType(fieldType parser.Expression) {
@@ -805,7 +811,7 @@ func (s *TypeChecker) visitMemberShipAccess(expr *parser.MemberShipExpression) {
 // Then compare those types in the end result to see if they match or not
 
 // parser expression here is one of 2 types, either parser.NodeType, or parser.MpaType
-func (s *TypeChecker) inferAssociatedValueType(expr parser.Expression) parser.Expression {
+func (s *TypeChecker) inferAssociatedValueType(expr parser.Expression) parser.Type {
 
 	switch ep := expr.(type) {
 	// atomic types
@@ -828,8 +834,12 @@ func (s *TypeChecker) inferAssociatedValueType(expr parser.Expression) parser.Ex
 
 	case *parser.ArrayLiteral:
 		return s.inferArrayType(ep).(*parser.NodeType)
+	case *parser.MapLiteral:
+		return s.inferMapType(ep)
 	case *parser.Identifier:
 		return s.inferIdentifierType(ep)
+	case *parser.StructInstanceExpression:
+		return s.inferStructInstanceType(ep)
 	case *parser.IndexExpression:
 		return s.inferIndexAccessType(ep).(*parser.NodeType)
 	case *parser.CallExpression:
@@ -843,7 +853,7 @@ func (s *TypeChecker) inferAssociatedValueType(expr parser.Expression) parser.Ex
 	return &parser.NodeType{}
 }
 
-func (s *TypeChecker) inferArrayType(expr *parser.ArrayLiteral) parser.Expression {
+func (s *TypeChecker) inferArrayType(expr *parser.ArrayLiteral) parser.Type {
 
 	if len(expr.Elements) == 0 {
 		return s.Symbols.CurrNode.Type.(*parser.NodeType)
@@ -854,6 +864,7 @@ func (s *TypeChecker) inferArrayType(expr *parser.ArrayLiteral) parser.Expressio
 	for idx, elem := range expr.Elements {
 		resType := s.inferAssociatedValueType(elem)
 		if idx == 0 {
+			fmt.Println(resType)
 			firstElem = resType.(*parser.NodeType)
 		}
 		if firstElem.Type != resType.(*parser.NodeType).Type {
@@ -864,12 +875,70 @@ func (s *TypeChecker) inferArrayType(expr *parser.ArrayLiteral) parser.Expressio
 	}
 
 	return &parser.NodeType{
+		Token:     firstElem.Token,
 		Type:      "array",
 		ChildType: firstElem,
 	}
 }
 
-func (s *TypeChecker) inferIdentifierType(expr *parser.Identifier) parser.Expression {
+func (s *TypeChecker) inferMapType(expr *parser.MapLiteral) parser.Type {
+	if len(expr.Pairs) == 0 {
+		return s.Symbols.CurrNode.Type.(*parser.NodeType)
+	}
+	// use interface for readability (preferred over any)
+	var keyElem interface{}
+	var valElem interface{}
+	idx := 0
+	for key, value := range expr.Pairs {
+		// key part
+		resType := s.inferAssociatedValueType(key)
+		if idx == 0 {
+			keyElem = resType
+		}
+		switch rst := keyElem.(type) {
+		case *parser.NodeType:
+			if rst.Type != resType.GetType() {
+				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
+				s.insertUniqueErrors(s.Error(key.GetToken(), errMsg))
+			}
+		case *parser.MapType:
+			if rst.Type != resType.GetType() {
+				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
+				s.insertUniqueErrors(s.Error(key.GetToken(), errMsg))
+			}
+		default:
+		}
+
+		// value part
+		resType = s.inferAssociatedValueType(value)
+		if idx == 0 {
+			valElem = resType
+			idx++
+		}
+		switch rst := valElem.(type) {
+		case *parser.NodeType:
+			if rst.Type != resType.GetType() {
+				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
+				s.insertUniqueErrors(s.Error(value.GetToken(), errMsg))
+			}
+		case *parser.MapType:
+			if rst.Type != resType.GetType() {
+				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
+				s.insertUniqueErrors(s.Error(value.GetToken(), errMsg))
+			}
+		default:
+		}
+	}
+
+	return &parser.MapType{
+		Token: expr.Token,
+		Type:  "map",
+		Left:  keyElem.(parser.Type),
+		Right: valElem.(parser.Type),
+	}
+}
+
+func (s *TypeChecker) inferIdentifierType(expr *parser.Identifier) parser.Type {
 	// call the visitIdentifier
 	sym := s.visitIdentifier(expr)
 
@@ -877,7 +946,54 @@ func (s *TypeChecker) inferIdentifierType(expr *parser.Identifier) parser.Expres
 		return nil
 	}
 
-	return s.inferAssociatedValueType(sym.DeclNode.(*parser.LetStatement).Value)
+	switch node := sym.DeclNode.(type) {
+	case *parser.LetStatement:
+		return s.inferAssociatedValueType(node.Value)
+	case *parser.StructInstanceExpression:
+		return s.inferAssociatedValueType(node.Left)
+	default:
+
+	}
+	return &parser.NodeType{
+		Type: expr.Value,
+	}
+}
+
+func (s *TypeChecker) inferStructInstanceType(expr *parser.StructInstanceExpression) parser.Type {
+	// check if the types are compatible with the definition
+	sym := s.visitIdentifier(expr.Left.(*parser.Identifier))
+
+	if sym == nil {
+		return nil
+	}
+
+	var keyElem interface{}
+	idx := 0
+	for id, elem := range expr.Body {
+		// check the types are evaluated correctly on the fields
+		resType := sym.DeclNode.(*parser.StructStatement).Body[id]
+		if idx == 0 {
+			keyElem = resType
+			idx++
+		}
+		switch rst := keyElem.(type) {
+		case *parser.NodeType:
+			if rst.Type != resType.Value.String() {
+				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
+				s.insertUniqueErrors(s.Error(elem.Value.GetToken(), errMsg))
+			}
+		case *parser.MapType:
+			if rst.Type != resType.Value.String() {
+				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
+				s.insertUniqueErrors(s.Error(elem.Value.GetToken(), errMsg))
+			}
+		default:
+		}
+	}
+
+	return &parser.NodeType{
+		Type: sym.Name,
+	}
 }
 
 func (s *TypeChecker) inferIndexAccessType(expr *parser.IndexExpression) parser.Expression {
@@ -895,7 +1011,7 @@ func (s *TypeChecker) inferIndexAccessType(expr *parser.IndexExpression) parser.
 	return s.inferAssociatedValueType(expr.Left).(*parser.NodeType).ChildType
 }
 
-func (s *TypeChecker) inferCallExpressionType(expr *parser.CallExpression) parser.Expression {
+func (s *TypeChecker) inferCallExpressionType(expr *parser.CallExpression) parser.Type {
 	sym := s.visitIdentifier(&expr.Function)
 
 	if sym == nil {
@@ -905,7 +1021,7 @@ func (s *TypeChecker) inferCallExpressionType(expr *parser.CallExpression) parse
 	return sym.Type.(*parser.NodeType)
 }
 
-func (s *TypeChecker) inferUnaryExpressionType(expr *parser.UnaryExpression) parser.Expression {
+func (s *TypeChecker) inferUnaryExpressionType(expr *parser.UnaryExpression) parser.Type {
 	if s.Symbols.CurrNode.Type.(*parser.NodeType).Type == parser.BoolType && expr.Operator == "-" {
 		errMsg := "ERROR: can't use operator (-) with boolean types, only operator (!) is allowed"
 		s.insertUniqueErrors(s.Error(expr.Token, errMsg))
@@ -914,7 +1030,7 @@ func (s *TypeChecker) inferUnaryExpressionType(expr *parser.UnaryExpression) par
 	return s.inferAssociatedValueType(expr.Right)
 }
 
-func (s *TypeChecker) inferBinaryExpressionType(expr *parser.BinaryExpression) parser.Expression {
+func (s *TypeChecker) inferBinaryExpressionType(expr *parser.BinaryExpression) parser.Type {
 	// check if the operation is allowed on that type
 	// rule: equality on all
 	// comparison only on floats, and ints
@@ -935,7 +1051,8 @@ func (s *TypeChecker) inferBinaryExpressionType(expr *parser.BinaryExpression) p
 	switch operator {
 	case "==", "!=":
 		return &parser.NodeType{
-			Type: parser.BoolType,
+			Token: expr.Token,
+			Type:  parser.BoolType,
 		}
 	case ">=", "<=", ">", "<":
 		fmt.Println(leftType)
@@ -954,7 +1071,8 @@ func (s *TypeChecker) inferBinaryExpressionType(expr *parser.BinaryExpression) p
 			// error
 		default:
 			return &parser.NodeType{
-				Type: parser.BoolType,
+				Token: expr.Token,
+				Type:  parser.BoolType,
 			}
 		}
 	case "+":
@@ -965,7 +1083,8 @@ func (s *TypeChecker) inferBinaryExpressionType(expr *parser.BinaryExpression) p
 			s.insertUniqueErrors(s.Error(expr.Token, errMsg))
 		} else {
 			return &parser.NodeType{
-				Type: leftType.String(),
+				Token: expr.Token,
+				Type:  leftType.String(),
 			}
 		}
 	case "-", "/", "*", "%":
@@ -995,6 +1114,7 @@ func (s *TypeChecker) inferBinaryExpressionType(expr *parser.BinaryExpression) p
 	}
 
 	return &parser.NodeType{
-		Type: parser.BoolType,
+		Token: expr.Token,
+		Type:  parser.BoolType,
 	}
 }

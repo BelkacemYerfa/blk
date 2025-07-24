@@ -30,6 +30,12 @@ type Expression interface {
 	expressionNode()
 }
 
+type Type interface {
+	Node
+	Expression
+	GetType() TYPE
+}
+
 type Program struct {
 	Statements []Statement
 }
@@ -60,6 +66,7 @@ type NodeType struct {
 func (nt *NodeType) expressionNode()      {}
 func (nt *NodeType) TokenLiteral() string { return nt.Token.Text }
 func (nt *NodeType) GetToken() Token      { return nt.Token }
+func (nt *NodeType) GetType() TYPE        { return nt.Type }
 func (nt *NodeType) String() string {
 	var out bytes.Buffer
 
@@ -90,13 +97,14 @@ func (nt *NodeType) String() string {
 type MapType struct {
 	Token Token
 	Type  TYPE
-	Left  Expression
-	Right Expression
+	Left  Type
+	Right Type
 }
 
 func (mt *MapType) expressionNode()      {}
 func (mt *MapType) TokenLiteral() string { return mt.Token.Text }
 func (nt *MapType) GetToken() Token      { return nt.Token }
+func (nt *MapType) GetType() TYPE        { return nt.Type }
 func (mt *MapType) String() string {
 	var out bytes.Buffer
 	out.WriteString(mt.Type)

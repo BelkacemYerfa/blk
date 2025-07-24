@@ -495,8 +495,8 @@ func (p *Parser) parseType() Expression {
 			return &MapType{
 				Token: p.currentToken(),
 				Type:  "map",
-				Left:  keyType,
-				Right: valueType,
+				Left:  keyType.(Type),
+				Right: valueType.(Type),
 			}
 		}
 
@@ -507,8 +507,8 @@ func (p *Parser) parseType() Expression {
 			return &MapType{
 				Token: p.currentToken(),
 				Type:  "map",
-				Left:  keyType,
-				Right: valueType,
+				Left:  keyType.(Type),
+				Right: valueType.(Type),
 			}
 		}
 
