@@ -162,8 +162,6 @@ func (s *TypeChecker) Error(tok parser.Token, msg string) error {
 	}
 
 	errMsg += msg
-	// skip until the next useful line
-
 	return errors.New(errMsg)
 }
 
@@ -229,8 +227,6 @@ func (s *TypeChecker) symbolReaderExpression(node parser.Expression) {
 		s.visitUnaryExpression(expr)
 	case *parser.IfExpression:
 		s.visitIfExpression(expr)
-	case *parser.BinaryExpression:
-		s.visitBinaryExpression(expr)
 	case *parser.StructInstanceExpression:
 		s.visitStructInstanceExpression(expr)
 	case *parser.ArrayLiteral:
@@ -462,8 +458,6 @@ func (s *TypeChecker) visitWhileLoopDCL(node *parser.WhileStatement) {
 		s.visitIdentifier(cnd)
 	case *parser.UnaryExpression:
 		s.visitUnaryExpression(cnd)
-	case *parser.BinaryExpression:
-		s.visitBinaryExpression(cnd)
 	default:
 		// do nothing
 	}
@@ -603,21 +597,12 @@ func (s *TypeChecker) visitUnaryExpression(expr *parser.UnaryExpression) {
 	s.symbolReaderExpression(expr.Right)
 }
 
-func (s *TypeChecker) visitBinaryExpression(expr *parser.BinaryExpression) {
-	// check for operations allowed to do
-	// if everything is good we're good to go
-	s.symbolReaderExpression(expr.Left)
-	s.symbolReaderExpression(expr.Right)
-}
-
 func (s *TypeChecker) visitIfExpression(expr *parser.IfExpression) {
 	conditionExpression := expr.Condition
 
 	switch cExpr := conditionExpression.(type) {
 	case *parser.UnaryExpression:
 		s.visitUnaryExpression(cExpr)
-	case *parser.BinaryExpression:
-		s.visitBinaryExpression(cExpr)
 	case *parser.Identifier:
 		s.visitIdentifier(cExpr)
 	case *parser.IndexExpression:
@@ -851,6 +836,8 @@ func (s *TypeChecker) inferAssociatedValueType(expr parser.Expression) parser.Ex
 		return s.inferCallExpressionType(ep)
 	case *parser.UnaryExpression:
 		return s.inferUnaryExpressionType(ep)
+	case *parser.BinaryExpression:
+		return s.inferBinaryExpressionType(ep)
 	}
 
 	return &parser.NodeType{}
@@ -905,16 +892,7 @@ func (s *TypeChecker) inferIndexAccessType(expr *parser.IndexExpression) parser.
 		return nil
 	}
 
-	returnType := &parser.NodeType{}
-	switch ep := expr.Left.(type) {
-	case *parser.Identifier:
-		returnType = s.inferIdentifierType(ep).(*parser.NodeType).ChildType
-	case *parser.ArrayLiteral:
-		returnType = s.inferArrayType(ep).(*parser.NodeType).ChildType
-	case *parser.IndexExpression:
-		returnType = s.inferIndexAccessType(ep).(*parser.NodeType).ChildType
-	}
-	return returnType
+	return s.inferAssociatedValueType(expr.Left).(*parser.NodeType).ChildType
 }
 
 func (s *TypeChecker) inferCallExpressionType(expr *parser.CallExpression) parser.Expression {
@@ -934,4 +912,89 @@ func (s *TypeChecker) inferUnaryExpressionType(expr *parser.UnaryExpression) par
 	}
 
 	return s.inferAssociatedValueType(expr.Right)
+}
+
+func (s *TypeChecker) inferBinaryExpressionType(expr *parser.BinaryExpression) parser.Expression {
+	// check if the operation is allowed on that type
+	// rule: equality on all
+	// comparison only on floats, and ints
+	// rule: allow only comparison of the same types
+	leftType := s.inferAssociatedValueType(expr.Left)
+	rightType := s.inferAssociatedValueType(expr.Right)
+	if leftType.String() != rightType.String() {
+		errMsg := fmt.Sprintf(
+			"ERROR: type mismatch, we can't compare 2 different types in a binary expression, left (%v), right (%v)", leftType, rightType,
+		)
+		expr.Token.Col++
+		fmt.Println(s.Error(expr.Token, errMsg))
+		os.Exit(1)
+	}
+
+	operator := expr.Operator
+
+	switch operator {
+	case "==", "!=":
+		return &parser.NodeType{
+			Type: parser.BoolType,
+		}
+	case ">=", "<=", ">", "<":
+		fmt.Println(leftType)
+		switch leftType.String() {
+		case parser.StringType:
+			// error
+			errMsg := fmt.Sprintf(
+				"ERROR: (%s) isn't allowed on string type", operator,
+			)
+			s.insertUniqueErrors(s.Error(expr.Token, errMsg))
+		case parser.BoolType:
+			errMsg := fmt.Sprintf(
+				"ERROR: (%s) isn't allowed on boolean type", operator,
+			)
+			s.insertUniqueErrors(s.Error(expr.Token, errMsg))
+			// error
+		default:
+			return &parser.NodeType{
+				Type: parser.BoolType,
+			}
+		}
+	case "+":
+		if leftType.String() == parser.BoolType {
+			errMsg := fmt.Sprintf(
+				"ERROR: (%s) isn't allowed on boolean type", operator,
+			)
+			s.insertUniqueErrors(s.Error(expr.Token, errMsg))
+		} else {
+			return &parser.NodeType{
+				Type: leftType.String(),
+			}
+		}
+	case "-", "/", "*", "%":
+		switch leftType.String() {
+		case parser.StringType:
+			// error
+			errMsg := fmt.Sprintf(
+				"ERROR: (%s) isn't allowed on string type", operator,
+			)
+			s.insertUniqueErrors(s.Error(expr.Token, errMsg))
+		case parser.BoolType:
+			errMsg := fmt.Sprintf(
+				"ERROR: (%s) isn't allowed on boolean type", operator,
+			)
+			s.insertUniqueErrors(s.Error(expr.Token, errMsg))
+			// error
+		}
+	case "&&", "||":
+		if leftType.String() != parser.BoolType {
+			errMsg := fmt.Sprintf(
+				"ERROR: (%s) isn't allowed on %s type", operator, leftType.String(),
+			)
+			s.insertUniqueErrors(s.Error(expr.Token, errMsg))
+		}
+	default:
+
+	}
+
+	return &parser.NodeType{
+		Type: parser.BoolType,
+	}
 }
