@@ -167,6 +167,15 @@ func (s *TypeChecker) Error(tok parser.Token, msg string) error {
 	return errors.New(errMsg)
 }
 
+func (s *TypeChecker) insertUniqueErrors(errMsg error) {
+	_, found := slices.BinarySearchFunc(s.Collector.Errors, errMsg, func(a, b error) int {
+		return strings.Compare(a.Error(), b.Error())
+	})
+	if !found {
+		s.Collector.Add(errMsg)
+	}
+}
+
 func (s *TypeChecker) SymbolBuilder(ast *parser.Program) {
 
 	// insert prebuilt func later on
@@ -231,10 +240,7 @@ func (s *TypeChecker) symbolReaderExpression(node parser.Expression) {
 	case *parser.IndexExpression:
 		s.visitIndexExpression(expr)
 	case *parser.MemberShipExpression:
-		s.visitMemberShitAccess(expr)
-
-	case *parser.IntegerLiteral, *parser.StringLiteral, *parser.BooleanLiteral, *parser.FloatLiteral:
-		s.visitAtomicLiteral(expr)
+		s.visitMemberShipAccess(expr)
 
 	default:
 	}
@@ -246,6 +252,7 @@ func (s *TypeChecker) visitFuncDCL(node *parser.FunctionStatement) {
 		Kind:     SymbolFunc,
 		Depth:    s.Symbols.DepthIndicator,
 		DeclNode: node,
+		Type:     node.ReturnType,
 	}
 
 	// check if the name doesn't collide with pre-built function
@@ -302,6 +309,7 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 
 	s.visitFieldType(node.ExplicitType)
 	s.Symbols.CurrNode = sym
+	s.symbolReaderExpression(node.Value)
 	expectedType := node.ExplicitType.String()
 	gotType := s.inferAssociatedValueType(node.Value).(*parser.NodeType).String()
 	if expectedType != gotType {
@@ -520,15 +528,6 @@ func (s *TypeChecker) visitCallExpression(expr *parser.CallExpression) {
 	returnValue := dclNode.ReturnType
 	s.visitFieldType(returnValue)
 
-	nodeType := s.Symbols.CurrNode.Type.(*parser.NodeType)
-	returnType := returnValue.(*parser.NodeType)
-
-	if nodeType.Type != returnType.Type {
-		errMsg := fmt.Sprintf("ERROR: type mismatch in (%v) call expression, element defined as (%v), returned value from call function is (%v)", functionName, nodeType, returnType)
-		s.Collector.Add(s.Error(expr.Token, errMsg))
-		return
-	}
-
 	// check if same number of the args provided is the same
 	args := expr.Args
 	if len(args) < len(dclNode.Args) {
@@ -565,13 +564,31 @@ func (s *TypeChecker) visitCallExpression(expr *parser.CallExpression) {
 
 	// check if the args of the call expr, already exist
 	// TODO: check also if there associated type is the same as the type of args on the function signature
-	for _, arg := range args {
+	for idx, arg := range args {
 		switch ag := arg.(type) {
 		case *parser.Identifier:
 			s.visitIdentifier(ag)
+			returnType := s.inferAssociatedValueType(ag)
+			tp := dclNode.Args[idx].Type
+			s.argTypeChecker(tp.String(), returnType.String(), arg)
 		case *parser.MemberShipExpression:
-			s.visitMemberShitAccess(ag)
+			s.visitMemberShipAccess(ag)
+
+		default:
+			// handle only atomic types (strings, booleans, floats, ints)
+			returnType := s.inferAssociatedValueType(ag)
+			tp := dclNode.Args[idx].Type
+			s.argTypeChecker(tp.String(), returnType.String(), arg)
 		}
+	}
+}
+
+func (s *TypeChecker) argTypeChecker(tp, returnType string, arg parser.Expression) {
+	if tp != returnType {
+		errMsg := fmt.Sprintf("ERROR: type mismatch, expected %v, got %v", tp, returnType)
+		tok := arg.GetToken()
+		tok.Text = arg.String()
+		s.Collector.Add(s.Error(tok, errMsg))
 	}
 }
 
@@ -583,14 +600,7 @@ func (s *TypeChecker) visitUnaryExpression(expr *parser.UnaryExpression) {
 		return
 	}
 
-	switch ep := expr.Right.(type) {
-	case *parser.Identifier:
-		s.visitIdentifier(ep)
-	case *parser.BooleanLiteral:
-		s.visitAtomicLiteral(ep)
-	default:
-		fmt.Println("sorry, not supported yet", ep)
-	}
+	s.symbolReaderExpression(expr.Right)
 }
 
 func (s *TypeChecker) visitBinaryExpression(expr *parser.BinaryExpression) {
@@ -636,7 +646,6 @@ func (s *TypeChecker) visitIdentifier(expr *parser.Identifier) *SymbolInfo {
 
 	if !isMatched {
 		errMsg := ("ERROR: identifier, needs to be declared before it gets used")
-		expr.Token.Col++
 		fmt.Println(s.Error(expr.Token, errMsg))
 		os.Exit(1)
 	}
@@ -689,24 +698,8 @@ func (s *TypeChecker) visitStructInstanceExpression(expr *parser.StructInstanceE
 
 func (s *TypeChecker) visitArrayLiteral(expr *parser.ArrayLiteral) {
 	elements := expr.Elements
-	nodeType := s.Symbols.CurrNode.Type.(*parser.NodeType)
-
-	if nodeType.Type == "array" && nodeType.ChildType != nil {
-		// means that this node is an array
-		s.Symbols.CurrNode.Type = nodeType.ChildType
-		s.visitArrayLiteral(expr)
-		return
-	}
 
 	for _, elem := range elements {
-		switch el := elem.(type) {
-		case *parser.Identifier:
-			if el.Value == s.Symbols.CurrNode.Name {
-				fmt.Println(s.Error(el.Token, "ERROR: can't use the current defined variable, as an element"))
-				os.Exit(1)
-			}
-		default:
-		}
 		s.symbolReaderExpression(elem)
 	}
 }
@@ -818,26 +811,9 @@ func (s *TypeChecker) visitIndexExpression(expr *parser.IndexExpression) {
 	}
 }
 
-func (s *TypeChecker) visitMemberShitAccess(expr *parser.MemberShipExpression) {
+func (s *TypeChecker) visitMemberShipAccess(expr *parser.MemberShipExpression) {
 	s.symbolReaderExpression(expr.Object)
 	s.symbolReaderExpression(expr.Property)
-}
-
-func (s *TypeChecker) visitAtomicLiteral(expr parser.Expression) {
-	// check this one
-	tok := expr.GetToken()
-
-	curr := s.Symbols.CurrNode
-
-	nodeType := curr.Type.(*parser.NodeType)
-
-	if nodeType.Type != tok.Kind {
-		errMsg := fmt.Sprintf("ERROR: type mismatch in (%v) definition, element defined as (%v), associated value (%v)", curr.Name, curr.Type, tok.Kind)
-		if tok.Kind == parser.TokenString {
-			tok.Text = expr.String()
-		}
-		s.Collector.Add(s.Error(tok, errMsg))
-	}
 }
 
 // TODO: make an infer function to get the type of the associated value
@@ -871,7 +847,10 @@ func (s *TypeChecker) inferAssociatedValueType(expr parser.Expression) parser.Ex
 		return s.inferIdentifierType(ep)
 	case *parser.IndexExpression:
 		return s.inferIndexAccessType(ep).(*parser.NodeType)
-
+	case *parser.CallExpression:
+		return s.inferCallExpressionType(ep)
+	case *parser.UnaryExpression:
+		return s.inferUnaryExpressionType(ep)
 	}
 
 	return &parser.NodeType{}
@@ -893,8 +872,7 @@ func (s *TypeChecker) inferArrayType(expr *parser.ArrayLiteral) parser.Expressio
 		if firstElem.Type != resType.(*parser.NodeType).Type {
 			errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", firstElem, resType)
 			expr.Token.Text = expr.String()
-			fmt.Println(s.Error(expr.Token, errMsg))
-			os.Exit(1)
+			s.insertUniqueErrors(s.Error(expr.Token, errMsg))
 		}
 	}
 
@@ -937,4 +915,23 @@ func (s *TypeChecker) inferIndexAccessType(expr *parser.IndexExpression) parser.
 		returnType = s.inferIndexAccessType(ep).(*parser.NodeType).ChildType
 	}
 	return returnType
+}
+
+func (s *TypeChecker) inferCallExpressionType(expr *parser.CallExpression) parser.Expression {
+	sym := s.visitIdentifier(&expr.Function)
+
+	if sym == nil {
+		return nil
+	}
+
+	return sym.Type.(*parser.NodeType)
+}
+
+func (s *TypeChecker) inferUnaryExpressionType(expr *parser.UnaryExpression) parser.Expression {
+	if s.Symbols.CurrNode.Type.(*parser.NodeType).Type == parser.BoolType && expr.Operator == "-" {
+		errMsg := "ERROR: can't use operator (-) with boolean types, only operator (!) is allowed"
+		s.insertUniqueErrors(s.Error(expr.Token, errMsg))
+	}
+
+	return s.inferAssociatedValueType(expr.Right)
 }
