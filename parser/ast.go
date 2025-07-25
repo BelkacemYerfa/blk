@@ -545,11 +545,10 @@ func (ie *IndexExpression) TokenLiteral() string { return ie.Token.Text }
 func (nt *IndexExpression) GetToken() Token      { return nt.Token }
 func (ie *IndexExpression) String() string {
 	var out bytes.Buffer
-	out.WriteString("(")
 	out.WriteString(ie.Left.String())
 	out.WriteString("[")
 	out.WriteString(ie.Index.String())
-	out.WriteString("])")
+	out.WriteString("]")
 	return out.String()
 }
 

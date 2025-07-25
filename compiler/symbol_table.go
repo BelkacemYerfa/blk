@@ -303,12 +303,12 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 		s.Collector.Add(s.Error(node.Token, errMsg))
 	}
 
-	s.visitFieldType(node.ExplicitType)
 	s.Symbols.CurrNode = sym
+	s.visitFieldType(node.ExplicitType)
 	s.symbolReaderExpression(node.Value)
 	expectedType := node.ExplicitType.String()
 	gotType := s.inferAssociatedValueType(node.Value)
-
+	// TODO: work on this comparison when it comes type aliases
 	if expectedType != gotType.String() {
 		errMsg := ""
 		if gotType.String() == "nil" {
@@ -388,6 +388,7 @@ func (s *TypeChecker) visitFieldType(fieldType parser.Expression) {
 					errMsg := fmt.Sprintf("ERROR: type ( %v ) needs to be declared before it gets used", tp.Type)
 					s.Collector.Add(s.Error(tp.Token, errMsg))
 				}
+
 			}
 		}
 
@@ -404,6 +405,7 @@ func (s *TypeChecker) visitFieldType(fieldType parser.Expression) {
 					errMsg := fmt.Sprintf("ERROR: type ( %v ) needs to be declared before it gets used", tp.Type)
 					s.Collector.Add(s.Error(tp.Token, errMsg))
 				}
+
 			}
 		}
 
@@ -427,6 +429,7 @@ func (s *TypeChecker) visitTypeDCL(node *parser.TypeStatement) {
 		Kind:     SymbolType,
 		Depth:    s.Symbols.DepthIndicator,
 		DeclNode: node,
+		Type:     node.Value,
 	}
 
 	_, ok := s.Symbols.Resolve(sym.Name)
@@ -658,7 +661,15 @@ func (s *TypeChecker) visitStructInstanceExpression(expr *parser.StructInstanceE
 		}
 
 		body := expr.Body
-		keys := structDef.DeclNode.(*parser.StructStatement)
+
+		keys := &parser.StructStatement{}
+
+		switch strcDf := structDef.DeclNode.(type) {
+		case *parser.StructStatement:
+			keys = strcDf
+		case *parser.TypeStatement:
+			keys = s.visitIdentifier(strcDf.Value.(*parser.Identifier)).DeclNode.(*parser.StructStatement)
+		}
 
 		// means that some fields are left out of the having an associated value
 		for _, field := range keys.Body {
@@ -961,17 +972,38 @@ func (s *TypeChecker) inferIdentifierType(expr *parser.Identifier) parser.Type {
 
 func (s *TypeChecker) inferStructInstanceType(expr *parser.StructInstanceExpression) parser.Type {
 	// check if the types are compatible with the definition
+	// rule the left is only an identifier, if it is something else add an error to the collector and return
+	switch lf := expr.Left.(type) {
+	case *parser.Identifier:
+		// fall through
+	default:
+		errMsg := fmt.Sprintf("ERROR: (%v) type can't be used here, only identifiers", lf)
+		// TODO: enhance the token position placement
+		tok := expr.Left.GetToken()
+		fmt.Println(s.Error(tok, errMsg))
+		os.Exit(1)
+	}
+
 	sym := s.visitIdentifier(expr.Left.(*parser.Identifier))
+	structDef := &parser.StructStatement{}
 
 	if sym == nil {
 		return nil
+	}
+
+	switch structDf := sym.DeclNode.(type) {
+	case *parser.StructStatement:
+		structDef = structDf
+	case *parser.TypeStatement:
+		structDef = s.visitIdentifier(structDf.Value.(*parser.Identifier)).DeclNode.(*parser.StructStatement)
+	default:
 	}
 
 	var keyElem interface{}
 	idx := 0
 	for id, elem := range expr.Body {
 		// check the types are evaluated correctly on the fields
-		resType := sym.DeclNode.(*parser.StructStatement).Body[id]
+		resType := structDef.Body[id]
 		if idx == 0 {
 			keyElem = resType
 			idx++
@@ -991,8 +1023,13 @@ func (s *TypeChecker) inferStructInstanceType(expr *parser.StructInstanceExpress
 		}
 	}
 
+	if _, ok := sym.DeclNode.(*parser.TypeStatement); ok {
+		return &parser.NodeType{
+			Type: sym.Name,
+		}
+	}
 	return &parser.NodeType{
-		Type: sym.Name,
+		Type: structDef.Name.Value,
 	}
 }
 
