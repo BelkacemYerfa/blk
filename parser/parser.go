@@ -69,7 +69,7 @@ func NewParser(tokens []Token, filepath string) *Parser {
 	p.registerPrefix(TokenInt, p.parseIntLiteral)
 	p.registerPrefix(TokenFloat, p.parseFloatLiteral)
 	p.registerPrefix(TokenString, p.parseStringLiteral)
-	p.registerPrefix(TokenBracketOpen, p.parseBracketOpen)
+	p.registerPrefix(TokenBracketOpen, p.parseArrayLiteral)
 	p.registerPrefix(TokenCurlyBraceOpen, p.parseMapLiteral)
 	p.registerPrefix(TokenExclamation, p.parsePrefixExpression)
 	p.registerPrefix(TokenMinus, p.parsePrefixExpression)
@@ -354,12 +354,8 @@ func (p *Parser) parseTypeStatement() (*TypeStatement, error) {
 	if tok.Kind != TokenAssign {
 		return nil, p.error(tok, "ERROR: expected assign ( = ), got shit")
 	}
-	p.internalFlags = append(p.internalFlags, "type")
-	stmt.Value = p.parseExpression(LOWEST)
 
-	p.internalFlags = slices.DeleteFunc(p.internalFlags, func(elem string) bool {
-		return elem == "type"
-	})
+	stmt.Value = p.parseType()
 
 	return stmt, nil
 }
@@ -604,14 +600,6 @@ func (p *Parser) parseBooleanLiteral() Expression {
 	return &BooleanLiteral{
 		Token: tok,
 		Value: truth,
-	}
-}
-
-func (p *Parser) parseBracketOpen() Expression {
-	if slices.Index(p.internalFlags, "type") != -1 {
-		return p.parseType()
-	} else {
-		return p.parseArrayLiteral()
 	}
 }
 

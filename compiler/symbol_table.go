@@ -165,6 +165,61 @@ func (s *TypeChecker) Error(tok parser.Token, msg string) error {
 	return errors.New(errMsg)
 }
 
+func (s *TypeChecker) NormalizeType(nodeType parser.Expression) parser.Type {
+
+	switch tp := nodeType.(type) {
+	case *parser.NodeType:
+		if tp.ChildType != nil {
+			return &parser.NodeType{
+				Token:     tp.Token,
+				Type:      tp.Type,
+				ChildType: s.NormalizeType(tp.ChildType).(*parser.NodeType),
+			}
+		}
+		return &parser.NodeType{
+			Type: s.ResolveAlias(tp.Type),
+		}
+	case *parser.MapType:
+		res := &parser.MapType{
+			Token: tp.Token,
+			Type:  "map",
+		}
+		if tp.Left != nil {
+			res.Left = s.NormalizeType(tp.Left)
+		}
+
+		if tp.Right != nil {
+			res.Right = s.NormalizeType(tp.Right)
+		}
+
+		return res
+	}
+	return nil
+}
+
+func (s *TypeChecker) ResolveAlias(typeName string) string {
+	visited := map[string]bool{}
+	for {
+		if visited[typeName] {
+			break // avoid cycles
+		}
+		visited[typeName] = true
+
+		alias, ok := s.Symbols.Resolve(typeName)
+		if !ok {
+			return typeName
+		}
+
+		if alias.Kind != SymbolType {
+			return typeName
+		}
+
+		// get the value of the type alias
+		typeName = alias.DeclNode.(*parser.TypeStatement).Value.String()
+	}
+	return typeName
+}
+
 func (s *TypeChecker) insertUniqueErrors(errMsg error) {
 	_, found := slices.BinarySearchFunc(s.Collector.Errors, errMsg, func(a, b error) int {
 		return strings.Compare(a.Error(), b.Error())
@@ -297,16 +352,17 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 		Type:      node.ExplicitType,
 	}
 
-	_, ok := s.Symbols.Resolve(sym.Name)
+	_, ok := s.Symbols.Resolve(node.Name.Value)
 	if ok {
-		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", sym.Name)
+		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", node.Name.Value)
 		s.Collector.Add(s.Error(node.Token, errMsg))
 	}
 
 	s.Symbols.CurrNode = sym
 	s.visitFieldType(node.ExplicitType)
 	s.symbolReaderExpression(node.Value)
-	expectedType := node.ExplicitType.String()
+
+	expectedType := s.NormalizeType(node.ExplicitType).String()
 	gotType := s.inferAssociatedValueType(node.Value)
 	// TODO: work on this comparison when it comes type aliases
 	if expectedType != gotType.String() {
@@ -321,8 +377,10 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 			tok.Text = node.ExplicitType.String()
 			tok.Col = node.ExplicitType.GetToken().Col - len(tok.Text) - 1
 		}
-		s.Collector.Add(s.Error(tok, errMsg))
+		s.Collector.Add(s.Error(node.Value.GetToken(), errMsg))
 	}
+
+	sym.Type = node.ExplicitType
 
 	s.Symbols.Define(sym.Name, sym)
 }
@@ -334,6 +392,9 @@ func (s *TypeChecker) visitStructDCL(node *parser.StructStatement) *SymbolInfo {
 		Kind:     SymbolStruct,
 		Depth:    s.Symbols.DepthIndicator,
 		DeclNode: node,
+		Type: &parser.NodeType{
+			Type: node.Name.Value,
+		},
 	}
 
 	_, ok := s.Symbols.Resolve(sym.Name)
@@ -388,7 +449,6 @@ func (s *TypeChecker) visitFieldType(fieldType parser.Expression) {
 					errMsg := fmt.Sprintf("ERROR: type ( %v ) needs to be declared before it gets used", tp.Type)
 					s.Collector.Add(s.Error(tp.Token, errMsg))
 				}
-
 			}
 		}
 
@@ -409,7 +469,6 @@ func (s *TypeChecker) visitFieldType(fieldType parser.Expression) {
 			}
 		}
 
-		// check for this in a recursive manner if the tp.(Left | Right) != nil
 		if tp.Left != nil {
 			s.visitFieldType(tp.Left)
 		}
@@ -421,6 +480,7 @@ func (s *TypeChecker) visitFieldType(fieldType parser.Expression) {
 	default:
 		// nothing
 	}
+
 }
 
 func (s *TypeChecker) visitTypeDCL(node *parser.TypeStatement) {
@@ -429,7 +489,6 @@ func (s *TypeChecker) visitTypeDCL(node *parser.TypeStatement) {
 		Kind:     SymbolType,
 		Depth:    s.Symbols.DepthIndicator,
 		DeclNode: node,
-		Type:     node.Value,
 	}
 
 	_, ok := s.Symbols.Resolve(sym.Name)
@@ -668,7 +727,11 @@ func (s *TypeChecker) visitStructInstanceExpression(expr *parser.StructInstanceE
 		case *parser.StructStatement:
 			keys = strcDf
 		case *parser.TypeStatement:
-			keys = s.visitIdentifier(strcDf.Value.(*parser.Identifier)).DeclNode.(*parser.StructStatement)
+			keys = s.visitIdentifier(
+				&parser.Identifier{
+					Value: strcDf.Value.(*parser.NodeType).Type,
+				},
+			).DeclNode.(*parser.StructStatement)
 		}
 
 		// means that some fields are left out of the having an associated value
@@ -874,8 +937,8 @@ func (s *TypeChecker) inferArrayType(expr *parser.ArrayLiteral) parser.Type {
 
 	for idx, elem := range expr.Elements {
 		resType := s.inferAssociatedValueType(elem)
+		resType = s.NormalizeType(resType)
 		if idx == 0 {
-			fmt.Println(resType)
 			firstElem = resType.(*parser.NodeType)
 		}
 		if firstElem.Type != resType.(*parser.NodeType).Type {
@@ -903,6 +966,7 @@ func (s *TypeChecker) inferMapType(expr *parser.MapLiteral) parser.Type {
 	for key, value := range expr.Pairs {
 		// key part
 		resType := s.inferAssociatedValueType(key)
+		resType = s.NormalizeType(resType)
 		if idx == 0 {
 			keyElem = resType
 		}
@@ -922,6 +986,7 @@ func (s *TypeChecker) inferMapType(expr *parser.MapLiteral) parser.Type {
 
 		// value part
 		resType = s.inferAssociatedValueType(value)
+		resType = s.NormalizeType(resType)
 		if idx == 0 {
 			valElem = resType
 			idx++
@@ -995,7 +1060,11 @@ func (s *TypeChecker) inferStructInstanceType(expr *parser.StructInstanceExpress
 	case *parser.StructStatement:
 		structDef = structDf
 	case *parser.TypeStatement:
-		structDef = s.visitIdentifier(structDf.Value.(*parser.Identifier)).DeclNode.(*parser.StructStatement)
+		structDef = s.visitIdentifier(
+			&parser.Identifier{
+				Value: structDf.Value.(*parser.NodeType).Type,
+			},
+		).DeclNode.(*parser.StructStatement)
 	default:
 	}
 
@@ -1023,11 +1092,12 @@ func (s *TypeChecker) inferStructInstanceType(expr *parser.StructInstanceExpress
 		}
 	}
 
-	if _, ok := sym.DeclNode.(*parser.TypeStatement); ok {
+	if nd, ok := sym.DeclNode.(*parser.TypeStatement); ok {
 		return &parser.NodeType{
-			Type: sym.Name,
+			Type: nd.Name.Value,
 		}
 	}
+
 	return &parser.NodeType{
 		Type: structDef.Name.Value,
 	}
@@ -1092,7 +1162,6 @@ func (s *TypeChecker) inferBinaryExpressionType(expr *parser.BinaryExpression) p
 			Type:  parser.BoolType,
 		}
 	case ">=", "<=", ">", "<":
-		fmt.Println(leftType)
 		switch leftType.String() {
 		case parser.StringType:
 			// error
