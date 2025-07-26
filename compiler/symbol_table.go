@@ -29,7 +29,7 @@ type SymbolInfo struct {
 	Name      string
 	DeclNode  any        // pointer to node dcl in AST
 	Kind      SymbolKind // func, var, param, let...
-	Type      any
+	Type      parser.Expression
 	IsMutable bool
 	Depth     int
 }
@@ -39,7 +39,6 @@ type SymbolTable struct {
 	Store            map[string]SymbolInfo // current scope's entries
 	EmbeddedSymTable []*SymbolTable
 	DepthIndicator   int
-	CurrNode         *SymbolInfo
 }
 
 func NewSymbolTable() *SymbolTable {
@@ -68,6 +67,7 @@ func (s *SymbolTable) Resolve(name string) (*SymbolInfo, bool) {
 }
 
 type TypeChecker struct {
+	CurrNode  *SymbolInfo
 	Symbols   *SymbolTable
 	Collector internals.ErrorCollector
 	Tokens    []parser.Token
@@ -320,6 +320,7 @@ func (s *TypeChecker) visitFuncDCL(node *parser.FunctionStatement) {
 		s.Collector.Add(s.Error(node.Token, errMsg))
 	}
 
+	s.CurrNode = sym
 	if node.Body != nil {
 		s.visitBlockDCL(node.Body)
 	}
@@ -328,9 +329,20 @@ func (s *TypeChecker) visitFuncDCL(node *parser.FunctionStatement) {
 	for _, arg := range node.Args {
 		argType := arg.Type
 		s.visitFieldType(argType)
+		// define the args as identifiers in the symbol table
 	}
 
 	s.visitFieldType(node.ReturnType)
+
+	// entry point function
+	if sym.Name == "main" {
+		// the return type needs to be void explicitly
+		if node.ReturnType.String() != "void" {
+			errMsg := fmt.Sprintf("ERROR: fn (%v) return type needs to be void", sym.Name)
+			s.Collector.Add(s.Error(node.ReturnType.GetToken(), errMsg))
+		}
+	}
+
 	s.Symbols.Define(sym.Name, sym)
 }
 
@@ -359,7 +371,7 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 		s.Collector.Add(s.Error(node.Token, errMsg))
 	}
 
-	s.Symbols.CurrNode = sym
+	s.CurrNode = sym
 	s.visitFieldType(node.ExplicitType)
 	s.symbolReaderExpression(node.Value)
 
@@ -502,16 +514,37 @@ func (s *TypeChecker) visitTypeDCL(node *parser.TypeStatement) {
 }
 
 func (s *TypeChecker) visitBlockDCL(block *parser.BlockStatement) {
-	if len(block.Body) > 0 {
-		nwTab := NewSymbolTable()
-		nwTab.Parent = s.Symbols
-		nwTab.DepthIndicator++
-		s.Symbols = nwTab
-		for _, nd := range block.Body {
-			s.symbolReader(nd)
+	// mean the body of the current scope is empty
+
+	nwTab := NewSymbolTable()
+	nwTab.Parent = s.Symbols
+	nwTab.DepthIndicator++
+	s.Symbols = nwTab
+	// save the return type for the func
+	currentFunction := s.CurrNode
+
+	if len(block.Body) == 0 {
+		if currentFunction.Kind == SymbolFunc && currentFunction.Type.String() != "void" {
+			errMsg := fmt.Sprintf("ERROR: a function that has (%v) as return type, needs always a return statement", currentFunction.Type)
+			tok := currentFunction.Type.GetToken()
+			tok.Text = currentFunction.Type.String()
+			tok.Col -= len(tok.Text) + 1
+			s.Collector.Add(s.Error(tok, errMsg))
 		}
-		s.Symbols = s.Symbols.Parent
+	} else {
+		for idx, nd := range block.Body {
+			s.symbolReader(nd)
+			// check happens only on the last instruction
+			if currentFunction.Kind == SymbolFunc && idx == len(block.Body)-1 && currentFunction.Type.String() != "void" {
+				if _, ok := nd.(*parser.ReturnStatement); !ok {
+					errMsg := fmt.Sprintf("ERROR: a function that has (%v) as return type, needs always a return statement", currentFunction.Type)
+					s.Collector.Add(s.Error(nd.GetToken(), errMsg))
+				}
+			}
+		}
 	}
+
+	s.Symbols = s.Symbols.Parent
 }
 
 func (s *TypeChecker) visitWhileLoopDCL(node *parser.WhileStatement) {
@@ -539,6 +572,7 @@ func (s *TypeChecker) visitForLoopDCL(node *parser.ForStatement) {
 			DeclNode: ident,
 			Kind:     SymbolIdentifier,
 			Depth:    s.Symbols.DepthIndicator,
+			// add type of for loop identifiers
 		}
 
 		s.Symbols.Define(sym.Name, sym)
@@ -557,12 +591,17 @@ func (s *TypeChecker) visitReturnDCL(node *parser.ReturnStatement) {
 		s.Collector.Add(s.Error(node.Token, errMsg))
 	}
 
-	identifier, ok := node.ReturnValue.(*parser.Identifier)
+	// check if the associated return value on the return statement, is the same as the return value of the function
+	returnType := s.inferAssociatedValueType(node.ReturnValue)
+	functionReturnType := s.CurrNode.Type
 
-	if ok {
-		// if (identifier) check if it declared or not
-		s.visitIdentifier(identifier)
+	if returnType.String() != functionReturnType.String() {
+		errMsg := fmt.Sprintf("ERROR: type mismatch in return function, expected %v as return type, got %v", functionReturnType, returnType)
+		tok := node.ReturnValue.GetToken()
+		tok.Text = node.ReturnValue.String()
+		s.Collector.Add(s.Error(tok, errMsg))
 	}
+
 }
 
 func (s *TypeChecker) visitScopeDCL(node *parser.ScopeStatement) {
@@ -657,7 +696,7 @@ func (s *TypeChecker) argTypeChecker(tp, returnType string, arg parser.Expressio
 
 func (s *TypeChecker) visitUnaryExpression(expr *parser.UnaryExpression) {
 	// check if the type is boolean or not
-	if s.Symbols.CurrNode.Type.(*parser.NodeType).Type == parser.BoolType && expr.Operator == "-" {
+	if s.CurrNode.Type.(*parser.NodeType).Type == parser.BoolType && expr.Operator == "-" {
 		errMsg := "ERROR: can't use operator (-) with boolean types, only operator (!) is allowed"
 		s.Collector.Add(s.Error(expr.Token, errMsg))
 		return
@@ -908,7 +947,7 @@ func (s *TypeChecker) inferAssociatedValueType(expr parser.Expression) parser.Ty
 func (s *TypeChecker) inferArrayType(expr *parser.ArrayLiteral) parser.Type {
 
 	if len(expr.Elements) == 0 {
-		return s.Symbols.CurrNode.Type.(*parser.NodeType)
+		return s.CurrNode.Type.(*parser.NodeType)
 	}
 
 	firstElem := &parser.NodeType{}
@@ -930,13 +969,12 @@ func (s *TypeChecker) inferArrayType(expr *parser.ArrayLiteral) parser.Type {
 		Token:     firstElem.Token,
 		Type:      "array",
 		ChildType: firstElem,
-		// TODO : refactor this later to support
 	}
 }
 
 func (s *TypeChecker) inferMapType(expr *parser.MapLiteral) parser.Type {
 	if len(expr.Pairs) == 0 {
-		return s.Symbols.CurrNode.Type.(*parser.NodeType)
+		return s.CurrNode.Type.(*parser.NodeType)
 	}
 	// use interface for readability (preferred over any)
 	var keyElem interface{}
@@ -1169,7 +1207,7 @@ func (s *TypeChecker) inferCallExpressionType(expr *parser.CallExpression) parse
 }
 
 func (s *TypeChecker) inferUnaryExpressionType(expr *parser.UnaryExpression) parser.Type {
-	if s.Symbols.CurrNode.Type.(*parser.NodeType).Type == parser.BoolType && expr.Operator == "-" {
+	if s.CurrNode.Type.(*parser.NodeType).Type == parser.BoolType && expr.Operator == "-" {
 		errMsg := "ERROR: can't use operator (-) with boolean types, only operator (!) is allowed"
 		s.insertUniqueErrors(s.Error(expr.Token, errMsg))
 	}
@@ -1247,6 +1285,12 @@ func (s *TypeChecker) inferBinaryExpressionType(expr *parser.BinaryExpression) p
 			)
 			s.insertUniqueErrors(s.Error(expr.Token, errMsg))
 			// error
+		default:
+			// return the type
+			return &parser.NodeType{
+				Token: expr.Token,
+				Type:  leftType.String(),
+			}
 		}
 	case "&&", "||":
 		if leftType.String() != parser.BoolType {
