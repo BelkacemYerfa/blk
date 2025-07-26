@@ -321,15 +321,53 @@ func (s *TypeChecker) visitFuncDCL(node *parser.FunctionStatement) {
 	}
 
 	s.CurrNode = sym
-	if node.Body != nil {
-		s.visitBlockDCL(node.Body)
-	}
 
+	nwTab := NewSymbolTable()
+	nwTab.Parent = s.Symbols
+	nwTab.DepthIndicator++
+	s.Symbols = nwTab
 	// checks if the arg type is declared or not
 	for _, arg := range node.Args {
 		argType := arg.Type
 		s.visitFieldType(argType)
-		// define the args as identifiers in the symbol table
+		// define the args as identifiers in the same symbol tab of the block
+		sym := &SymbolInfo{
+			Name:     arg.Value,
+			DeclNode: arg,
+			Kind:     SymbolIdentifier,
+			Depth:    s.Symbols.DepthIndicator,
+			Type:     arg.Type.(parser.Type),
+		}
+		s.Symbols.Define(sym.Name, sym)
+	}
+
+	if node.Body != nil {
+		block := node.Body
+		// save the return type for the func
+		currentFunction := sym
+
+		if len(block.Body) == 0 {
+			if currentFunction.Kind == SymbolFunc && currentFunction.Type.String() != "void" {
+				errMsg := fmt.Sprintf("ERROR: a function that has (%v) as return type, needs always a return statement", currentFunction.Type)
+				tok := currentFunction.Type.GetToken()
+				tok.Text = currentFunction.Type.String()
+				tok.Col -= len(tok.Text) + 1
+				s.Collector.Add(s.Error(tok, errMsg))
+			}
+		} else {
+			for idx, nd := range block.Body {
+				s.symbolReader(nd)
+				// check happens only on the last instruction
+				if currentFunction.Kind == SymbolFunc && idx == len(block.Body)-1 && currentFunction.Type.String() != "void" {
+					if _, ok := nd.(*parser.ReturnStatement); !ok {
+						errMsg := fmt.Sprintf("ERROR: a function that has (%v) as return type, needs always a return statement", currentFunction.Type)
+						s.Collector.Add(s.Error(nd.GetToken(), errMsg))
+					}
+				}
+			}
+		}
+
+		s.Symbols = s.Symbols.Parent
 	}
 
 	s.visitFieldType(node.ReturnType)
@@ -370,7 +408,8 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", node.Name.Value)
 		s.Collector.Add(s.Error(node.Token, errMsg))
 	}
-
+	// this is for to save the last current node if we're in function scope
+	tempCurr := s.CurrNode
 	s.CurrNode = sym
 	s.visitFieldType(node.ExplicitType)
 	s.symbolReaderExpression(node.Value)
@@ -389,9 +428,8 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 		tok.Text = node.Value.String()
 		s.Collector.Add(s.Error(tok, errMsg))
 	}
-
+	s.CurrNode = tempCurr
 	sym.Type = node.ExplicitType
-
 	s.Symbols.Define(sym.Name, sym)
 }
 
@@ -1044,9 +1082,12 @@ func (s *TypeChecker) inferIdentifierType(expr *parser.Identifier) parser.Type {
 		return s.inferAssociatedValueType(node.Value)
 	case *parser.StructInstanceExpression:
 		return s.inferAssociatedValueType(node.Left)
+	case *parser.ArgExpression:
+		// this for args type of function definitions
+		return node.Type.(parser.Type)
 	default:
-
 	}
+
 	return &parser.NodeType{
 		Token: expr.Token,
 		Type:  expr.Value,
@@ -1191,7 +1232,6 @@ func (s *TypeChecker) inferIndexAccessType(expr *parser.IndexExpression) parser.
 	default:
 	}
 	// this should be unreachable
-	fmt.Println(resType)
 	panic("UNREACHABLE PART, INFER INDEX ACCESS")
 }
 
@@ -1300,7 +1340,11 @@ func (s *TypeChecker) inferBinaryExpressionType(expr *parser.BinaryExpression) p
 			s.insertUniqueErrors(s.Error(expr.Token, errMsg))
 		}
 	default:
-
+		// this will return the first part if nothing there matched
+		return &parser.NodeType{
+			Token: expr.Token,
+			Type:  leftType.String(),
+		}
 	}
 
 	return &parser.NodeType{
