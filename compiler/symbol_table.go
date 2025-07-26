@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -166,7 +167,6 @@ func (s *TypeChecker) Error(tok parser.Token, msg string) error {
 }
 
 func (s *TypeChecker) NormalizeType(nodeType parser.Expression) parser.Type {
-
 	switch tp := nodeType.(type) {
 	case *parser.NodeType:
 		if tp.ChildType != nil {
@@ -174,6 +174,7 @@ func (s *TypeChecker) NormalizeType(nodeType parser.Expression) parser.Type {
 				Token:     tp.Token,
 				Type:      tp.Type,
 				ChildType: s.NormalizeType(tp.ChildType).(*parser.NodeType),
+				Size:      tp.Size,
 			}
 		}
 		return &parser.NodeType{
@@ -364,7 +365,7 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 
 	expectedType := s.NormalizeType(node.ExplicitType).String()
 	gotType := s.inferAssociatedValueType(node.Value)
-	// TODO: work on this comparison when it comes type aliases
+
 	if expectedType != gotType.String() {
 		errMsg := ""
 		if gotType.String() == "nil" {
@@ -372,12 +373,9 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 		} else {
 			errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v", expectedType, gotType)
 		}
-		tok := gotType.GetToken()
-		if gotType.GetType() == parser.TokenMap {
-			tok.Text = node.ExplicitType.String()
-			tok.Col = node.ExplicitType.GetToken().Col - len(tok.Text) - 1
-		}
-		s.Collector.Add(s.Error(node.Value.GetToken(), errMsg))
+		tok := node.Value.GetToken()
+		tok.Text = node.Value.String()
+		s.Collector.Add(s.Error(tok, errMsg))
 	}
 
 	sym.Type = node.ExplicitType
@@ -630,9 +628,7 @@ func (s *TypeChecker) visitCallExpression(expr *parser.CallExpression) {
 		switch ag := arg.(type) {
 		case *parser.Identifier:
 			s.visitIdentifier(ag)
-			returnType := s.inferAssociatedValueType(ag)
-			tp := dclNode.Args[idx].Type
-			s.argTypeChecker(tp.String(), returnType.String(), arg)
+			// fall through
 		case *parser.MemberShipExpression:
 			s.visitMemberShipAccess(ag)
 
@@ -642,7 +638,12 @@ func (s *TypeChecker) visitCallExpression(expr *parser.CallExpression) {
 			tp := dclNode.Args[idx].Type
 			s.argTypeChecker(tp.String(), returnType.String(), arg)
 		}
+
+		returnType := s.inferAssociatedValueType(arg)
+		tp := dclNode.Args[idx].Type
+		s.argTypeChecker(tp.String(), returnType.String(), arg)
 	}
+
 }
 
 func (s *TypeChecker) argTypeChecker(tp, returnType string, arg parser.Expression) {
@@ -773,14 +774,6 @@ func (s *TypeChecker) visitMapLiteral(expr *parser.MapLiteral) {
 
 	pairs := expr.Pairs
 
-	// nodeType := s.Symbols.CurrNode.Type.(*parser.MapType)
-	// if nodeType.Type != "map" {
-	// 	errMsg := fmt.Sprintf("ERROR: type mismatch in (%v) definition, defined as (%v), associated value (%v)", s.Symbols.CurrNode.Name, s.Symbols.CurrNode.Type, "map")
-	// 	expr.Token.Text = expr.String()
-	// 	s.Collector.Add(s.Error(expr.Token, errMsg))
-	// 	return
-	// }
-
 	for key, value := range pairs {
 		switch k := key.(type) {
 		case *parser.Identifier:
@@ -855,18 +848,6 @@ func (s *TypeChecker) visitIndexExpression(expr *parser.IndexExpression) {
 		errMsg = "ERROR: can't use an if expression as index, index can only be an int"
 		tok = rf.Token
 		tok.Text = rf.String()
-	case *parser.BooleanLiteral:
-		errMsg = "ERROR: can't use a boolean as an index, index can only be an int"
-		tok = rf.Token
-		tok.Text = rf.String()
-	case *parser.StringLiteral:
-		errMsg = "ERROR: can't use a string as an index, index can only be an int"
-		tok = rf.Token
-		tok.Text = rf.String()
-	case *parser.FloatLiteral:
-		errMsg = "ERROR: can't use a float as an index, index can only be an int"
-		tok = rf.Token
-		tok.Text = rf.String()
 	default:
 
 	}
@@ -881,10 +862,7 @@ func (s *TypeChecker) visitMemberShipAccess(expr *parser.MemberShipExpression) {
 	s.symbolReaderExpression(expr.Property)
 }
 
-// TODO: make an infer function to get the type of the associated value
-// Then compare those types in the end result to see if they match or not
-
-// parser expression here is one of 2 types, either parser.NodeType, or parser.MpaType
+// parser Type here is one of 2 types, either parser.NodeType, or parser.MpaType
 func (s *TypeChecker) inferAssociatedValueType(expr parser.Expression) parser.Type {
 
 	switch ep := expr.(type) {
@@ -915,7 +893,7 @@ func (s *TypeChecker) inferAssociatedValueType(expr parser.Expression) parser.Ty
 	case *parser.StructInstanceExpression:
 		return s.inferStructInstanceType(ep)
 	case *parser.IndexExpression:
-		return s.inferIndexAccessType(ep).(*parser.NodeType)
+		return s.inferIndexAccessType(ep)
 	case *parser.CallExpression:
 		return s.inferCallExpressionType(ep)
 	case *parser.UnaryExpression:
@@ -952,6 +930,7 @@ func (s *TypeChecker) inferArrayType(expr *parser.ArrayLiteral) parser.Type {
 		Token:     firstElem.Token,
 		Type:      "array",
 		ChildType: firstElem,
+		// TODO : refactor this later to support
 	}
 }
 
@@ -1031,7 +1010,8 @@ func (s *TypeChecker) inferIdentifierType(expr *parser.Identifier) parser.Type {
 
 	}
 	return &parser.NodeType{
-		Type: expr.Value,
+		Token: expr.Token,
+		Type:  expr.Value,
 	}
 }
 
@@ -1094,28 +1074,87 @@ func (s *TypeChecker) inferStructInstanceType(expr *parser.StructInstanceExpress
 
 	if nd, ok := sym.DeclNode.(*parser.TypeStatement); ok {
 		return &parser.NodeType{
-			Type: nd.Name.Value,
+			Token: nd.GetToken(),
+			Type:  nd.Name.Value,
 		}
 	}
 
 	return &parser.NodeType{
-		Type: structDef.Name.Value,
+		Token: structDef.GetToken(),
+		Type:  structDef.Name.Value,
 	}
 }
 
-func (s *TypeChecker) inferIndexAccessType(expr *parser.IndexExpression) parser.Expression {
-	// check what the left side is
+func (s *TypeChecker) inferIndexAccessType(expr *parser.IndexExpression) parser.Type {
+	// check what the left side is an int if it is an array
+	// also if it is a map allow indexing with key name that correspond to that type
 
-	indexType := s.inferAssociatedValueType(expr.Index)
+	resType := s.inferAssociatedValueType(expr.Left)
+	switch rst := resType.(type) {
+	case *parser.NodeType:
+		if len(rst.Size) > 0 {
+			// only for fixed size arrays
+			fixedSized, _ := strconv.Atoi(rst.Size)
+			index, _ := strconv.Atoi(expr.Index.String())
+			if index > fixedSized-1 {
+				errMsg := fmt.Sprintf("ERROR: index out of bound, array size %d", fixedSized)
+				expr.Token.Text = expr.String()
+				s.Collector.Add(s.Error(expr.Token, errMsg))
+			}
+		}
+		// break at this point, when using the array map
+		indexType := s.inferAssociatedValueType(expr.Index)
+		if indexType.String() != "int" && rst.Type == "array" {
+			errMsg := fmt.Sprintf("ERROR: can't use %v as index, index should be of type int %v", indexType, rst)
+			expr.Token.Text = expr.String()
+			fmt.Println(s.Error(expr.Token, errMsg))
+			return nil
+		}
+		return rst.ChildType
+	case *parser.MapType:
+		// get the type of the current side
+		// This returns all the actual type of the left side, need the type based on the nest level
+		inferType := s.inferAssociatedValueType(expr.Left)
+		tempType := inferType
+		switch tp := inferType.(type) {
+		case *parser.NodeType:
+			for tp.ChildType != nil {
+				tempType = tp.ChildType
+			}
+		case *parser.MapType:
+			for tp.Left != nil {
+				tempType = tp.Left
+				if leftType, ok := tp.Left.(*parser.MapType); ok {
+					tp = leftType
+				} else {
+					break
+				}
+			}
 
-	if indexType.String() != "int" {
-		errMsg := fmt.Sprintf("ERROR: can't use %v as index, index should be of type int", indexType)
-		expr.Token.Text = expr.String()
-		fmt.Println(s.Error(expr.Token, errMsg))
-		return nil
+			for tp.Right != nil {
+				inferType = tp.Right
+				if RightType, ok := tp.Right.(*parser.MapType); ok {
+					tp = RightType
+				} else {
+					break
+				}
+			}
+		}
+
+		indexType := s.inferAssociatedValueType(expr.Index)
+		if indexType.String() != tempType.String() {
+			errMsg := fmt.Sprintf("ERROR: can't use type (%v) as key in a map, key should be of same type as one defined in map (%s)", indexType, tempType)
+			expr.Token.Text = expr.String()
+			fmt.Println(s.Error(expr.Token, errMsg))
+			return nil
+		}
+
+		return inferType
+	default:
 	}
-
-	return s.inferAssociatedValueType(expr.Left).(*parser.NodeType).ChildType
+	// this should be unreachable
+	fmt.Println(resType)
+	panic("UNREACHABLE PART, INFER INDEX ACCESS")
 }
 
 func (s *TypeChecker) inferCallExpressionType(expr *parser.CallExpression) parser.Type {
@@ -1125,6 +1164,7 @@ func (s *TypeChecker) inferCallExpressionType(expr *parser.CallExpression) parse
 		return nil
 	}
 
+	// calls my return hashMaps, check for that also
 	return sym.Type.(*parser.NodeType)
 }
 

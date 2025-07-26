@@ -870,7 +870,7 @@ func (p *Parser) parseCallExpression(left Expression) Expression {
 		return nil
 	}
 
-	exp := CallExpression{Token: left.(*Identifier).Token, Function: *(left.(*Identifier))}
+	exp := CallExpression{Token: left.GetToken(), Function: *(left.(*Identifier))}
 
 	exp.Args = p.parseCallArguments()
 	return &exp
@@ -903,7 +903,7 @@ func (p *Parser) parseCallArguments() []Expression {
 
 func (p *Parser) parseIndexExpression(left Expression) Expression {
 	// TODO: if left expr is nil return an error
-	exp := &IndexExpression{Token: p.currentToken(), Left: left}
+	exp := &IndexExpression{Token: left.GetToken(), Left: left}
 
 	p.nextToken()
 
@@ -917,7 +917,7 @@ func (p *Parser) parseIndexExpression(left Expression) Expression {
 }
 
 func (p *Parser) parseStructInstanceExpression(left Expression) Expression {
-	expr := &StructInstanceExpression{Token: p.currentToken(), Left: left}
+	expr := &StructInstanceExpression{Token: left.GetToken(), Left: left}
 
 	expr.Body = p.parseFieldValues()
 
@@ -959,7 +959,7 @@ func (p *Parser) parseFieldValues() []FieldInstance {
 }
 
 func (p *Parser) parseMemberShipAccess(left Expression) Expression {
-	expr := &MemberShipExpression{Token: p.currentToken(), Object: left}
+	expr := &MemberShipExpression{Token: left.GetToken(), Object: left}
 
 	if !p.expect([]TokenKind{TokenDot}) {
 		return nil

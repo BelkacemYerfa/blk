@@ -74,15 +74,15 @@ func (nt *NodeType) String() string {
 		out.WriteString("nil")
 		return out.String()
 	}
+	// used for fixed size arrays
+	// if len(nt.Size) > 0 {
+	// 	out.WriteString("[")
+	// 	out.WriteString(nt.Size)
+	// 	out.WriteString("]")
+	// 	out.WriteString(nt.ChildType.String())
 
-	if len(nt.Size) > 0 {
-		out.WriteString("[")
-		out.WriteString(nt.Size)
-		out.WriteString("]")
-		out.WriteString(nt.ChildType.String())
-
-		return out.String()
-	}
+	// 	return out.String()
+	// }
 	if nt.ChildType == nil {
 		out.WriteString(nt.Type)
 	} else {
