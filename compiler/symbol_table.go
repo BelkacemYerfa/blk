@@ -166,19 +166,22 @@ func (s *TypeChecker) Error(tok parser.Token, msg string) error {
 	return errors.New(errMsg)
 }
 
-func (s *TypeChecker) NormalizeType(nodeType parser.Expression) parser.Type {
+func (s *TypeChecker) normalizeType(nodeType parser.Expression) parser.Type {
 	switch tp := nodeType.(type) {
 	case *parser.NodeType:
 		if tp.ChildType != nil {
 			return &parser.NodeType{
 				Token:     tp.Token,
 				Type:      tp.Type,
-				ChildType: s.NormalizeType(tp.ChildType).(*parser.NodeType),
+				ChildType: s.normalizeType(tp.ChildType).(*parser.NodeType),
 				Size:      tp.Size,
 			}
 		}
+		// follow of the bug is here, since it didn't find a child it called this directly
 		return &parser.NodeType{
-			Type: s.ResolveAlias(tp.Type),
+			Token: tp.Token,
+			Type:  s.resolveAlias(tp.Type),
+			Size:  tp.Size,
 		}
 	case *parser.MapType:
 		res := &parser.MapType{
@@ -186,11 +189,11 @@ func (s *TypeChecker) NormalizeType(nodeType parser.Expression) parser.Type {
 			Type:  "map",
 		}
 		if tp.Left != nil {
-			res.Left = s.NormalizeType(tp.Left)
+			res.Left = s.normalizeType(tp.Left)
 		}
 
 		if tp.Right != nil {
-			res.Right = s.NormalizeType(tp.Right)
+			res.Right = s.normalizeType(tp.Right)
 		}
 
 		return res
@@ -198,7 +201,7 @@ func (s *TypeChecker) NormalizeType(nodeType parser.Expression) parser.Type {
 	return nil
 }
 
-func (s *TypeChecker) ResolveAlias(typeName string) string {
+func (s *TypeChecker) resolveAlias(typeName string) string {
 	visited := map[string]bool{}
 	for {
 		if visited[typeName] {
@@ -216,7 +219,7 @@ func (s *TypeChecker) ResolveAlias(typeName string) string {
 		}
 
 		// get the value of the type alias
-		typeName = alias.DeclNode.(*parser.TypeStatement).Value.String()
+		typeName = s.normalizeType(alias.DeclNode.(*parser.TypeStatement).Value.(parser.Type)).String()
 	}
 	return typeName
 }
@@ -414,10 +417,10 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 	s.visitFieldType(node.ExplicitType)
 	s.symbolReaderExpression(node.Value)
 
-	expectedType := s.NormalizeType(node.ExplicitType).String()
+	expectedType := s.normalizeType(node.ExplicitType)
 	gotType := s.inferAssociatedValueType(node.Value)
 
-	if expectedType != gotType.String() {
+	if expectedType.String() != gotType.String() {
 		errMsg := ""
 		if gotType.String() == "nil" {
 			errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", expectedType, gotType)
@@ -631,7 +634,7 @@ func (s *TypeChecker) visitReturnDCL(node *parser.ReturnStatement) {
 
 	// check if the associated return value on the return statement, is the same as the return value of the function
 	returnType := s.inferAssociatedValueType(node.ReturnValue)
-	functionReturnType := s.CurrNode.Type
+	functionReturnType := s.normalizeType(s.CurrNode.Type)
 
 	if returnType.String() != functionReturnType.String() {
 		errMsg := fmt.Sprintf("ERROR: type mismatch in return function, expected %v as return type, got %v", functionReturnType, returnType)
@@ -639,7 +642,6 @@ func (s *TypeChecker) visitReturnDCL(node *parser.ReturnStatement) {
 		tok.Text = node.ReturnValue.String()
 		s.Collector.Add(s.Error(tok, errMsg))
 	}
-
 }
 
 func (s *TypeChecker) visitScopeDCL(node *parser.ScopeStatement) {
@@ -992,7 +994,7 @@ func (s *TypeChecker) inferArrayType(expr *parser.ArrayLiteral) parser.Type {
 
 	for idx, elem := range expr.Elements {
 		resType := s.inferAssociatedValueType(elem)
-		resType = s.NormalizeType(resType)
+		resType = s.normalizeType(resType)
 		if idx == 0 {
 			firstElem = resType.(*parser.NodeType)
 		}
@@ -1003,11 +1005,46 @@ func (s *TypeChecker) inferArrayType(expr *parser.ArrayLiteral) parser.Type {
 		}
 	}
 
+	// read the type
+	nodeType := internals.ParseToNodeType(s.normalizeType(s.CurrNode.Type)).(*parser.NodeType)
+
+	counter := internals.CountChildTypes(firstElem)
+
+	for nodeType.ChildType != nil && counter > 0 {
+		nodeType = nodeType.ChildType
+		counter--
+	}
+
+	if internals.CheckEqualityOnFieldSize(nodeType, nodeType.Size) {
+		if nodeType.Type == "array" && len(nodeType.Size) > 0 {
+			return &parser.NodeType{
+				Token:     firstElem.Token,
+				Type:      "array",
+				ChildType: firstElem,
+				Size:      fmt.Sprint(len(expr.Elements)),
+			}
+		}
+		return &parser.NodeType{
+			Token:     firstElem.Token,
+			Type:      "array",
+			ChildType: firstElem,
+		}
+	}
+
+	if nodeType.Type == "array" && len(nodeType.Size) > 0 {
+		return &parser.NodeType{
+			Token:     firstElem.Token,
+			Type:      "array",
+			ChildType: firstElem,
+		}
+	}
 	return &parser.NodeType{
 		Token:     firstElem.Token,
 		Type:      "array",
 		ChildType: firstElem,
+		Size:      fmt.Sprint(len(expr.Elements)),
 	}
+
 }
 
 func (s *TypeChecker) inferMapType(expr *parser.MapLiteral) parser.Type {
@@ -1021,7 +1058,7 @@ func (s *TypeChecker) inferMapType(expr *parser.MapLiteral) parser.Type {
 	for key, value := range expr.Pairs {
 		// key part
 		resType := s.inferAssociatedValueType(key)
-		resType = s.NormalizeType(resType)
+		resType = s.normalizeType(resType)
 		if idx == 0 {
 			keyElem = resType
 		}
@@ -1041,7 +1078,7 @@ func (s *TypeChecker) inferMapType(expr *parser.MapLiteral) parser.Type {
 
 		// value part
 		resType = s.inferAssociatedValueType(value)
-		resType = s.NormalizeType(resType)
+		resType = s.normalizeType(resType)
 		if idx == 0 {
 			valElem = resType
 			idx++
@@ -1169,12 +1206,16 @@ func (s *TypeChecker) inferIndexAccessType(expr *parser.IndexExpression) parser.
 	// also if it is a map allow indexing with key name that correspond to that type
 
 	resType := s.inferAssociatedValueType(expr.Left)
+	// fmt.Println(expr.Left, resType)
 	switch rst := resType.(type) {
 	case *parser.NodeType:
+		// bug here cause of that type infer with call expression and indexing
+		fmt.Println(rst.Size)
 		if len(rst.Size) > 0 {
 			// only for fixed size arrays
 			fixedSized, _ := strconv.Atoi(rst.Size)
 			index, _ := strconv.Atoi(expr.Index.String())
+			fmt.Println(fixedSized, index)
 			if index > fixedSized-1 {
 				errMsg := fmt.Sprintf("ERROR: index out of bound, array size %d", fixedSized)
 				expr.Token.Text = expr.String()
@@ -1189,7 +1230,14 @@ func (s *TypeChecker) inferIndexAccessType(expr *parser.IndexExpression) parser.
 			fmt.Println(s.Error(expr.Token, errMsg))
 			return nil
 		}
-		return rst.ChildType
+		// problem is here
+		// fmt.Println(rst.Type) // prints array(int) instead of array
+		if rst.ChildType != nil {
+			return rst.ChildType
+		} else {
+			// parse the structure and construct the node in NodeType interface
+			return internals.ParseToNodeType(rst).(*parser.NodeType).ChildType
+		}
 	case *parser.MapType:
 		// get the type of the current side
 		// This returns all the actual type of the left side, need the type based on the nest level
@@ -1242,8 +1290,8 @@ func (s *TypeChecker) inferCallExpressionType(expr *parser.CallExpression) parse
 		return nil
 	}
 
-	// calls my return hashMaps, check for that also
-	return sym.Type.(*parser.NodeType)
+	// calls may return hashMaps, check for that also
+	return internals.ParseToNodeType(s.normalizeType(sym.Type))
 }
 
 func (s *TypeChecker) inferUnaryExpressionType(expr *parser.UnaryExpression) parser.Type {

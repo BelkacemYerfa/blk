@@ -64,8 +64,8 @@ func NewParser(tokens []Token, filepath string) *Parser {
 
 	// prefix/unary operators
 	p.registerPrefix(TokenIdentifier, p.parseIdentifier)
-	p.registerPrefix(TokenArray, p.parseType)
-	p.registerPrefix(TokenMap, p.parseType)
+	p.registerPrefix(TokenArray, p.ParseType)
+	p.registerPrefix(TokenMap, p.ParseType)
 	p.registerPrefix(TokenInt, p.parseIntLiteral)
 	p.registerPrefix(TokenFloat, p.parseFloatLiteral)
 	p.registerPrefix(TokenString, p.parseStringLiteral)
@@ -283,7 +283,7 @@ func (p *Parser) parseStatement() (Statement, error) {
 	case TokenFn:
 		return p.parseFunctionStatement()
 	case TokenType:
-		return p.parseTypeStatement()
+		return p.ParseTypeStatement()
 	case TokenStruct:
 		return p.parseStructStatement()
 	case TokenWhile:
@@ -312,7 +312,7 @@ func (p *Parser) parseLetStatement() (*LetStatement, error) {
 		return nil, p.error(tok, "ERROR: expected colon (:), got shit")
 	}
 
-	stmt.ExplicitType = p.parseType()
+	stmt.ExplicitType = p.ParseType()
 
 	tok = p.currentToken()
 
@@ -343,7 +343,7 @@ func (p *Parser) parseExpressionStatement() (*ExpressionStatement, error) {
 	return stmt, nil
 }
 
-func (p *Parser) parseTypeStatement() (*TypeStatement, error) {
+func (p *Parser) ParseTypeStatement() (*TypeStatement, error) {
 	stmt := &TypeStatement{Token: p.currentToken()}
 	p.nextToken()
 
@@ -355,7 +355,7 @@ func (p *Parser) parseTypeStatement() (*TypeStatement, error) {
 		return nil, p.error(tok, "ERROR: expected assign ( = ), got shit")
 	}
 
-	stmt.Value = p.parseType()
+	stmt.Value = p.ParseType()
 
 	return stmt, nil
 }
@@ -387,7 +387,7 @@ func (p *Parser) parseFields() []Field {
 		if tok.Kind != TokenColon {
 			return []Field{}
 		}
-		nodeType := p.parseType()
+		nodeType := p.ParseType()
 
 		fields = append(fields, Field{
 			Key:   identifier,
@@ -452,7 +452,7 @@ func (p *Parser) parseForStatement() (*ForStatement, error) {
 	return stmt, nil
 }
 
-func (p *Parser) parseType() Expression {
+func (p *Parser) ParseType() Expression {
 	nodeType := &NodeType{Token: p.currentToken()}
 
 	tok := p.nextToken()
@@ -464,7 +464,7 @@ func (p *Parser) parseType() Expression {
 		tok = p.nextToken() // consume (
 
 		if p.currentToken().Kind != TokenArray {
-			childType := p.parseType()
+			childType := p.ParseType()
 			return &NodeType{
 				Token:     p.currentToken(),
 				Type:      "array",
@@ -473,7 +473,7 @@ func (p *Parser) parseType() Expression {
 		}
 
 		for p.currentToken().Kind == TokenArray {
-			childType := p.parseType()
+			childType := p.ParseType()
 			return &NodeType{
 				Token:     p.currentToken(),
 				Type:      "array",
@@ -485,9 +485,9 @@ func (p *Parser) parseType() Expression {
 		tok = p.nextToken() // consume (
 
 		if p.currentToken().Kind != TokenMap {
-			keyType := p.parseType()
+			keyType := p.ParseType()
 			p.nextToken()
-			valueType := p.parseType()
+			valueType := p.ParseType()
 			return &MapType{
 				Token: p.currentToken(),
 				Type:  "map",
@@ -497,9 +497,9 @@ func (p *Parser) parseType() Expression {
 		}
 
 		for p.currentToken().Kind == TokenMap {
-			keyType := p.parseType()
+			keyType := p.ParseType()
 			p.nextToken()
-			valueType := p.parseType()
+			valueType := p.ParseType()
 			return &MapType{
 				Token: p.currentToken(),
 				Type:  "map",
@@ -514,7 +514,7 @@ func (p *Parser) parseType() Expression {
 			if tok.Kind == TokenInt {
 				p.nextToken()
 				p.nextToken()
-				childType := p.parseType()
+				childType := p.ParseType()
 				return &NodeType{
 					Token:     p.currentToken(),
 					Type:      "array",
@@ -766,7 +766,7 @@ func (p *Parser) parseFunctionStatement() (*FunctionStatement, error) {
 		return nil, fmt.Errorf("ERROR: expected colon ( : ), got shit")
 	}
 
-	returnType := p.parseType()
+	returnType := p.ParseType()
 
 	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
 		return nil, fmt.Errorf("ERROR: expected curly brace open ( { ), got shit")
@@ -807,7 +807,7 @@ func (p *Parser) parseArguments() []*ArgExpression {
 	p.Pos--
 	args = append(args, &ArgExpression{
 		Identifier: ident,
-		Type:       p.parseType(),
+		Type:       p.ParseType(),
 	})
 
 	for p.currentToken().Kind == TokenComma {
@@ -828,7 +828,7 @@ func (p *Parser) parseArguments() []*ArgExpression {
 		p.Pos--
 		args = append(args, &ArgExpression{
 			Identifier: ident,
-			Type:       p.parseType(),
+			Type:       p.ParseType(),
 		})
 	}
 
