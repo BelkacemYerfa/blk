@@ -55,7 +55,9 @@ func (s *SymbolTable) Define(name string, sym *SymbolInfo) {
 func (s *SymbolTable) Resolve(name string) (*SymbolInfo, bool) {
 	curr := s
 	if sym, ok := curr.Store[name]; ok {
-		return &sym, true
+		if sym.Depth == s.DepthIndicator {
+			return &sym, true
+		}
 	}
 	if curr.Parent != nil {
 		sym, _ := curr.Parent.Resolve(name)
@@ -152,13 +154,12 @@ func (s *TypeChecker) Error(tok parser.Token, msg string) error {
 			totalSpaces := spacesBeforeLineNum + spacesAfterLineNum + spacesBeforeToken
 
 			errorIndicator := strings.Repeat(" ", totalSpaces)
-			errMsg += errorIndicator + "\033[1;31m"
+			errMsg += errorIndicator + "\033[1;35m" // Violet color
 			repeat := len(tok.Text)
 			if repeat == 0 {
 				repeat = 1
 			}
-			errMsg += strings.Repeat("^", repeat)
-			errMsg += "\033[0m\n"
+			errMsg += strings.Repeat("~", repeat) + "\033[0m\n"
 		}
 	}
 
@@ -406,7 +407,7 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 		Type:      node.ExplicitType,
 	}
 
-	_, ok := s.Symbols.Resolve(node.Name.Value)
+	_, ok := s.Symbols.Store[node.Name.Value]
 	if ok {
 		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", node.Name.Value)
 		s.Collector.Add(s.Error(node.Token, errMsg))
@@ -417,20 +418,34 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 	s.visitFieldType(node.ExplicitType)
 	s.symbolReaderExpression(node.Value)
 
-	expectedType := s.normalizeType(node.ExplicitType)
+	expectedType := internals.ParseToNodeType(s.normalizeType(node.ExplicitType))
 	gotType := s.inferAssociatedValueType(node.Value)
 
-	if expectedType.String() != gotType.String() {
-		errMsg := ""
-		if gotType.String() == "nil" {
-			errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", expectedType, gotType)
-		} else {
-			errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v", expectedType, gotType)
+	// TODO: replace this method of string based, use helper functions to check that
+	switch ept := expectedType.(type) {
+	case *parser.NodeType:
+		switch ift := gotType.(type) {
+		case *parser.NodeType:
+			if isMatching, errNode := internals.DeepEqualOnNodeType(ept, ift); !isMatching {
+				errMsg := ""
+				if gotType.String() == "nil" {
+					errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
+				} else {
+					errMsg = fmt.Sprintf("ERROR: type mismatch on %v, expected type %v", errNode, ept)
+				}
+				tok := node.Value.GetToken()
+				tok.Text = node.Value.String()
+				s.Collector.Add(s.Error(tok, errMsg))
+			}
+		default:
+			// fall through
+			panic("ERROR: THIS IS UNIMPLEMENTED, VISIT VAR DCL")
 		}
-		tok := node.Value.GetToken()
-		tok.Text = node.Value.String()
-		s.Collector.Add(s.Error(tok, errMsg))
+	default:
+		// fall through otherwise
+		panic("ERROR: THIS IS UNIMPLEMENTED, VISIT VAR DCL")
 	}
+
 	s.CurrNode = tempCurr
 	sym.Type = node.ExplicitType
 	s.Symbols.Define(sym.Name, sym)
@@ -540,6 +555,7 @@ func (s *TypeChecker) visitTypeDCL(node *parser.TypeStatement) {
 		Kind:     SymbolType,
 		Depth:    s.Symbols.DepthIndicator,
 		DeclNode: node,
+		Type:     node.Value,
 	}
 
 	_, ok := s.Symbols.Resolve(sym.Name)
@@ -633,14 +649,31 @@ func (s *TypeChecker) visitReturnDCL(node *parser.ReturnStatement) {
 	}
 
 	// check if the associated return value on the return statement, is the same as the return value of the function
-	returnType := s.inferAssociatedValueType(node.ReturnValue)
-	functionReturnType := s.normalizeType(s.CurrNode.Type)
+	functionReturnType := s.inferAssociatedValueType(node.ReturnValue)
+	returnType := internals.ParseToNodeType(s.normalizeType(s.CurrNode.Type))
 
-	if returnType.String() != functionReturnType.String() {
-		errMsg := fmt.Sprintf("ERROR: type mismatch in return function, expected %v as return type, got %v", functionReturnType, returnType)
-		tok := node.ReturnValue.GetToken()
-		tok.Text = node.ReturnValue.String()
-		s.Collector.Add(s.Error(tok, errMsg))
+	switch ept := returnType.(type) {
+	case *parser.NodeType:
+		switch ift := functionReturnType.(type) {
+		case *parser.NodeType:
+			if isMatching, errNode := internals.DeepEqualOnNodeType(ept, ift); !isMatching {
+				errMsg := ""
+				if functionReturnType.String() == "nil" {
+					errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
+				} else {
+					errMsg = fmt.Sprintf("ERROR: type mismatch on %v, expected type %v", errNode, ept)
+				}
+				tok := node.ReturnValue.GetToken()
+				tok.Text = node.ReturnValue.String()
+				s.Collector.Add(s.Error(tok, errMsg))
+			}
+		default:
+			// fall through
+			panic("ERROR: THIS IS UNIMPLEMENTED, VISIT VAR DCL")
+		}
+	default:
+		// fall through otherwise
+		panic("ERROR: THIS IS UNIMPLEMENTED, VISIT VAR DCL")
 	}
 }
 
@@ -964,7 +997,7 @@ func (s *TypeChecker) inferAssociatedValueType(expr parser.Expression) parser.Ty
 		}
 
 	case *parser.ArrayLiteral:
-		return s.inferArrayType(ep).(*parser.NodeType)
+		return s.inferArrayType(ep)
 	case *parser.MapLiteral:
 		return s.inferMapType(ep)
 	case *parser.Identifier:
@@ -1006,40 +1039,9 @@ func (s *TypeChecker) inferArrayType(expr *parser.ArrayLiteral) parser.Type {
 	}
 
 	// read the type
-	nodeType := internals.ParseToNodeType(s.normalizeType(s.CurrNode.Type)).(*parser.NodeType)
 
-	counter := internals.CountChildTypes(firstElem)
-
-	for nodeType.ChildType != nil && counter > 0 {
-		nodeType = nodeType.ChildType
-		counter--
-	}
-
-	if internals.CheckEqualityOnFieldSize(nodeType, nodeType.Size) {
-		if nodeType.Type == "array" && len(nodeType.Size) > 0 {
-			return &parser.NodeType{
-				Token:     firstElem.Token,
-				Type:      "array",
-				ChildType: firstElem,
-				Size:      fmt.Sprint(len(expr.Elements)),
-			}
-		}
-		return &parser.NodeType{
-			Token:     firstElem.Token,
-			Type:      "array",
-			ChildType: firstElem,
-		}
-	}
-
-	if nodeType.Type == "array" && len(nodeType.Size) > 0 {
-		return &parser.NodeType{
-			Token:     firstElem.Token,
-			Type:      "array",
-			ChildType: firstElem,
-		}
-	}
 	return &parser.NodeType{
-		Token:     firstElem.Token,
+		Token:     expr.Token,
 		Type:      "array",
 		ChildType: firstElem,
 		Size:      fmt.Sprint(len(expr.Elements)),
@@ -1188,17 +1190,7 @@ func (s *TypeChecker) inferStructInstanceType(expr *parser.StructInstanceExpress
 		}
 	}
 
-	if nd, ok := sym.DeclNode.(*parser.TypeStatement); ok {
-		return &parser.NodeType{
-			Token: nd.GetToken(),
-			Type:  nd.Name.Value,
-		}
-	}
-
-	return &parser.NodeType{
-		Token: structDef.GetToken(),
-		Type:  structDef.Name.Value,
-	}
+	return s.normalizeType(sym.Type)
 }
 
 func (s *TypeChecker) inferIndexAccessType(expr *parser.IndexExpression) parser.Type {
@@ -1341,7 +1333,9 @@ func (s *TypeChecker) inferBinaryExpressionType(expr *parser.BinaryExpression) p
 	case "-", "/", "*", "%", ">=", "<=", ">", "<":
 		switch leftType.String() {
 		case parser.IntType:
+			// skip
 		case parser.FloatType:
+			// skip
 		default:
 			// throw the error here
 			errMsg := fmt.Sprintf(
@@ -1349,7 +1343,6 @@ func (s *TypeChecker) inferBinaryExpressionType(expr *parser.BinaryExpression) p
 			)
 			fmt.Println(s.Error(expr.Token, errMsg))
 			os.Exit(1)
-			s.insertUniqueErrors(s.Error(expr.Token, errMsg))
 		}
 		return &parser.NodeType{
 			Token: expr.Token,

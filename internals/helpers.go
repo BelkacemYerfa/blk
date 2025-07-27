@@ -2,6 +2,8 @@ package internals
 
 import (
 	"blk/parser"
+	"fmt"
+	"strconv"
 )
 
 func ParseToNodeType(nodeType parser.Type) parser.Type {
@@ -24,13 +26,36 @@ func CountChildTypes(nodeType parser.Type) int {
 	return count
 }
 
-func CheckEqualityOnFieldSize(v *parser.NodeType, size string) bool {
-	if v.Size != size && v.Type == "array" {
-		return false
-	}
-	if v.ChildType == nil {
-		return true
+// checks equality recursively on v1 and v2
+// v1 is the user defined type, v2 is the inferred type
+// return a report on where the error happened
+func DeepEqualOnNodeType(v1, v2 *parser.NodeType) (bool, *parser.NodeType) {
+	if v1.GetType() != v2.GetType() {
+		return false, v2
 	}
 
-	return CheckEqualityOnFieldSize(v.ChildType, size)
+	if len(v1.Size) > 0 {
+		fixedSized, _ := strconv.Atoi(v1.Size)
+		if len(v2.Size) > 0 {
+			v2Size, _ := strconv.Atoi(v2.Size)
+			fmt.Println(v1, v2)
+			if fixedSized < v2Size {
+				return false, v2
+			}
+		}
+	}
+
+	if v1.ChildType == nil && v2.ChildType == nil {
+		return true, nil
+	}
+
+	if v1.ChildType == nil || v2.ChildType == nil {
+		if v1.ChildType == nil {
+			return false, v1
+		} else {
+			return false, v2
+		}
+	}
+
+	return DeepEqualOnNodeType(v1.ChildType, v2.ChildType)
 }
