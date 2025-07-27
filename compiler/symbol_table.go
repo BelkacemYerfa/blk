@@ -1206,16 +1206,14 @@ func (s *TypeChecker) inferIndexAccessType(expr *parser.IndexExpression) parser.
 	// also if it is a map allow indexing with key name that correspond to that type
 
 	resType := s.inferAssociatedValueType(expr.Left)
-	// fmt.Println(expr.Left, resType)
 	switch rst := resType.(type) {
 	case *parser.NodeType:
 		// bug here cause of that type infer with call expression and indexing
-		fmt.Println(rst.Size)
 		if len(rst.Size) > 0 {
 			// only for fixed size arrays
 			fixedSized, _ := strconv.Atoi(rst.Size)
 			index, _ := strconv.Atoi(expr.Index.String())
-			fmt.Println(fixedSized, index)
+
 			if index > fixedSized-1 {
 				errMsg := fmt.Sprintf("ERROR: index out of bound, array size %d", fixedSized)
 				expr.Token.Text = expr.String()
@@ -1327,58 +1325,35 @@ func (s *TypeChecker) inferBinaryExpressionType(expr *parser.BinaryExpression) p
 			Token: expr.Token,
 			Type:  parser.BoolType,
 		}
-	case ">=", "<=", ">", "<":
-		switch leftType.String() {
-		case parser.StringType:
-			// error
-			errMsg := fmt.Sprintf(
-				"ERROR: (%s) isn't allowed on string type", operator,
-			)
-			s.insertUniqueErrors(s.Error(expr.Token, errMsg))
-		case parser.BoolType:
-			errMsg := fmt.Sprintf(
-				"ERROR: (%s) isn't allowed on boolean type", operator,
-			)
-			s.insertUniqueErrors(s.Error(expr.Token, errMsg))
-			// error
-		default:
-			return &parser.NodeType{
-				Token: expr.Token,
-				Type:  parser.BoolType,
-			}
-		}
 	case "+":
-		if leftType.String() == parser.BoolType {
+		if leftType.String() != parser.StringType && leftType.String() != parser.FloatType && leftType.String() != parser.IntType {
 			errMsg := fmt.Sprintf(
-				"ERROR: (%s) isn't allowed on boolean type", operator,
+				"ERROR: (%s) isn't allowed on (%v) type", operator, leftType.String(),
 			)
-			s.insertUniqueErrors(s.Error(expr.Token, errMsg))
+			fmt.Println(s.Error(expr.Token, errMsg))
+			os.Exit(1)
 		} else {
 			return &parser.NodeType{
 				Token: expr.Token,
 				Type:  leftType.String(),
 			}
 		}
-	case "-", "/", "*", "%":
+	case "-", "/", "*", "%", ">=", "<=", ">", "<":
 		switch leftType.String() {
-		case parser.StringType:
-			// error
-			errMsg := fmt.Sprintf(
-				"ERROR: (%s) isn't allowed on string type", operator,
-			)
-			s.insertUniqueErrors(s.Error(expr.Token, errMsg))
-		case parser.BoolType:
-			errMsg := fmt.Sprintf(
-				"ERROR: (%s) isn't allowed on boolean type", operator,
-			)
-			s.insertUniqueErrors(s.Error(expr.Token, errMsg))
-			// error
+		case parser.IntType:
+		case parser.FloatType:
 		default:
-			// return the type
-			return &parser.NodeType{
-				Token: expr.Token,
-				Type:  leftType.String(),
-			}
+			// throw the error here
+			errMsg := fmt.Sprintf(
+				"ERROR: (%s) isn't allowed on (%v) type", operator, leftType.String(),
+			)
+			fmt.Println(s.Error(expr.Token, errMsg))
+			os.Exit(1)
+			s.insertUniqueErrors(s.Error(expr.Token, errMsg))
+		}
+		return &parser.NodeType{
+			Token: expr.Token,
+			Type:  leftType.String(),
 		}
 	case "&&", "||":
 		if leftType.String() != parser.BoolType {
