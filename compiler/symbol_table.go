@@ -450,17 +450,31 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 			tok.Text = node.Value.String()
 			s.Collector.Add(s.Error(tok, errMsg))
 		}
-	default:
-		// fall through otherwise
-		errMsg := ""
-		if gotType.String() == "nil" {
-			errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, gotType)
-		} else {
-			errMsg = fmt.Sprintf("ERROR: type mismatch on (%v), original type (%v)", expectedType, ept)
+	case *parser.MapType:
+		switch ift := gotType.(type) {
+		case *parser.MapType:
+			if isMatching, errNode := internals.DeepEqualOnMapType(ept, ift); !isMatching {
+				errMsg := ""
+				if gotType.String() == "nil" {
+					errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
+				} else {
+					errMsg = fmt.Sprintf("ERROR: type mismatch on %v, expected type %v", errNode, ept)
+				}
+				tok := node.Value.GetToken()
+				tok.Text = node.Value.String()
+				s.Collector.Add(s.Error(tok, errMsg))
+			}
+		default:
+			errMsg := ""
+			if gotType.String() == "nil" {
+				errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
+			} else {
+				errMsg = fmt.Sprintf("ERROR: type mismatch on %v, expected type %v", gotType, ept)
+			}
+			tok := node.Value	.GetToken()
+			tok.Text = node.Value	.String()
+			s.Collector.Add(s.Error(tok, errMsg))
 		}
-		tok := node.Value.GetToken()
-		tok.Text = node.Value.String()
-		s.Collector.Add(s.Error(tok, errMsg))
 	}
 
 	s.CurrNode = tempCurr
