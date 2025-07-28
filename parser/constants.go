@@ -10,6 +10,7 @@ var (
 		"struct": TokenStruct,
 		"if":     TokenIf,
 		"else":   TokenElse,
+		"scope":  TokenScope,
 		"fn":     TokenFn,
 		"for":    TokenFor,
 		"in":     TokenIn,

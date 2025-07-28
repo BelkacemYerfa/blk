@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"blk/compiler"
+	"blk/semantics"
 	"blk/internals"
 	"blk/parser"
 	"encoding/json"
@@ -160,12 +160,12 @@ func Run(args []string) {
 		return
 	}
 
-	errCollector := internals.NewErrorCollector()
+	errCollector := internals.NewErrorCollector(tokens)
 
-	typeChecker := compiler.NewTypeChecker(tokens, *errCollector)
+	typeChecker := semantics.NewTypeChecker(errCollector)
 	typeChecker.SymbolBuilder(ast)
 
-	for _, err := range typeChecker.Collector.Errors {
+	for _, err := range errCollector.Errors {
 		fmt.Println(err)
 	}
 }

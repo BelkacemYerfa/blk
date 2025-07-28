@@ -269,7 +269,7 @@ blk compile main.blk -o main.blkout
 blk run main.blk
 ```
 
-### Building the Compiler (Go example)
+### Building the semantics (Go example)
 
 ```bash
 git clone https://github.com/yourname/blk

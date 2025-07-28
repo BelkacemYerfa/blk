@@ -9,6 +9,7 @@ const (
 	TokenVar    TokenKind = "var"
 	TokenType   TokenKind = "type"
 	TokenStruct TokenKind = "struct"
+	TokenScope  TokenKind = "scope"
 	TokenFn     TokenKind = "fn"
 	TokenFor    TokenKind = "for"
 	TokenIn     TokenKind = "in"

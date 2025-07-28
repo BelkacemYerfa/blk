@@ -1,4 +1,4 @@
-package compiler
+package semantics
 
 var (
 	// TODO: needs to be filled

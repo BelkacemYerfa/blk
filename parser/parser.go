@@ -290,7 +290,7 @@ func (p *Parser) parseStatement() (Statement, error) {
 		return p.parseWhileStatement()
 	case TokenFor:
 		return p.parseForStatement()
-	case TokenCurlyBraceOpen:
+	case TokenScope:
 		return p.parseScope()
 	default:
 		return p.parseExpressionStatement()
@@ -642,10 +642,16 @@ func (p *Parser) parseArrayLiteral() Expression {
 }
 
 func (p *Parser) parseScope() (*ScopeStatement, error) {
-	expr := &ScopeStatement{Token: p.currentToken()}
+	stmt := &ScopeStatement{Token: p.currentToken()}
 	p.nextToken()
-	expr.Body = p.parseBlockStatement().(*BlockStatement)
-	return expr, nil
+
+	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
+		tok := p.currentToken()
+		return nil, p.error(tok, "ERROR: expected ({), got shit")
+	}
+
+	stmt.Body = p.parseBlockStatement().(*BlockStatement)
+	return stmt, nil
 }
 
 func (p *Parser) parseMapLiteral() Expression {
