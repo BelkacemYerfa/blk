@@ -154,12 +154,13 @@ func (s *TypeChecker) Error(tok parser.Token, msg string) error {
 			totalSpaces := spacesBeforeLineNum + spacesAfterLineNum + spacesBeforeToken
 
 			errorIndicator := strings.Repeat(" ", totalSpaces)
-			errMsg += errorIndicator + "\033[1;35m" // Violet color
+			errMsg += errorIndicator + "\033[1;31m"
 			repeat := len(tok.Text)
 			if repeat == 0 {
 				repeat = 1
 			}
-			errMsg += strings.Repeat("~", repeat) + "\033[0m\n"
+			errMsg += strings.Repeat("^", repeat)
+			errMsg += "\033[0m\n"
 		}
 	}
 
@@ -431,7 +432,7 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 				if gotType.String() == "nil" {
 					errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
 				} else {
-					errMsg = fmt.Sprintf("ERROR: type mismatch on %v, expected type %v", errNode, ept)
+					errMsg = fmt.Sprintf("ERROR: type mismatch on (%v), original type (%v)", errNode, ept)
 				}
 				tok := node.Value.GetToken()
 				tok.Text = node.Value.String()
@@ -439,11 +440,27 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 			}
 		default:
 			// fall through
-			panic("ERROR: THIS IS UNIMPLEMENTED, VISIT VAR DCL")
+			errMsg := ""
+			if gotType.String() == "nil" {
+				errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
+			} else {
+				errMsg = fmt.Sprintf("ERROR: type mismatch on (%v), original type (%v)", expectedType, ept)
+			}
+			tok := node.Value.GetToken()
+			tok.Text = node.Value.String()
+			s.Collector.Add(s.Error(tok, errMsg))
 		}
 	default:
 		// fall through otherwise
-		panic("ERROR: THIS IS UNIMPLEMENTED, VISIT VAR DCL")
+		errMsg := ""
+		if gotType.String() == "nil" {
+			errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, gotType)
+		} else {
+			errMsg = fmt.Sprintf("ERROR: type mismatch on (%v), original type (%v)", expectedType, ept)
+		}
+		tok := node.Value.GetToken()
+		tok.Text = node.Value.String()
+		s.Collector.Add(s.Error(tok, errMsg))
 	}
 
 	s.CurrNode = tempCurr
@@ -668,12 +685,44 @@ func (s *TypeChecker) visitReturnDCL(node *parser.ReturnStatement) {
 				s.Collector.Add(s.Error(tok, errMsg))
 			}
 		default:
-			// fall through
-			panic("ERROR: THIS IS UNIMPLEMENTED, VISIT VAR DCL")
+			errMsg := ""
+			if functionReturnType.String() == "nil" {
+				errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
+			} else {
+				errMsg = fmt.Sprintf("ERROR: type mismatch on %v, expected type %v", functionReturnType, ept)
+			}
+			tok := node.ReturnValue.GetToken()
+			tok.Text = node.ReturnValue.String()
+			s.Collector.Add(s.Error(tok, errMsg))
+		}
+	case *parser.MapType:
+		switch ift := functionReturnType.(type) {
+		case *parser.MapType:
+			if isMatching, errNode := internals.DeepEqualOnMapType(ept, ift); !isMatching {
+				errMsg := ""
+				if functionReturnType.String() == "nil" {
+					errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
+				} else {
+					errMsg = fmt.Sprintf("ERROR: type mismatch on %v, expected type %v", errNode, ept)
+				}
+				tok := node.ReturnValue.GetToken()
+				tok.Text = node.ReturnValue.String()
+				s.Collector.Add(s.Error(tok, errMsg))
+			}
+		default:
+			errMsg := ""
+			if functionReturnType.String() == "nil" {
+				errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
+			} else {
+				errMsg = fmt.Sprintf("ERROR: type mismatch on %v, expected type %v", functionReturnType, ept)
+			}
+			tok := node.ReturnValue.GetToken()
+			tok.Text = node.ReturnValue.String()
+			s.Collector.Add(s.Error(tok, errMsg))
 		}
 	default:
 		// fall through otherwise
-		panic("ERROR: THIS IS UNIMPLEMENTED, VISIT VAR DCL")
+		panic("ERROR: UNREACHABLE, VISIT RETURN DCL")
 	}
 }
 

@@ -30,7 +30,16 @@ func CountChildTypes(nodeType parser.Type) int {
 // v1 is the user defined type, v2 is the inferred type
 // return a report on where the error happened
 func DeepEqualOnNodeType(v1, v2 *parser.NodeType) (bool, *parser.NodeType) {
-	if v1.GetType() != v2.GetType() {
+
+	if v1 == nil || v2 == nil {
+		if v1 == nil {
+			return false, v1
+		} else {
+			return false, v2
+		}
+	}
+
+	if v1.Type != v2.Type {
 		return false, v2
 	}
 
@@ -58,4 +67,73 @@ func DeepEqualOnNodeType(v1, v2 *parser.NodeType) (bool, *parser.NodeType) {
 	}
 
 	return DeepEqualOnNodeType(v1.ChildType, v2.ChildType)
+}
+
+func DeepEqualOnMapType(v1, v2 parser.Type) (bool, parser.Type) {
+	if v1.GetType() != v2.GetType() {
+		return false, v2
+	}
+
+	switch tp1 := v1.(type) {
+	case *parser.NodeType:
+		switch tp2 := v2.(type) {
+		case *parser.NodeType:
+
+			if tp1.ChildType == nil && tp2.ChildType == nil {
+				return true, nil
+			}
+
+			if tp1.ChildType == nil || tp2.ChildType == nil {
+				if tp1.ChildType == nil {
+					return false, tp1
+				} else {
+					return false, tp2
+				}
+			}
+
+			return DeepEqualOnNodeType(tp1.ChildType, tp2.ChildType)
+		case *parser.MapType:
+			return false, v2
+		}
+	case *parser.MapType:
+		switch tp2 := v2.(type) {
+		case *parser.MapType:
+			if tp1.Left == nil && tp2.Left == nil {
+				// fallthrough
+			} else if tp1.Left == nil || tp2.Left == nil {
+				// return the one that has the error
+				if tp1.Left == nil {
+					return false, v1
+				} else {
+					return false, v2
+				}
+			} else {
+
+				leftEqual, leftErr := DeepEqualOnMapType(tp1.Left, tp2.Left)
+				if leftErr != nil {
+					return false, leftErr
+				}
+				if !leftEqual {
+					return false, nil // or appropriate error
+				}
+			}
+
+			if tp1.Right == nil && tp2.Right == nil {
+				return true, nil
+			} else if tp1.Right == nil || tp2.Right == nil {
+				if tp1.Right == nil {
+					return false, v1
+				} else {
+					return false, v2
+				}
+			} else {
+				// Both right sides exist, check if they're equal
+				return DeepEqualOnMapType(tp1.Right, tp2.Right)
+			}
+		case *parser.NodeType:
+			return false, v2
+		}
+	}
+
+	return false, nil
 }
