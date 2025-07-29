@@ -303,6 +303,7 @@ func (fn *FunctionStatement) String() string {
 
 type ScopeStatement struct {
 	Token Token
+	Name  *Identifier
 	Body  *BlockStatement
 }
 
@@ -311,7 +312,9 @@ func (ss *ScopeStatement) TokenLiteral() string { return ss.Token.Text }
 func (nt *ScopeStatement) GetToken() Token      { return nt.Token }
 func (ss *ScopeStatement) String() string {
 	var out bytes.Buffer
-	out.WriteString("{ ")
+	out.WriteString("scope ")
+	out.WriteString(ss.Name.String())
+	out.WriteString(" { ")
 	out.WriteString(ss.Body.String())
 	out.WriteString(" }")
 	return out.String()

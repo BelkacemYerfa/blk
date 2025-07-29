@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"blk/semantics"
 	"blk/internals"
 	"blk/parser"
+	"blk/semantics"
 	"encoding/json"
 	"fmt"
 	"os"

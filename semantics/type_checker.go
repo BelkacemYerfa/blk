@@ -38,6 +38,7 @@ func (s *TypeChecker) SymbolBuilder(ast *parser.Program) {
 	// check if the entry point is a main function
 	// access to the main
 	mainFn := s.symbols.current.Store["main"]
+	fmt.Println(mainFn)
 	if mainFn.Name != "main" {
 		errMsg := ("ERROR: no entry point found, consider creating an entry point called main")
 		fmt.Println(errMsg)
@@ -197,8 +198,10 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 	}
 
 	_, ok := s.symbols.current.Store[node.Name.Value]
+
 	if ok {
 		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", node.Name.Value)
+		fmt.Println(errMsg)
 		s.collector.Add(s.collector.Error(node.Token, errMsg))
 	}
 	// this is for to save the last current node if we're in function scope
@@ -532,6 +535,7 @@ func (s *TypeChecker) visitReturnDCL(node *parser.ReturnStatement) {
 }
 
 func (s *TypeChecker) visitScopeDCL(node *parser.ScopeStatement) {
+	// TODO: check if the name already exists here later on
 	if node.Body != nil {
 		s.visitBlockDCL(node.Body)
 	}

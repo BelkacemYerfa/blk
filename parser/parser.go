@@ -115,8 +115,8 @@ func (p *Parser) nextToken() Token {
 	return tok
 }
 
-func (p *Parser) peekToken() Token {
-	peekPos := p.Pos + 1
+func (p *Parser) lookToken(move int) Token {
+	peekPos := p.Pos + move
 	if peekPos >= len(p.Tokens) {
 		return Token{LiteralToken: LiteralToken{Kind: TokenEOF}}
 	}
@@ -290,8 +290,13 @@ func (p *Parser) parseStatement() (Statement, error) {
 		return p.parseWhileStatement()
 	case TokenFor:
 		return p.parseForStatement()
-	case TokenScope:
-		return p.parseScope()
+	case TokenIdentifier:
+		// check after it if there is a colon and a {
+		if p.lookToken(1).Kind == TokenColon && p.lookToken(2).Kind == TokenCurlyBraceOpen {
+			return p.parseScope()
+		} else {
+			return p.parseExpressionStatement()
+		}
 	default:
 		return p.parseExpressionStatement()
 	}
@@ -335,11 +340,13 @@ func (p *Parser) parseReturnStatement() (*ReturnStatement, error) {
 
 func (p *Parser) parseExpressionStatement() (*ExpressionStatement, error) {
 	stmt := &ExpressionStatement{Token: p.currentToken()}
+
 	expr := p.parseExpression(LOWEST)
 	if expr == nil {
 		return nil, fmt.Errorf("ERROR: on the expression stmt")
 	}
 	stmt.Expression = expr
+
 	return stmt, nil
 }
 
@@ -643,7 +650,18 @@ func (p *Parser) parseArrayLiteral() Expression {
 
 func (p *Parser) parseScope() (*ScopeStatement, error) {
 	stmt := &ScopeStatement{Token: p.currentToken()}
-	p.nextToken()
+
+	identifier := p.parseIdentifier()
+	if identifier == nil {
+		return nil, p.Errors[len(p.Errors)-1]
+	}
+
+	stmt.Name = identifier.(*Identifier)
+	tok := p.nextToken()
+
+	if tok.Kind != TokenColon {
+		return nil, p.error(tok, "ERROR: expected colon (:), got shit")
+	}
 
 	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
 		tok := p.currentToken()
