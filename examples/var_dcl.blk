@@ -11,10 +11,11 @@ struct Person {
 
 var hashMap : map(string, Person) = {
   "1125" : Person {
-    Name:"John"
-    age:34
+    Name:"John",
+    Age:34
   },
   "1256" : Person {
-    Name:"Amy" age:30
+    Name:"Amy",
+    Age:30
   }
 }

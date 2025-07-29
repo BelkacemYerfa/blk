@@ -4,9 +4,7 @@ import (
 	"blk/internals"
 	"blk/parser"
 	"fmt"
-	"slices"
 	"strconv"
-	"strings"
 )
 
 type typeAliasResolver struct {
@@ -94,15 +92,6 @@ func NewTypeInference(errCollector *internals.ErrorCollector, aliasRs *typeAlias
 	}
 }
 
-func (tie *TypeInference) insertUniqueErrors(errMsg error) {
-	_, found := slices.BinarySearchFunc(tie.Collector.Errors, errMsg, func(a, b error) int {
-		return strings.Compare(a.Error(), b.Error())
-	})
-	if !found {
-		tie.Collector.Add(errMsg)
-	}
-}
-
 func (ti *TypeInference) visitIdentifier(expr *parser.Identifier) *SymbolInfo {
 	// if (identifier) check if it declared or not
 	ident, isMatched := ti.symbols.Resolve(expr.Value)
@@ -174,7 +163,7 @@ func (ti *TypeInference) inferArrayType(expr *parser.ArrayLiteral) parser.Type {
 		if firstElem.Type != resType.(*parser.NodeType).Type {
 			errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", firstElem, resType)
 			expr.Token.Text = expr.String()
-			ti.insertUniqueErrors(ti.Collector.Error(expr.Token, errMsg))
+			ti.Collector.Add(ti.Collector.Error(expr.Token, errMsg))
 		}
 	}
 
@@ -194,8 +183,8 @@ func (ti *TypeInference) inferMapType(expr *parser.MapLiteral) parser.Type {
 		return ti.CurrSymbol.Type.(*parser.NodeType)
 	}
 	// use interface for readability (preferred over any)
-	var keyElem interface{}
-	var valElem interface{}
+	var keyElem, valElem parser.Type
+
 	idx := 0
 	for key, value := range expr.Pairs {
 		// key part
@@ -208,12 +197,12 @@ func (ti *TypeInference) inferMapType(expr *parser.MapLiteral) parser.Type {
 		case *parser.NodeType:
 			if rst.Type != resType.GetType() {
 				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
-				ti.insertUniqueErrors(ti.Collector.Error(key.GetToken(), errMsg))
+				ti.Collector.Add(ti.Collector.Error(key.GetToken(), errMsg))
 			}
 		case *parser.MapType:
 			if rst.Type != resType.GetType() {
 				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
-				ti.insertUniqueErrors(ti.Collector.Error(key.GetToken(), errMsg))
+				ti.Collector.Add(ti.Collector.Error(key.GetToken(), errMsg))
 			}
 		default:
 		}
@@ -229,12 +218,12 @@ func (ti *TypeInference) inferMapType(expr *parser.MapLiteral) parser.Type {
 		case *parser.NodeType:
 			if rst.Type != resType.GetType() {
 				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
-				ti.insertUniqueErrors(ti.Collector.Error(value.GetToken(), errMsg))
+				ti.Collector.Add(ti.Collector.Error(value.GetToken(), errMsg))
 			}
 		case *parser.MapType:
 			if rst.Type != resType.GetType() {
 				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
-				ti.insertUniqueErrors(ti.Collector.Error(value.GetToken(), errMsg))
+				ti.Collector.Add(ti.Collector.Error(value.GetToken(), errMsg))
 			}
 		default:
 		}
@@ -243,8 +232,8 @@ func (ti *TypeInference) inferMapType(expr *parser.MapLiteral) parser.Type {
 	return &parser.MapType{
 		Token: expr.Token,
 		Type:  "map",
-		Left:  keyElem.(parser.Type),
-		Right: valElem.(parser.Type),
+		Left:  keyElem,
+		Right: valElem,
 	}
 }
 
@@ -319,12 +308,12 @@ func (ti *TypeInference) inferStructInstanceType(expr *parser.StructInstanceExpr
 		case *parser.NodeType:
 			if rst.Type != resType.Value.String() {
 				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
-				ti.insertUniqueErrors(ti.Collector.Error(elem.Value.GetToken(), errMsg))
+				ti.Collector.Add(ti.Collector.Error(elem.Value.GetToken(), errMsg))
 			}
 		case *parser.MapType:
 			if rst.Type != resType.Value.String() {
 				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
-				ti.insertUniqueErrors(ti.Collector.Error(elem.Value.GetToken(), errMsg))
+				ti.Collector.Add(ti.Collector.Error(elem.Value.GetToken(), errMsg))
 			}
 		default:
 		}
@@ -427,7 +416,7 @@ func (ti *TypeInference) inferCallExpressionType(expr *parser.CallExpression) pa
 func (ti *TypeInference) inferUnaryExpressionType(expr *parser.UnaryExpression) parser.Type {
 	if ti.CurrSymbol.Type.(*parser.NodeType).Type == parser.BoolType && expr.Operator == "-" {
 		errMsg := "ERROR: can't use operator (-) with boolean types, only operator (!) is allowed"
-		ti.insertUniqueErrors(ti.Collector.Error(expr.Token, errMsg))
+		ti.Collector.Add(ti.Collector.Error(expr.Token, errMsg))
 	}
 
 	return ti.inferAssociatedValueType(expr.Right)
@@ -493,7 +482,7 @@ func (ti *TypeInference) inferBinaryExpressionType(expr *parser.BinaryExpression
 			errMsg := fmt.Sprintf(
 				"ERROR: (%s) isn't allowed on %s type", operator, leftType.String(),
 			)
-			ti.insertUniqueErrors(ti.Collector.Error(expr.Token, errMsg))
+			ti.Collector.Add(ti.Collector.Error(expr.Token, errMsg))
 		}
 	default:
 		// this will return the first part if nothing there matched

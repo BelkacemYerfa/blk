@@ -952,17 +952,37 @@ func (p *Parser) parseFieldValues() []FieldInstance {
 	fields := make([]FieldInstance, 0)
 	p.nextToken()
 
-	for p.currentToken().Kind != TokenCurlyBraceClose {
+	identifier, ok := p.parseIdentifier().(*Identifier)
+
+	if !ok {
+		return []FieldInstance{}
+	}
+
+	tok := p.nextToken()
+
+	if tok.Kind != TokenColon {
+		return []FieldInstance{}
+	}
+
+	value := p.parseExpression(LOWEST)
+
+	fields = append(fields, FieldInstance{
+		Key:   identifier,
+		Value: value,
+	})
+
+	for p.currentToken().Kind == TokenComma {
+		p.nextToken()
 		identifier, ok := p.parseIdentifier().(*Identifier)
 
 		if !ok {
-			return []FieldInstance{}
+			return fields
 		}
 
 		tok := p.nextToken()
 
 		if tok.Kind != TokenColon {
-			return []FieldInstance{}
+			return fields
 		}
 
 		value := p.parseExpression(LOWEST)
@@ -973,10 +993,10 @@ func (p *Parser) parseFieldValues() []FieldInstance {
 		})
 	}
 
-	tok := p.nextToken()
+	tok = p.nextToken()
 
 	if tok.Kind != TokenCurlyBraceClose {
-		return []FieldInstance{}
+		return fields
 	}
 
 	return fields

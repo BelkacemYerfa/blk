@@ -9,8 +9,7 @@
 - Minimal syntax: easy to read, easy to parse
 - Explicit types: no hidden behavior
 - No classes or objects — just functions, types, and modules
-- Single-pass compilation model
-- Stack-based VM (planned) and direct native compilation targets
+- Direct native compilation targets
 
 ---
 
@@ -35,7 +34,7 @@ fn add(a: int, b: int): int {
 
 ## ✅ Language Features
 
-- Static types: `int`, `float`, `bool`, `string`, `[]type` (arrays), structs via `type`
+- Static types: `int`, `float`, `bool`, `string`, `[]type` (arrays)
 - Functions with explicit return types and parameters
 - Variables using `let` (immutable) and `var` (mutable)
 - Custom types with `type` for aliasing
@@ -246,9 +245,8 @@ fn _helper(): int {
 ## 🛠️ Development Roadmap
 
 - [x] Lexer and Tokenizer
-- [ ] Parser and AST generator
+- [x] Parser and AST generator
 - [ ] Semantic analysis and type checking
-- [ ] Bytecode interpreter (stack-based VM)
 - [ ] LLVM IR backend
 - [ ] Official standard library (blk stdlib)
 - [ ] Macro system

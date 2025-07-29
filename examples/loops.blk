@@ -8,8 +8,9 @@ fn sum_to(n: int): int {
     return sum
 }
 
-fn print_numbers() {
+fn print_numbers(): void {
     for i, val in arr {
         print(i)
     }
 }
+

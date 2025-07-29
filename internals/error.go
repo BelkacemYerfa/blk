@@ -4,6 +4,7 @@ import (
 	"blk/parser"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -22,8 +23,13 @@ func NewErrorCollector(tokens []parser.Token) *ErrorCollector {
 	}
 }
 
-func (ec *ErrorCollector) Add(err error) {
-	ec.Errors = append(ec.Errors, err)
+func (ec *ErrorCollector) Add(errMsg error) {
+	_, found := slices.BinarySearchFunc(ec.Errors, errMsg, func(a, b error) int {
+		return strings.Compare(a.Error(), b.Error())
+	})
+	if !found {
+		ec.Errors = append(ec.Errors, errMsg)
+	}
 }
 
 func (ec *ErrorCollector) Error(tok parser.Token, msg string) error {
