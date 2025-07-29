@@ -2,7 +2,6 @@ package internals
 
 import (
 	"blk/parser"
-	"fmt"
 	"strconv"
 )
 
@@ -47,7 +46,6 @@ func DeepEqualOnNodeType(v1, v2 *parser.NodeType) (bool, *parser.NodeType) {
 		fixedSized, _ := strconv.Atoi(v1.Size)
 		if len(v2.Size) > 0 {
 			v2Size, _ := strconv.Atoi(v2.Size)
-			fmt.Println(v1, v2)
 			if fixedSized < v2Size {
 				return false, v2
 			}

@@ -77,6 +77,8 @@ func (s *TypeChecker) symbolReaderExpression(node parser.Expression) {
 		s.visitCallExpression(expr)
 	case *parser.UnaryExpression:
 		s.visitUnaryExpression(expr)
+	case *parser.BinaryExpression:
+		s.visitBinaryExpression(expr)
 	case *parser.IfExpression:
 		s.visitIfExpression(expr)
 	case *parser.StructInstanceExpression:
@@ -210,69 +212,10 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 	s.symbolReaderExpression(node.Value)
 
 	expectedType := internals.ParseToNodeType(s.aliasResolver.normalizeType(node.ExplicitType))
+	s.symbolReaderExpression(node.Value)
 	gotType := s.Inference.inferAssociatedValueType(node.Value)
 
-	switch ept := expectedType.(type) {
-	case *parser.NodeType:
-		switch ift := gotType.(type) {
-		case *parser.NodeType:
-			if isMatching, errNode := internals.DeepEqualOnNodeType(ept, ift); !isMatching {
-				errMsg := ""
-				if gotType.String() == "nil" {
-					errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
-				} else {
-					errMsg = fmt.Sprintf("ERROR: type mismatch on (%v), original type (%v)", errNode, ept)
-				}
-				tok := node.Value.GetToken()
-				tok.Text = node.Value.String()
-				s.collector.Add(s.collector.Error(tok, errMsg))
-			}
-		default:
-			// fall through
-			errMsg := ""
-			if gotType == nil {
-				errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v", ept, gotType)
-			} else {
-				if gotType.String() == "nil" {
-					errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
-				} else {
-					errMsg = fmt.Sprintf("ERROR: type mismatch on (%v), original type (%v)", expectedType, ept)
-				}
-			}
-			tok := node.Value.GetToken()
-			tok.Text = node.Value.String()
-			s.collector.Add(s.collector.Error(tok, errMsg))
-		}
-	case *parser.MapType:
-		switch ift := gotType.(type) {
-		case *parser.MapType:
-			if isMatching, errNode := internals.DeepEqualOnMapType(ept, ift); !isMatching {
-				errMsg := ""
-				if gotType.String() == "nil" {
-					errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
-				} else {
-					errMsg = fmt.Sprintf("ERROR: type mismatch on %v, expected type %v", errNode, ept)
-				}
-				tok := node.Value.GetToken()
-				tok.Text = node.Value.String()
-				s.collector.Add(s.collector.Error(tok, errMsg))
-			}
-		default:
-			errMsg := ""
-			if gotType == nil {
-				errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v", ept, gotType)
-			} else {
-				if gotType.String() == "nil" {
-					errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
-				} else {
-					errMsg = fmt.Sprintf("ERROR: type mismatch on %v, expected type %v", gotType, ept)
-				}
-			}
-			tok := node.Value.GetToken()
-			tok.Text = node.Value.String()
-			s.collector.Add(s.collector.Error(tok, errMsg))
-		}
-	}
+	s.typeEquals(expectedType, gotType, node.Value)
 
 	s.CurrNode = tempCurr
 	s.Inference.CurrSymbol = tempCurr
@@ -473,64 +416,11 @@ func (s *TypeChecker) visitReturnDCL(node *parser.ReturnStatement) {
 	}
 
 	// check if the associated return value on the return statement, is the same as the return value of the function
-	functionReturnType := s.Inference.inferAssociatedValueType(node.ReturnValue)
 	returnType := internals.ParseToNodeType(s.aliasResolver.normalizeType(s.CurrNode.Type))
+	s.symbolReaderExpression(node.ReturnValue)
+	functionReturnType := s.Inference.inferAssociatedValueType(node.ReturnValue)
 
-	switch ept := returnType.(type) {
-	case *parser.NodeType:
-		switch ift := functionReturnType.(type) {
-		case *parser.NodeType:
-			if isMatching, errNode := internals.DeepEqualOnNodeType(ept, ift); !isMatching {
-				errMsg := ""
-				if functionReturnType.String() == "nil" {
-					errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
-				} else {
-					errMsg = fmt.Sprintf("ERROR: type mismatch on %v, expected type %v", errNode, ept)
-				}
-				tok := node.ReturnValue.GetToken()
-				tok.Text = node.ReturnValue.String()
-				s.collector.Add(s.collector.Error(tok, errMsg))
-			}
-		default:
-			errMsg := ""
-			if functionReturnType.String() == "nil" {
-				errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
-			} else {
-				errMsg = fmt.Sprintf("ERROR: type mismatch on %v, expected type %v", functionReturnType, ept)
-			}
-			tok := node.ReturnValue.GetToken()
-			tok.Text = node.ReturnValue.String()
-			s.collector.Add(s.collector.Error(tok, errMsg))
-		}
-	case *parser.MapType:
-		switch ift := functionReturnType.(type) {
-		case *parser.MapType:
-			if isMatching, errNode := internals.DeepEqualOnMapType(ept, ift); !isMatching {
-				errMsg := ""
-				if functionReturnType.String() == "nil" {
-					errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
-				} else {
-					errMsg = fmt.Sprintf("ERROR: type mismatch on %v, expected type %v", errNode, ept)
-				}
-				tok := node.ReturnValue.GetToken()
-				tok.Text = node.ReturnValue.String()
-				s.collector.Add(s.collector.Error(tok, errMsg))
-			}
-		default:
-			errMsg := ""
-			if functionReturnType.String() == "nil" {
-				errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
-			} else {
-				errMsg = fmt.Sprintf("ERROR: type mismatch on %v, expected type %v", functionReturnType, ept)
-			}
-			tok := node.ReturnValue.GetToken()
-			tok.Text = node.ReturnValue.String()
-			s.collector.Add(s.collector.Error(tok, errMsg))
-		}
-	default:
-		// fall through otherwise
-		panic("ERROR: UNREACHABLE, VISIT RETURN DCL")
-	}
+	s.typeEquals(returnType, functionReturnType, node.ReturnValue)
 }
 
 func (s *TypeChecker) visitScopeDCL(node *parser.ScopeStatement) {
@@ -591,36 +481,88 @@ func (s *TypeChecker) visitCallExpression(expr *parser.CallExpression) {
 		return
 	}
 
-	// check if the args of the call expr, already exist
-	// TODO: check also if there associated type is the same as the type of args on the function signature
+	// checks if the args of the call expr, already exist
+	// and also tries to infer the type and do the comparison between the definition and the provided ones
 	for idx, arg := range args {
 		switch ag := arg.(type) {
-		case *parser.Identifier:
-			s.visitIdentifier(ag)
-			// fall through
-		case *parser.MemberShipExpression:
-			s.visitMemberShipAccess(ag)
+		case *parser.IfExpression:
+			errMsg := "ERROR: can't use if expression as an arg of a call function"
+			tok := ag.GetToken()
+			tok.Text = ag.String()
+			s.collector.Add(s.collector.Error(tok, errMsg))
 
 		default:
 			// handle only atomic types (strings, booleans, floats, ints)
 			returnType := s.Inference.inferAssociatedValueType(ag)
-			tp := dclNode.Args[idx].Type
-			s.argTypeChecker(tp.String(), returnType.String(), arg)
+			tp := dclNode.Args[idx].Type.(parser.Type)
+			s.typeEquals(tp, returnType, arg)
 		}
-
-		returnType := s.Inference.inferAssociatedValueType(arg)
-		tp := dclNode.Args[idx].Type
-		s.argTypeChecker(tp.String(), returnType.String(), arg)
 	}
 
 }
 
-func (s *TypeChecker) argTypeChecker(tp, returnType string, arg parser.Expression) {
-	if tp != returnType {
-		errMsg := fmt.Sprintf("ERROR: type mismatch, expected %v, got %v", tp, returnType)
-		tok := arg.GetToken()
-		tok.Text = arg.String()
-		s.collector.Add(s.collector.Error(tok, errMsg))
+func (s *TypeChecker) typeEquals(tp, returnType parser.Type, arg parser.Expression) {
+
+	switch ept := tp.(type) {
+	case *parser.NodeType:
+		switch ift := returnType.(type) {
+		case *parser.NodeType:
+			if isMatching, errNode := internals.DeepEqualOnNodeType(ept, ift); !isMatching {
+				errMsg := ""
+				if returnType.String() == "nil" {
+					errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
+				} else {
+					errMsg = fmt.Sprintf("ERROR: type mismatch on (%v), original type (%v)", errNode, ept)
+				}
+				tok := arg.GetToken()
+				tok.Text = arg.String()
+				s.collector.Add(s.collector.Error(tok, errMsg))
+			}
+		default:
+			// fall through
+			errMsg := ""
+			if returnType == nil {
+				errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v", ept, returnType)
+			} else {
+				if returnType.String() == "nil" {
+					errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
+				} else {
+					errMsg = fmt.Sprintf("ERROR: type mismatch on (%v), original type (%v)", tp, ept)
+				}
+			}
+			tok := arg.GetToken()
+			tok.Text = arg.String()
+			s.collector.Add(s.collector.Error(tok, errMsg))
+		}
+	case *parser.MapType:
+		switch ift := returnType.(type) {
+		case *parser.MapType:
+			if isMatching, errNode := internals.DeepEqualOnMapType(ept, ift); !isMatching {
+				errMsg := ""
+				if returnType.String() == "nil" {
+					errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
+				} else {
+					errMsg = fmt.Sprintf("ERROR: type mismatch on %v, expected type %v", errNode, ept)
+				}
+				tok := arg.GetToken()
+				tok.Text = arg.String()
+				s.collector.Add(s.collector.Error(tok, errMsg))
+			}
+		default:
+			errMsg := ""
+			if returnType == nil {
+				errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v", ept, returnType)
+			} else {
+				if returnType.String() == "nil" {
+					errMsg = fmt.Sprintf("ERROR: type mismatch, expected %v, got %v, check nest level of the array", ept, ift)
+				} else {
+					errMsg = fmt.Sprintf("ERROR: type mismatch on %v, expected type %v", returnType, ept)
+				}
+			}
+			tok := arg.GetToken()
+			tok.Text = arg.String()
+			s.collector.Add(s.collector.Error(tok, errMsg))
+		}
 	}
 }
 
@@ -632,21 +574,81 @@ func (s *TypeChecker) visitUnaryExpression(expr *parser.UnaryExpression) {
 		return
 	}
 
-	s.symbolReaderExpression(expr.Right)
+	errMsg := ""
+	switch expr.Right.(type) {
+	case *parser.IfExpression:
+		errMsg = "ERROR: can't have an if expression as the right side of a unary expression"
+	case *parser.ArrayLiteral:
+		errMsg = "ERROR: can't have an array literal as the right side of a unary expression"
+	case *parser.MapLiteral:
+		errMsg = "ERROR: can't have a map literal as the right side of a unary expression"
+	default:
+		s.symbolReaderExpression(expr.Right)
+	}
+
+	if len(errMsg) > 0 {
+		tok := expr.Right.GetToken()
+		tok.Text = expr.Right.String()
+		s.collector.Add(s.collector.Error(tok, errMsg))
+	}
+}
+
+func (s *TypeChecker) visitBinaryExpression(expr *parser.BinaryExpression) {
+	// check if the type is boolean or not
+	errMsg := ""
+	switch expr.Left.(type) {
+	case *parser.IfExpression:
+		errMsg = "ERROR: can't have an if expression as the left side of a binary expression"
+	case *parser.ArrayLiteral:
+		errMsg = "ERROR: can't have an array literal as the left side of a binary expression"
+	case *parser.MapLiteral:
+		errMsg = "ERROR: can't have a map literal as the left side of a binary expression"
+	default:
+		s.symbolReaderExpression(expr.Right)
+	}
+
+	if len(errMsg) > 0 {
+		tok := expr.Right.GetToken()
+		tok.Text = expr.Right.String()
+		s.collector.Add(s.collector.Error(tok, errMsg))
+	}
+
+	switch expr.Right.(type) {
+	case *parser.IfExpression:
+		errMsg = "ERROR: can't have an if expression as the right side of a binary expression"
+	case *parser.ArrayLiteral:
+		errMsg = "ERROR: can't have an array literal as the right side of a binary expression"
+	case *parser.MapLiteral:
+		errMsg = "ERROR: can't have a map literal as the right side of a binary expression"
+	default:
+		s.symbolReaderExpression(expr.Right)
+	}
+
+	if len(errMsg) > 0 {
+		tok := expr.Right.GetToken()
+		tok.Text = expr.Right.String()
+		s.collector.Add(s.collector.Error(tok, errMsg))
+	}
 }
 
 func (s *TypeChecker) visitIfExpression(expr *parser.IfExpression) {
 	conditionExpression := expr.Condition
 
+	errMsg := ""
 	switch cExpr := conditionExpression.(type) {
-	case *parser.UnaryExpression:
-		s.visitUnaryExpression(cExpr)
-	case *parser.Identifier:
-		s.visitIdentifier(cExpr)
-	case *parser.IndexExpression:
-		s.visitIndexExpression(cExpr)
+	case *parser.ArrayLiteral:
+		errMsg = "ERROR: can't use an array literal as condition in if expression"
+	case *parser.MapLiteral:
+		errMsg = "ERROR: can't use a map literal as condition in if expression"
 	default:
-		//
+		// rest of allowed operation
+		s.symbolReaderExpression(cExpr)
+	}
+
+	if len(errMsg) > 0 {
+		tok := conditionExpression.GetToken()
+		tok.Text = conditionExpression.String()
+		s.collector.Add(s.collector.Error(tok, errMsg))
 	}
 
 	// check the body of if
@@ -735,27 +737,46 @@ func (s *TypeChecker) visitArrayLiteral(expr *parser.ArrayLiteral) {
 	elements := expr.Elements
 
 	for _, elem := range elements {
-		s.symbolReaderExpression(elem)
+		switch elem.(type) {
+		case *parser.IfExpression:
+			errMsg := "ERROR: can't use an if expression as value in array literal"
+			tok := elem.GetToken()
+			tok.Text = elem.String()
+			s.collector.Add(s.collector.Error(tok, errMsg))
+		default:
+			s.symbolReaderExpression(elem)
+		}
 	}
 }
 
 func (s *TypeChecker) visitMapLiteral(expr *parser.MapLiteral) {
-
 	pairs := expr.Pairs
-
+	errMsg := ""
 	for key, value := range pairs {
 		switch k := key.(type) {
-		case *parser.Identifier:
-			s.visitIdentifier(k)
-		case *parser.CallExpression:
-			s.visitCallExpression(k)
-		case *parser.IndexExpression:
-			s.visitIndexExpression(k)
-
+		case *parser.IfExpression:
+			errMsg = "ERROR: can't use an if expression as key in a map literal"
+		case *parser.MapLiteral:
+			errMsg = "ERROR: can't use an map literal as key of a map literal"
+		case *parser.ArrayLiteral:
+			errMsg = "ERROR: can't use an array literal as key in map literal"
 		default:
-			// panic(fmt.Sprintf("ERROR: %v ain't supported in map literal (key check)", k))
+			s.symbolReaderExpression(k)
 		}
-		s.symbolReaderExpression(value)
+		if len(errMsg) > 0 {
+			tok := key.GetToken()
+			tok.Text = key.String()
+			s.collector.Add(s.collector.Error(tok, errMsg))
+		}
+		switch v := value.(type) {
+		case *parser.IfExpression:
+			errMsg = "ERROR: can't use an if expression as value in a map literal"
+			tok := key.GetToken()
+			tok.Text = key.String()
+			s.collector.Add(s.collector.Error(tok, errMsg))
+		default:
+			s.symbolReaderExpression(v)
+		}
 	}
 }
 
@@ -764,12 +785,6 @@ func (s *TypeChecker) visitIndexExpression(expr *parser.IndexExpression) {
 	tok := parser.Token{}
 	errMsg := ""
 	switch lf := expr.Left.(type) {
-	case *parser.Identifier:
-		s.visitIdentifier(lf)
-	case *parser.ArrayLiteral:
-		s.visitArrayLiteral(lf)
-	case *parser.CallExpression:
-		s.visitCallExpression(lf)
 	case *parser.IfExpression:
 		errMsg = "ERROR: can't use an if expression as left side of index expression"
 		tok = lf.Token
@@ -790,6 +805,7 @@ func (s *TypeChecker) visitIndexExpression(expr *parser.IndexExpression) {
 		tok.Text = lf.String()
 	default:
 		// nothing
+		s.symbolReaderExpression(lf)
 	}
 
 	if len(tok.Text) > 0 {
@@ -797,12 +813,6 @@ func (s *TypeChecker) visitIndexExpression(expr *parser.IndexExpression) {
 	}
 
 	switch rf := expr.Index.(type) {
-	case *parser.Identifier:
-		s.visitIdentifier(rf)
-	case *parser.CallExpression:
-		s.visitCallExpression(rf)
-	case *parser.IndexExpression:
-		s.visitIndexExpression(rf)
 	case *parser.BinaryExpression:
 		errMsg = "ERROR: can't use a binary expression, cause it evaluates to a boolean"
 		// construct the token
@@ -818,7 +828,7 @@ func (s *TypeChecker) visitIndexExpression(expr *parser.IndexExpression) {
 		tok = rf.Token
 		tok.Text = rf.String()
 	default:
-
+		s.symbolReaderExpression(rf)
 	}
 
 	if len(tok.Text) > 0 {
