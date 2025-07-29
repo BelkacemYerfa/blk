@@ -1,15 +1,17 @@
 # blk — A Minimalist Systems Programming Language
 
-`blk` is a statically typed, compiled programming language focused on simplicity, predictability, and a clean developer experience. Inspired by languages like Zig, Odin, and C — but designed to be approachable for learners and hobbyists interested in writing small tools, utilities, and experimenting with low-level systems programming.
+`blk` is a statically typed, compiled systems programming language focused on simplicity, predictability, and a clean developer experience. Inspired by Jai, Zig, Odin, and C — but designed to be minimal, expressive, and powerful for tooling, low-level system utilities, and experimentation.
 
 ---
 
 ## ✨ Why blk?
 
 - Minimal syntax: easy to read, easy to parse
-- Explicit types: no hidden behavior
-- No classes or objects — just functions, types, and modules
-- Direct native compilation targets
+- Expression-oriented core
+- No classes or objects — just functions, types, and blocks
+- Native targets (no runtime)
+- Explicit memory control
+- Uniform code blocks and low keyword count
 
 ---
 
@@ -17,16 +19,34 @@
 
 ```blk
 import "math"
-import "utils"
 
-fn main(): int {
-    let result: int = utils::double(5)
-    print(result)
-    return 0
+User :: struct {
+    name: string,
+    age: int,
+
+    greet: fn() {
+        print("Hi, I'm " + name)
+    }
 }
 
-fn add(a: int, b: int): int {
-    return a + b
+Status :: union {
+    Online,
+    Offline(reason: string),
+    Banned(code: int),
+}
+
+fn main() {
+    u := User{ name: "Ali", age: 22 }
+    u.greet()
+
+    status := Status::Offline("Network error")
+    msg := match status {
+        Online => "Online",
+        Offline(reason) => "Offline: " + reason,
+        Banned(code) => "Banned with code: " + code,
+    }
+
+    print(msg)
 }
 ```
 
@@ -34,209 +54,182 @@ fn add(a: int, b: int): int {
 
 ## ✅ Language Features
 
-- Static types: `int`, `float`, `bool`, `string`, `[]type` (arrays)
-- Functions with explicit return types and parameters
-- Variables using `let` (immutable) and `var` (mutable)
-- Custom types with `type` for aliasing
-- Structs using `struct` keyword:
-
-```blk
-# type aliasing
-type ID = int
-
-# structs
-struct Person {
-    name: string
-    age: int
-}
-```
-
-- Array declaration:
-
-for fixed-size arrays, use `[size]type`:
-
-```blk
-let numbers: [3]int = [1, 2, 3]
-let names: [2]string = ["Alice", "Bob"]
-```
-
-for dynamic arrays, use `array(type)`:
-
-```blk
-var dynamicNumbers: array(int) = [10, 20, 30]
-var dynamicNames: array(string) = ["Alice", "Bob", "Charlie"]
-```
-
-- Hashmaps using `map(key_type, value_type)`:
-
-```blk
-var settings: map(string, int) = {
-    "volume": 100,
-    "brightness": 80
-}
-```
-
-- Import system using `import "file"`. No aliasing. Always use namespace prefix:
-
-```blk
-import "math"
-import "utils"
-
-let result: int = utils::double(10)
-```
-
-- All top-level symbols in a module are automatically visible. No `export` keyword is needed.
-- To declare something as internal/private to a module, prefix it with `_`:
-
-```blk
-fn _internal_helper(): int {
-    return 42
-}
-```
-
-- Conditionals: `if`, `else if`, `else`
-- Loops:
-
-```blk
-var i: int = 0
-while i < 10 {
-    print(i)
-    i = i + 1
-}
-```
-
-- Loop control keyword: `skip`:
-
-```blk
-var i: int = 0
-while i < 10 {
-    i = i + 1
-    if i % 2 == 0 {
-        skip
-    }
-    print(i)
-}
-```
-
-- Switch statement:
-
-```blk
-switch x {
-    case 1 {
-        print("One")
-    }
-    case 2, 3 {
-        print("Two or Three")
-    }
-    else {
-        print("Default")
-    }
-}
-```
-
-- Explicit memory management (planned)
-- No runtime garbage collection: fully manual or allocator-driven
-- Macro system (planned): clean, hygienic, declarative and procedural macros planned for later versions
+- **Static types**: `int`, `float`, `bool`, `string`, `[]type`, `array(type)`, `map(k, v)`, `fn(...) -> ...`
+- **No `let/var` required**: use `:=` for all variable bindings
+- **Top-level constants**: use `name :: value` syntax (Jai-style)
+- **Structs with methods** using embedded functions
+- **Enums** with optional values
+- **Unions** (like C style)
+- **Pattern matching** via `match` expressions
+- **Struct and map literals** share `{}` syntax (based on context)
+- **Minimal control flow**: `if`, `match`, `while`, `for`, `skip`
+- **No `return` required** in last expression
+- **Functions as first-class values**
 
 ---
 
-## 📚 Syntax Reference
+## 🧱 Core Constructs
 
-### Variables
+### Declarations
 
 ```blk
-let x: int = 42
-var y: float = 3.14
+x := 42
+name :: "blk"
+add :: fn(a: int, b: int) int { a + b }
 ```
 
-### Functions
+### Structs
 
 ```blk
-fn double(value: int): int {
-    return value * 2
+Vec2 :: struct {
+    x: float,
+    y: float,
+
+    length: fn() float {
+        return math::sqrt(x * x + y * y)
+    }
+}
+
+p := Vec2{ x: 3.0, y: 4.0 }
+len := p.length()
+```
+
+### Enums
+
+```blk
+Color :: enum {
+    Red,
+    Green,
+    Blue
 }
 ```
 
-### Custom Types
+### C style unions
 
 ```blk
-type Point {
-    x: float
-    y: float
-}
-
-fn length(p: Point): float {
-    return math::sqrt(p.x * p.x + p.y * p.y)
+Data :: union {
+    i: int,
+    f: float,
+    s: string
 }
 ```
+
+---
+
+## 🔁 Control Flow
+
+### If expressions
+
+```blk
+msg := if x > 10 {
+    "Large"
+} else {
+    "Small"
+}
+```
+
+### Match expressions
+
+```blk
+kind := match value {
+    1 => "one",
+    2 => "two",
+    _ => "many"
+}
+```
+
+### While loops
+
+```blk
+i := 0
+while i < 10 {
+    print(i)
+    i += 1
+}
+```
+
+### For loops
+
+```blk
+# Iterate over an array
+for idx, value in [1, 2, 3] {
+    print(idx, value)
+}
+
+# Iterate over a map
+for key, value in {"a": 1, "b": 2} {
+    print(key, value)
+}
+```
+
+### Skip
+
+```blk
+while x < 10 {
+    x += 1
+    if x % 2 == 0 {
+        skip
+    }
+    print(x)
+}
+```
+
+---
+
+## 📦 Modules & Imports
+
+```blk
+import "math"
+import "io"
+```
+
+- Always use `namespace::symbol` form.
+- No aliasing (`as`) — keep module names explicit.
+- Imports resolve to full top-level namespace.
+
+---
+
+## 🗃️ Data Types
 
 ### Arrays
 
 ```blk
-let numbers: [int] = [10, 20, 30]
-let first: int = numbers[0]
+nums := [1, 2, 3]
+names := ["Alice", "Bob"]
 ```
+
+### Fixed-size arrays
+
+```blk
+coords: [3]int = [1, 2, 3]
+```
+
+### Dynamic arrays
+
+```blk
+items: array(string) = ["a", "b", "c"]
+```
+
+**Note:** Inferred type from an array literal is `array(type)` (i.e dynamic array) where `type` is the element type.
 
 ### Maps
 
 ```blk
-var config: map(string, int) = map {
-    "width": 1280,
-    "height": 720
+settings := {
+    volume: 100,
+    brightness: 80
 }
 ```
 
-### Conditionals
+---
+
+## 🧠 Expression Orientation
+
+Every block and control flow structure returns a value. Last expression in a block is implicitly returned.
 
 ```blk
-if x > 10 {
-    print("Greater")
-} else {
-    print("Smaller or equal")
-}
-```
-
-### Loops
-
-```blk
-var i: int = 0
-while i < 10 {
-    print(i)
-    i = i + 1
-}
-```
-
-### Switch Statements
-
-```blk
-switch x {
-    case 1 {
-        print("One")
-    }
-    case 2, 3 {
-        print("Two or Three")
-    }
-    else {
-        print("Default")
-    }
-}
-```
-
-### Importing Modules
-
-```blk
-import "math"
-import "utils"
-```
-
-- Always use `namespace::symbol` format. No aliasing keyword.
-- No `.blk` file extension in imports.
-
-### Internal/Private Symbols
-
-```blk
-fn _helper(): int {
-    return 123
+double := fn(x: int) int {
+    x * 2
 }
 ```
 
@@ -244,30 +237,33 @@ fn _helper(): int {
 
 ## 🛠️ Development Roadmap
 
-- [x] Lexer and Tokenizer
-- [x] Parser and AST generator
-- [ ] Semantic analysis and type checking
+- [ ] Lexer and Tokenizer
+- [ ] Parser and AST Generator
+- [ ] Expression-based syntax model
+- [ ] Semantic analysis and type system
+- [ ] Pattern matcher and tag-dispatcher
 - [ ] LLVM IR backend
-- [ ] Official standard library (blk stdlib)
-- [ ] Macro system
+- [ ] Standard library (math, io, array, etc.)
+- [ ] Macros and compile-time evaluation
+- [ ] Error reporting and diagnostics
 
 ---
 
-## ⚙️ Build & Usage
+## ⚙️ Tooling
 
-### Compiling blk programs
+### Compile
 
 ```bash
-blk compile main.blk -o main.blkout
+blk compile main.blk -o out
 ```
 
-### Running blk programs
+### Run
 
 ```bash
 blk run main.blk
 ```
 
-### Building the semantics (Go example)
+### Build (Go-based Compiler)
 
 ```bash
 git clone https://github.com/yourname/blk
