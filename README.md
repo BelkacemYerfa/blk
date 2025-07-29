@@ -29,12 +29,6 @@ User :: struct {
     }
 }
 
-Status :: union {
-    Online,
-    Offline(reason: string),
-    Banned(code: int),
-}
-
 fn main() {
     u := User{ name: "Ali", age: 22 }
     u.greet()
@@ -59,7 +53,6 @@ fn main() {
 - **Top-level constants**: use `name :: value` syntax (Jai-style)
 - **Structs with methods** using embedded functions
 - **Enums** with optional values
-- **Unions** (like C style)
 - **Pattern matching** via `match` expressions
 - **Struct and map literals** share `{}` syntax (based on context)
 - **Minimal control flow**: `if`, `match`, `while`, `for`, `skip`
@@ -101,16 +94,6 @@ Color :: enum {
     Red,
     Green,
     Blue
-}
-```
-
-### C style unions
-
-```blk
-Data :: union {
-    i: int,
-    f: float,
-    s: string
 }
 ```
 

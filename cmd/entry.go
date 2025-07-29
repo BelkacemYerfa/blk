@@ -1,9 +1,7 @@
 package cmd
 
 import (
-	"blk/internals"
 	"blk/parser"
-	"blk/semantics"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -160,14 +158,16 @@ func Run(args []string) {
 		return
 	}
 
-	errCollector := internals.NewErrorCollector(tokens)
+	fmt.Println(ast)
 
-	typeChecker := semantics.NewTypeChecker(errCollector)
-	typeChecker.SymbolBuilder(ast)
+	// errCollector := internals.NewErrorCollector(tokens)
 
-	for _, err := range errCollector.Errors {
-		fmt.Println(err)
-	}
+	// typeChecker := semantics.NewTypeChecker(errCollector)
+	// typeChecker.SymbolBuilder(ast)
+
+	// for _, err := range errCollector.Errors {
+	// 	fmt.Println(err)
+	// }
 }
 
 func Execute() {
