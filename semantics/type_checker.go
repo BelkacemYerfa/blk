@@ -36,9 +36,7 @@ func (s *TypeChecker) SymbolBuilder(ast *parser.Program) {
 	}
 
 	// check if the entry point is a main function
-	// access to the main
 	mainFn := s.symbols.current.Store["main"]
-	fmt.Println(mainFn)
 	if mainFn.Name != "main" {
 		errMsg := ("ERROR: no entry point found, consider creating an entry point called main")
 		fmt.Println(errMsg)
@@ -111,7 +109,7 @@ func (s *TypeChecker) visitFuncDCL(node *parser.FunctionStatement) {
 		s.collector.Add(s.collector.Error(node.Name.Token, errMsg))
 	}
 
-	_, ok := s.symbols.Resolve(sym.Name)
+	_, ok := s.symbols.current.Store[sym.Name]
 
 	if ok {
 		errMsg := fmt.Sprintf("ERROR:fn %v is already declared, consider removing the duplicate", sym.Name)
@@ -120,7 +118,8 @@ func (s *TypeChecker) visitFuncDCL(node *parser.FunctionStatement) {
 
 	s.CurrNode = sym
 	s.Inference.CurrSymbol = sym
-	parentScope := s.symbols.EnterScope()
+	newScope := s.symbols.EnterScope()
+
 	// checks if the arg type is declared or not
 	for _, arg := range node.Args {
 		argType := arg.Type
@@ -163,7 +162,7 @@ func (s *TypeChecker) visitFuncDCL(node *parser.FunctionStatement) {
 		}
 	}
 
-	s.symbols.ExitScope(parentScope)
+	s.symbols.ExitScope(newScope)
 	s.visitFieldType(node.ReturnType)
 
 	// entry point function
@@ -201,7 +200,6 @@ func (s *TypeChecker) visitVarDCL(node *parser.LetStatement) {
 
 	if ok {
 		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", node.Name.Value)
-		fmt.Println(errMsg)
 		s.collector.Add(s.collector.Error(node.Token, errMsg))
 	}
 	// this is for to save the last current node if we're in function scope
@@ -294,16 +292,17 @@ func (s *TypeChecker) visitStructDCL(node *parser.StructStatement) *SymbolInfo {
 		},
 	}
 
-	_, ok := s.symbols.Resolve(sym.Name)
+	_, ok := s.symbols.current.Store[sym.Name]
 
 	if ok {
 		errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", sym.Name)
 		s.collector.Add(s.collector.Error(node.Token, errMsg))
 	}
 
+	// we define the struct here, in case if it is used in an inner field(s)
 	s.symbols.Define(sym.Name, sym)
 	if len(node.Body) > 0 {
-		scope := s.symbols.EnterScope()
+		newScope := s.symbols.EnterScope()
 		for _, field := range node.Body {
 			// check for field redundancy
 			fieldName := field.Key.Value
@@ -326,7 +325,7 @@ func (s *TypeChecker) visitStructDCL(node *parser.StructStatement) *SymbolInfo {
 			fieldType := field.Value
 			s.visitFieldType(fieldType)
 		}
-		s.symbols.ExitScope(scope)
+		s.symbols.ExitScope(newScope)
 	}
 	return sym
 }
@@ -399,12 +398,11 @@ func (s *TypeChecker) visitTypeDCL(node *parser.TypeStatement) {
 }
 
 func (s *TypeChecker) visitBlockDCL(block *parser.BlockStatement) {
-	// mean the body of the current scope is empty
-	parentScope := s.symbols.EnterScope()
 
 	// save the return type for the func
 	currentFunction := s.CurrNode
 
+	// means the body of the current scope is empty
 	if len(block.Body) == 0 {
 		if currentFunction.Kind == SymbolFunc && currentFunction.Type.String() != "void" {
 			errMsg := fmt.Sprintf("ERROR: a function that has (%v) as return type, needs always a return statement", currentFunction.Type)
@@ -414,6 +412,7 @@ func (s *TypeChecker) visitBlockDCL(block *parser.BlockStatement) {
 			s.collector.Add(s.collector.Error(tok, errMsg))
 		}
 	} else {
+		newScope := s.symbols.EnterScope()
 		for idx, nd := range block.Body {
 			s.symbolReader(nd)
 			// check happens only on the last instruction
@@ -424,9 +423,9 @@ func (s *TypeChecker) visitBlockDCL(block *parser.BlockStatement) {
 				}
 			}
 		}
+		s.symbols.ExitScope(newScope)
 	}
 
-	s.symbols.ExitScope(parentScope)
 }
 
 func (s *TypeChecker) visitWhileLoopDCL(node *parser.WhileStatement) {

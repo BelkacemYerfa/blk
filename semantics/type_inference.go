@@ -106,10 +106,10 @@ func (tie *TypeInference) insertUniqueErrors(errMsg error) {
 func (ti *TypeInference) visitIdentifier(expr *parser.Identifier) *SymbolInfo {
 	// if (identifier) check if it declared or not
 	ident, isMatched := ti.symbols.Resolve(expr.Value)
+
 	if !isMatched {
 		errMsg := ("ERROR: identifier, needs to be declared before it gets used")
 		ti.Collector.Add(ti.Collector.Error(expr.Token, errMsg))
-		return nil
 	}
 
 	return ident

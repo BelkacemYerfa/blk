@@ -49,26 +49,16 @@ func NewSymbolResolver() *symbolResolver {
 }
 
 func (s *symbolResolver) Define(name string, sym *SymbolInfo) {
-	if _, exists := s.current.Store[name]; exists {
-		// TODO: add proper error reporting in here
-		return
-	}
-
 	s.current.Store[name] = *sym
 }
 
 func (s *symbolResolver) Resolve(name string) (*SymbolInfo, bool) {
-	if sym, ok := s.current.Store[name]; ok {
-		// if sym.Depth == s.current.Depth {
-		return &sym, true
-		// }
-	}
-	if s.current.Parent != nil {
-		s.current = s.current.Parent
-		sym, _ := s.Resolve(name)
-		if sym != nil {
-			return sym, true
+	scope := s.current
+	for scope != nil {
+		if sym, ok := scope.Store[name]; ok {
+			return &sym, true
 		}
+		scope = scope.Parent
 	}
 	return nil, false
 }
@@ -81,7 +71,9 @@ func (s *symbolResolver) EnterScope() *symbolTable {
 	return newScope
 }
 
-func (s *symbolResolver) ExitScope(parent *symbolTable) *symbolTable {
-	s.current = parent
+func (s *symbolResolver) ExitScope(curr *symbolTable) *symbolTable {
+	if curr.Parent != nil {
+		s.current = curr.Parent
+	}
 	return s.current
 }
