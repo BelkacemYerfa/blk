@@ -33,6 +33,8 @@ const (
 var precedences = map[TokenKind]int{
 	TokenCurlyBraceOpen: ASSIGN,
 	TokenAssign:         ASSIGN,
+	TokenBind:           ASSIGN,
+	TokenWalrus:         ASSIGN,
 	TokenOr:             OR,
 	TokenAnd:            AND,
 	TokenEquals:         EQUALS,
@@ -76,6 +78,10 @@ func NewParser(tokens []Token, filepath string) *Parser {
 	p.registerPrefix(TokenBool, p.parseBooleanLiteral)
 	p.registerPrefix(TokenBraceOpen, p.parseGroupedExpression)
 	p.registerPrefix(TokenIf, p.parseIfExpression)
+	p.registerPrefix(TokenMatch, p.parseMatchExpression)
+	p.registerPrefix(TokenFn, p.parseFunctionExpression)
+	p.registerPrefix(TokenStruct, p.parseStructExpression)
+	p.registerPrefix(TokenEnum, p.parseEnumExpression)
 
 	// infix/binary operators
 	p.registerInfix(TokenPlus, p.parseInfixExpression)
@@ -94,8 +100,9 @@ func NewParser(tokens []Token, filepath string) *Parser {
 	p.registerInfix(TokenGreaterOrEqual, p.parseInfixExpression)
 	p.registerInfix(TokenBraceOpen, p.parseCallExpression)
 	p.registerInfix(TokenBracketOpen, p.parseIndexExpression)
-	p.registerInfix(TokenCurlyBraceOpen, p.parseStructInstanceExpression)
+	p.registerInfix(TokenCurlyBraceOpen, p.parseCurlyBraceOpen)
 	p.registerInfix(TokenDot, p.parseMemberShipAccess)
+
 	return &p
 }
 
@@ -276,34 +283,35 @@ func (p *Parser) Parse() *Program {
 func (p *Parser) parseStatement() (Statement, error) {
 	stmtToken := p.currentToken() // Consume stmt
 	switch stmtToken.Kind {
-	case TokenLet, TokenVar:
-		return p.parseLetStatement()
+	case TokenLet:
+		return p.parseVarDeclaration()
 	case TokenReturn:
 		return p.parseReturnStatement()
-	case TokenFn:
-		return p.parseFunctionStatement()
-	case TokenType:
-		return p.ParseTypeStatement()
-	case TokenStruct:
-		return p.parseStructStatement()
+	case TokenImport:
+		return p.parseImportStatement()
 	case TokenWhile:
 		return p.parseWhileStatement()
 	case TokenFor:
 		return p.parseForStatement()
 	case TokenIdentifier:
+		firstLookKind := p.lookToken(1).Kind
 		// check after it if there is a colon and a {
-		if p.lookToken(1).Kind == TokenColon && p.lookToken(2).Kind == TokenCurlyBraceOpen {
+		if firstLookKind == TokenColon && p.lookToken(2).Kind == TokenCurlyBraceOpen {
 			return p.parseScope()
-		} else {
-			return p.parseExpressionStatement()
 		}
+
+		// for the bind operations, either :: or := or :
+		if firstLookKind == TokenBind || firstLookKind == TokenWalrus || firstLookKind == TokenColon {
+			return p.parseBindExpression()
+		}
+		return p.parseExpressionStatement()
 	default:
 		return p.parseExpressionStatement()
 	}
 }
 
-func (p *Parser) parseLetStatement() (*LetStatement, error) {
-	stmt := &LetStatement{Token: p.currentToken()}
+func (p *Parser) parseVarDeclaration() (*VarDeclaration, error) {
+	stmt := &VarDeclaration{Token: p.currentToken()}
 	p.nextToken()
 	identifier := p.parseIdentifier()
 	if identifier == nil {
@@ -338,6 +346,23 @@ func (p *Parser) parseReturnStatement() (*ReturnStatement, error) {
 	return stmt, nil
 }
 
+func (p *Parser) parseImportStatement() (*ImportStatement, error) {
+	stmt := &ImportStatement{Token: p.currentToken()}
+	// skip import
+	p.nextToken()
+
+	// get the current after tok
+	tok := p.currentToken()
+
+	if tok.Kind != TokenString {
+		return nil, p.error(tok, "ERROR: expected a string as module name, got shit")
+	}
+
+	stmt.ModuleName = p.parseStringLiteral().(*StringLiteral)
+
+	return stmt, nil
+}
+
 func (p *Parser) parseExpressionStatement() (*ExpressionStatement, error) {
 	stmt := &ExpressionStatement{Token: p.currentToken()}
 
@@ -350,63 +375,139 @@ func (p *Parser) parseExpressionStatement() (*ExpressionStatement, error) {
 	return stmt, nil
 }
 
-func (p *Parser) ParseTypeStatement() (*TypeStatement, error) {
-	stmt := &TypeStatement{Token: p.currentToken()}
+func (p *Parser) parseStructExpression() Expression {
+	expr := &StructExpression{Token: p.currentToken()}
 	p.nextToken()
 
-	stmt.Name = p.parseIdentifier().(*Identifier)
-
-	tok := p.nextToken()
-
-	if tok.Kind != TokenAssign {
-		return nil, p.error(tok, "ERROR: expected assign ( = ), got shit")
+	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
+		p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: expected curl, got shit"))
+		return nil
 	}
 
-	stmt.Value = p.ParseType()
+	tok := p.currentToken()
 
-	return stmt, nil
-}
-
-func (p *Parser) parseStructStatement() (*StructStatement, error) {
-	stmt := &StructStatement{Token: p.currentToken()}
-	p.nextToken()
-
-	stmt.Name = p.parseIdentifier().(*Identifier)
-
-	tok := p.nextToken()
-
-	if tok.Kind != TokenCurlyBraceOpen {
-		return nil, p.error(tok, "ERROR: expected assign ( = ), got shit")
+	if tok.Kind == TokenBracketClose {
+		p.nextToken()
+		return &StructExpression{
+			Token: expr.Token,
+			Body:  []Field{},
+		}
 	}
 
-	stmt.Body = p.parseFields()
+	expr.Body = p.parseFields()
 
-	return stmt, nil
+	return expr
 }
 
 func (p *Parser) parseFields() []Field {
 	fields := make([]Field, 0)
 
-	for p.currentToken().Kind != TokenCurlyBraceClose {
-		identifier := p.parseIdentifier().(*Identifier)
-		tok := p.nextToken()
+	field, ok := p.parseIdentifier().(*Identifier)
 
-		if tok.Kind != TokenColon {
-			return []Field{}
-		}
-		nodeType := p.ParseType()
-
-		fields = append(fields, Field{
-			Key:   identifier,
-			Value: nodeType,
-		})
-
+	if !ok {
+		p.Errors = append(p.Errors, p.error(p.lookToken(-1), "ERROR: expected an identifier, got shit"))
+		return nil
 	}
 
 	tok := p.nextToken()
 
-	if tok.Kind != TokenCurlyBraceClose {
-		return []Field{}
+	if tok.Kind != TokenColon {
+		p.Errors = append(p.Errors, p.error(tok, "ERROR: expected colon ( : ), got shit"))
+		return nil
+	}
+
+	fieldValue := p.parseExpression(LOWEST)
+
+	fields = append(fields, Field{
+		Key:   field,
+		Value: fieldValue,
+	})
+
+	for p.currentToken().Kind == TokenComma {
+		p.nextToken()
+		field, ok := p.parseIdentifier().(*Identifier)
+
+		if !ok {
+			p.Errors = append(p.Errors, p.error(p.lookToken(-1), "ERROR: expected an identifier, got shit"))
+			return nil
+		}
+
+		tok := p.nextToken()
+
+		if tok.Kind != TokenColon {
+			p.Errors = append(p.Errors, p.error(tok, "ERROR: expected colon ( : ), got shit"))
+			return nil
+		}
+
+		fieldValue := p.parseExpression(LOWEST)
+
+		fields = append(fields, Field{
+			Key:   field,
+			Value: fieldValue,
+		})
+	}
+
+	if !p.expect([]TokenKind{TokenCurlyBraceClose}) {
+		p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: expected close curly brace ( } ), got shit"))
+		return nil
+	}
+
+	return fields
+}
+
+func (p *Parser) parseEnumExpression() Expression {
+	expr := &EnumExpression{Token: p.currentToken()}
+
+	// consume the enum token
+	p.nextToken()
+
+	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
+		p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: expected curl, got shit"))
+		return nil
+	}
+
+	tok := p.currentToken()
+
+	if tok.Kind == TokenBracketClose {
+		p.nextToken()
+		return &EnumExpression{
+			Token: expr.Token,
+			Body:  []*Identifier{},
+		}
+	}
+
+	expr.Body = p.parseEnumFields()
+	return expr
+
+}
+
+func (p *Parser) parseEnumFields() []*Identifier {
+	fields := make([]*Identifier, 0)
+
+	field, ok := p.parseIdentifier().(*Identifier)
+
+	if !ok {
+		p.Errors = append(p.Errors, p.error(p.lookToken(-1), "ERROR: expected an identifier, got shit"))
+		return nil
+	}
+
+	fields = append(fields, field)
+
+	for p.currentToken().Kind == TokenComma {
+		p.nextToken()
+		field, ok := p.parseIdentifier().(*Identifier)
+
+		if !ok {
+			p.Errors = append(p.Errors, p.error(p.lookToken(-1), "ERROR: expected an identifier, got shit"))
+			return nil
+		}
+
+		fields = append(fields, field)
+	}
+
+	if !p.expect([]TokenKind{TokenCurlyBraceClose}) {
+		p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: expected close curly brace ( } ), got shit"))
+		return nil
 	}
 
 	return fields
@@ -441,7 +542,13 @@ func (p *Parser) parseForStatement() (*ForStatement, error) {
 	tok = p.nextToken()
 
 	if tok.Kind == TokenComma {
-		stmt.Identifiers = append(stmt.Identifiers, p.parseIdentifier().(*Identifier))
+		ident, ok := p.parseIdentifier().(*Identifier)
+		if !ok {
+			return nil, p.error(tok, "ERROR: expected an identifier, got shit")
+		}
+		stmt.Identifiers = append(stmt.Identifiers, ident)
+	} else {
+		p.Pos--
 	}
 
 	tok = p.nextToken()
@@ -517,22 +624,19 @@ func (p *Parser) ParseType() Expression {
 
 	case TokenBracketOpen:
 		tok = p.currentToken()
-		for tok.Kind != TokenIdentifier {
-			if tok.Kind == TokenInt {
-				p.nextToken()
-				p.nextToken()
-				childType := p.ParseType()
-				return &NodeType{
-					Token:     p.currentToken(),
-					Type:      "array",
-					ChildType: childType.(*NodeType),
-					Size:      tok.Text,
-				}
-			}
+		p.nextToken()
+		p.nextToken()
+		childType := p.ParseType()
+		return &NodeType{
+			Token:     p.currentToken(),
+			Type:      "array",
+			ChildType: childType.(*NodeType),
+			Size:      tok.Text,
 		}
 	default:
-		errMsg := p.error(tok, "ERROR: expected type, got shit")
-		panic(errMsg)
+		p.Pos--
+		// if there is no type, empty, we return what we already have in the node type
+		return nodeType
 	}
 
 	if p.nextToken().Kind == TokenBraceClose {
@@ -741,20 +845,26 @@ func (p *Parser) parseIfExpression() Expression {
 	expr := &IfExpression{Token: p.currentToken()}
 	p.nextToken()
 
+	// this is to prevent the launch of parse struct instance func
+	p.internalFlags = append(p.internalFlags, "if-mode")
 	expr.Condition = p.parseExpression(ASSIGN)
+	p.internalFlags = slices.DeleteFunc(p.internalFlags, func(elem string) bool {
+		return elem == "if-mode"
+	})
 
 	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
+		p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: expected close curly brace ( } ), got shit"))
 		return nil
 	}
 
 	expr.Consequence = p.parseBlockStatement().(*BlockStatement)
 
-	// check if there is an else stmt
 	tok := p.nextToken()
 
-	// support for else if
+	// check if there is an else stmt
 	if tok.Kind == TokenElse {
 		tok = p.currentToken()
+		// support for else if
 		if tok.Kind == TokenIf {
 			expr.Alternative = p.parseIfExpression()
 		} else {
@@ -770,41 +880,130 @@ func (p *Parser) parseIfExpression() Expression {
 	return expr
 }
 
-func (p *Parser) parseFunctionStatement() (*FunctionStatement, error) {
-	prev := p.currentToken()
+func (p *Parser) parseMatchExpression() Expression {
+	expr := &MatchExpression{Token: p.currentToken()}
+	// consume math keyword
 	p.nextToken()
 
-	if !p.expect([]TokenKind{TokenIdentifier}) {
-		return nil, fmt.Errorf("ERROR: expected identifier, got shit")
+	expr.MatchKey = p.parseExpression(ASSIGN)
+
+	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
+		p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: expected close curly brace '{', got shit"))
+		return nil
 	}
-	p.Pos--
-	name := p.parseIdentifier().(*Identifier)
+
+	matchArms := make([]MatchArm, 0)
+	tok := p.currentToken()
+
+	if tok.Kind == TokenCurlyBraceClose {
+		p.nextToken()
+		expr.Arms = matchArms
+		return expr
+	}
+
+	pattern := p.parseExpression(LOWEST)
+
+	tok = p.nextToken()
+
+	if tok.Kind != TokenMatch {
+		p.Errors = append(p.Errors, p.error(tok, "ERROR: expected colon ( : ), got shit"))
+		return nil
+	}
+
+	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
+		p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: expected close curly brace '{', got shit"))
+		return nil
+	}
+
+	value := p.parseBlockStatement().(*BlockStatement)
+
+	matchArms = append(matchArms, MatchArm{
+		Token:   pattern.GetToken(),
+		Pattern: pattern,
+		Body:    value,
+	})
+
+	for p.currentToken().Kind == TokenComma {
+		p.nextToken()
+
+		patterCase := p.currentToken()
+
+		pattern := p.parseExpression(LOWEST)
+		tok = p.nextToken()
+
+		if tok.Kind != TokenMatch {
+			p.Errors = append(p.Errors, p.error(tok, "ERROR: expected colon ( : ), got shit"))
+			return nil
+		}
+
+		if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
+			p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: expected close curly brace '{', got shit"))
+			return nil
+		}
+
+		value := p.parseBlockStatement().(*BlockStatement)
+
+		if patterCase.Text == "_" {
+			// default case
+			expr.Default = &MatchArm{
+				Token:   pattern.GetToken(),
+				Pattern: pattern,
+				Body:    value,
+			}
+		} else {
+			matchArms = append(matchArms, MatchArm{
+				Token:   pattern.GetToken(),
+				Pattern: pattern,
+				Body:    value,
+			})
+		}
+	}
+	expr.Arms = matchArms
+
+	if !p.expect([]TokenKind{TokenCurlyBraceClose}) {
+		p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: expected close curly brace '}', got shit"))
+		return nil
+	}
+
+	return expr
+}
+
+func (p *Parser) parseFunctionExpression() Expression {
+	expr := &FunctionExpression{Token: p.currentToken()}
+	p.nextToken()
 
 	if !p.expect([]TokenKind{TokenBraceOpen}) {
-		return nil, fmt.Errorf("ERROR: expected brace open ( ( ), got shit")
+		p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: expected brace open '(' , got shit"))
+		return nil
 	}
 
 	args := p.parseArguments()
 
-	if !p.expect([]TokenKind{TokenColon}) {
-		return nil, fmt.Errorf("ERROR: expected colon ( : ), got shit")
+	if args == nil {
+		p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: expected arguments, got shit"))
+		return nil
 	}
 
+	expr.Args = args
+
 	returnType := p.ParseType()
+	expr.ReturnType = returnType
 
 	if !p.expect([]TokenKind{TokenCurlyBraceOpen}) {
-		return nil, fmt.Errorf("ERROR: expected curly brace open ( { ), got shit")
+		p.Errors = append(p.Errors, fmt.Errorf("ERROR: expected curly brace open ( { ), got shit"))
+		return nil
 	}
 
 	body := p.parseBlockStatement().(*BlockStatement)
 
-	return &FunctionStatement{
-		Token:      prev,
-		Name:       name,
-		Args:       args,
-		ReturnType: returnType,
-		Body:       body,
-	}, nil
+	if body == nil {
+		p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: expected valid body, got shit"))
+		return nil
+	}
+
+	expr.Body = body
+
+	return expr
 }
 
 func (p *Parser) parseArguments() []*ArgExpression {
@@ -897,6 +1096,7 @@ func (p *Parser) parseCallExpression(left Expression) Expression {
 	exp := CallExpression{Token: left.GetToken(), Function: *(left.(*Identifier))}
 
 	exp.Args = p.parseCallArguments()
+
 	return &exp
 }
 
@@ -940,9 +1140,16 @@ func (p *Parser) parseIndexExpression(left Expression) Expression {
 	return exp
 }
 
+func (p *Parser) parseCurlyBraceOpen(left Expression) Expression {
+	if slices.Index(p.internalFlags, "if-mode") != -1 {
+		return p.parseBlockStatement()
+	} else {
+		return p.parseStructInstanceExpression(left)
+	}
+}
+
 func (p *Parser) parseStructInstanceExpression(left Expression) Expression {
 	expr := &StructInstanceExpression{Token: left.GetToken(), Left: left}
-
 	expr.Body = p.parseFieldValues()
 
 	return expr
@@ -955,6 +1162,7 @@ func (p *Parser) parseFieldValues() []FieldInstance {
 	identifier, ok := p.parseIdentifier().(*Identifier)
 
 	if !ok {
+		p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: expected an identifier, got shit"))
 		return []FieldInstance{}
 	}
 
@@ -1009,9 +1217,48 @@ func (p *Parser) parseMemberShipAccess(left Expression) Expression {
 		return nil
 	}
 
-	expr.Property = p.parseExpression(LOWEST)
+	expr.Property = p.parseExpression(ASSIGN)
 
 	return expr
+}
+
+func (p *Parser) parseBindExpression() (Statement, error) {
+	stmt := &VarDeclaration{Token: p.currentToken()}
+
+	identifier, ok := p.parseIdentifier().(*Identifier)
+
+	if !ok {
+		return nil, p.error(identifier.GetToken(), "ERROR: expected an identifier, got shit")
+	}
+
+	stmt.Name = identifier
+
+	tok := p.nextToken()
+
+	switch tok.Kind {
+	case TokenWalrus, TokenBind:
+		// consume the operator
+		p.nextToken()
+	case TokenColon:
+		// parse the type
+		stmt.ExplicitType = p.ParseType()
+		// checks for =
+		if !p.expect([]TokenKind{TokenAssign}) {
+			return nil, p.error(p.currentToken(), "ERROR: expected =, got shit")
+		}
+	default:
+		return nil, p.error(tok, "ERROR: expected (:= or ::) operators, got shit")
+	}
+
+	value := p.parseExpression(LOWEST)
+
+	if value == nil {
+		return nil, p.error(tok, "ERROR: expected an expression, got nil value")
+	}
+
+	stmt.Value = value
+
+	return stmt, nil
 }
 
 func (p *Parser) parsePrefixExpression() Expression {
@@ -1055,13 +1302,14 @@ func (p *Parser) parseExpression(precedence int) Expression {
 	prefix := p.prefixParseFns[p.currentToken().Kind]
 
 	if prefix == nil {
-		p.Errors = append(p.Errors, fmt.Errorf("ERROR: %v ain't an expression, it is a statement", p.currentToken().Kind))
+		p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: ain't an expression, it is a statement"))
 		return nil
 	}
 
 	leftExp := prefix()
 
 	cur := p.currentToken()
+
 	for p.currentToken().Row <= cur.Row && precedence < p.peekPrecedence() {
 		infix := p.infixParseFns[p.currentToken().Kind]
 		if infix == nil {

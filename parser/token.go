@@ -6,9 +6,8 @@ const (
 
 	// Keywords
 	TokenLet    TokenKind = "let"
-	TokenVar    TokenKind = "var"
-	TokenType   TokenKind = "type"
 	TokenStruct TokenKind = "struct"
+	TokenEnum   TokenKind = "enum"
 	TokenFn     TokenKind = "fn"
 	TokenFor    TokenKind = "for"
 	TokenIn     TokenKind = "in"
@@ -16,6 +15,7 @@ const (
 	TokenSkip   TokenKind = "skip"
 	TokenIf     TokenKind = "if"
 	TokenElse   TokenKind = "else"
+	TokenMatch  TokenKind = "match"
 	TokenReturn TokenKind = "return"
 	TokenImport TokenKind = "import"
 
@@ -38,13 +38,18 @@ const (
 	TokenMultiply       TokenKind = "*"
 	TokenSlash          TokenKind = "/"
 	TokenModule         TokenKind = "%"
-	TokenAssign         TokenKind = "="
 	TokenEquals         TokenKind = "=="
 	TokenNotEquals      TokenKind = "!="
 	TokenGreater        TokenKind = ">"
 	TokenLess           TokenKind = "<"
 	TokenGreaterOrEqual TokenKind = ">="
 	TokenLessOrEqual    TokenKind = "<="
+
+	// Bind Operators
+	TokenAssign TokenKind = "="
+	TokenBind   TokenKind = "::"
+	TokenWalrus TokenKind = ":="
+
 	// Logical Operators
 	TokenAnd         TokenKind = "&&"
 	TokenOr          TokenKind = "||"

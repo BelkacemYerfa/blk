@@ -103,9 +103,23 @@ func (l *Lexer) NextToken() Token {
 		}
 	case TokenColon:
 		l.readChar()
-		token.LiteralToken = LiteralToken{
-			Kind: TokenColon,
-			Text: ":",
+		nextChar := string(l.Content[l.Cur])
+		switch nextChar {
+		case ":":
+			token.LiteralToken = LiteralToken{
+				Kind: TokenBind,
+				Text: "::",
+			}
+		case "=":
+			token.LiteralToken = LiteralToken{
+				Kind: TokenWalrus,
+				Text: ":=",
+			}
+		default:
+			token.LiteralToken = LiteralToken{
+				Kind: TokenColon,
+				Text: ":",
+			}
 		}
 	case TokenDot:
 		l.readChar()
@@ -166,14 +180,21 @@ func (l *Lexer) NextToken() Token {
 		}
 	case TokenAssign:
 		l.readChar()
-		equalChar := string(l.Content[l.Cur])
-		if equalChar == TokenAssign {
+		nextChar := string(l.Content[l.Cur])
+		switch nextChar {
+		case TokenAssign:
 			l.readChar()
 			token.LiteralToken = LiteralToken{
 				Kind: TokenEquals,
 				Text: "==",
 			}
-		} else {
+		case TokenGreater:
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenMatch,
+				Text: "=>",
+			}
+		default:
 			token.LiteralToken = LiteralToken{
 				Kind: TokenAssign,
 				Text: "=",

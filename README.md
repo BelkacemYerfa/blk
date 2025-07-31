@@ -32,14 +32,11 @@ User :: struct {
 fn main() {
     u := User{ name: "Ali", age: 22 }
     u.greet()
-
-    status := Status::Offline("Network error")
-    msg := match status {
-        Online => "Online",
-        Offline(reason) => "Offline: " + reason,
-        Banned(code) => "Banned with code: " + code,
+    msg := if u.age > 18 {
+        "Adult"
+    } else {
+        "Minor"
     }
-
     print(msg)
 }
 ```
@@ -79,7 +76,7 @@ Vec2 :: struct {
     y: float,
 
     length: fn() float {
-        return math::sqrt(x * x + y * y)
+        return sqrt(x * x + y * y)
     }
 }
 
@@ -166,10 +163,6 @@ import "math"
 import "io"
 ```
 
-- Always use `namespace::symbol` form.
-- No aliasing (`as`) — keep module names explicit.
-- Imports resolve to full top-level namespace.
-
 ---
 
 ## 🗃️ Data Types
@@ -220,8 +213,8 @@ double := fn(x: int) int {
 
 ## 🛠️ Development Roadmap
 
-- [ ] Lexer and Tokenizer
-- [ ] Parser and AST Generator
+- [x] Lexer and Tokenizer
+- [x] Parser and AST Generator
 - [ ] Expression-based syntax model
 - [ ] Semantic analysis and type system
 - [ ] Pattern matcher and tag-dispatcher

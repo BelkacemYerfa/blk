@@ -21,10 +21,12 @@ type Node interface {
 	String() string
 	GetToken() Token
 }
+
 type Statement interface {
 	Node
 	statementNode()
 }
+
 type Expression interface {
 	Node
 	expressionNode()
@@ -121,17 +123,17 @@ func (mt *MapType) String() string {
 	return out.String()
 }
 
-type LetStatement struct {
+type VarDeclaration struct {
 	Token        Token // the token.LET token
 	Name         *Identifier
 	ExplicitType Expression
 	Value        Expression
 }
 
-func (ls *LetStatement) statementNode()       {}
-func (ls *LetStatement) TokenLiteral() string { return ls.Token.Text }
-func (nt *LetStatement) GetToken() Token      { return nt.Token }
-func (ls *LetStatement) String() string {
+func (ls *VarDeclaration) statementNode()       {}
+func (ls *VarDeclaration) TokenLiteral() string { return ls.Token.Text }
+func (nt *VarDeclaration) GetToken() Token      { return nt.Token }
+func (ls *VarDeclaration) String() string {
 	var out bytes.Buffer
 	out.WriteString(ls.TokenLiteral() + " ")
 	out.WriteString(ls.Name.String())
@@ -139,6 +141,21 @@ func (ls *LetStatement) String() string {
 	if ls.Value != nil {
 		out.WriteString(ls.Value.String())
 	}
+	return out.String()
+}
+
+type ImportStatement struct {
+	Token      Token // the token.LET token
+	ModuleName *StringLiteral
+}
+
+func (ls *ImportStatement) statementNode()       {}
+func (ls *ImportStatement) TokenLiteral() string { return ls.Token.Text }
+func (nt *ImportStatement) GetToken() Token      { return nt.Token }
+func (ls *ImportStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString(ls.TokenLiteral() + " ")
+	out.WriteString(ls.ModuleName.String())
 	return out.String()
 }
 
@@ -167,19 +184,17 @@ type Field struct {
 	Value Expression // any value type
 }
 
-type StructStatement struct {
+type StructExpression struct {
 	Token Token // the token.LET token
-	Name  *Identifier
 	Body  []Field
 }
 
-func (ss *StructStatement) statementNode()       {}
-func (ss *StructStatement) TokenLiteral() string { return ss.Token.Text }
-func (nt *StructStatement) GetToken() Token      { return nt.Token }
-func (ss *StructStatement) String() string {
+func (ss *StructExpression) expressionNode()      {}
+func (ss *StructExpression) TokenLiteral() string { return ss.Token.Text }
+func (nt *StructExpression) GetToken() Token      { return nt.Token }
+func (ss *StructExpression) String() string {
 	var out bytes.Buffer
 	out.WriteString(ss.TokenLiteral() + " ")
-	out.WriteString(ss.Name.String())
 	out.WriteString(" { ")
 	if ss.Body != nil {
 		for idx, field := range ss.Body {
@@ -192,6 +207,70 @@ func (ss *StructStatement) String() string {
 		}
 	}
 	out.WriteString(" }")
+	return out.String()
+}
+
+type EnumExpression struct {
+	Token Token // the token.LET token
+	Body  []*Identifier
+}
+
+func (ss *EnumExpression) expressionNode()      {}
+func (ss *EnumExpression) TokenLiteral() string { return ss.Token.Text }
+func (nt *EnumExpression) GetToken() Token      { return nt.Token }
+func (ss *EnumExpression) String() string {
+	var out bytes.Buffer
+	out.WriteString(ss.TokenLiteral() + " ")
+	out.WriteString(" { ")
+	if ss.Body != nil {
+		for idx, field := range ss.Body {
+			out.WriteString(field.Value)
+			if idx+1 <= len(ss.Body)-1 {
+				out.WriteString(", ")
+			}
+		}
+	}
+	out.WriteString(" }")
+	return out.String()
+}
+
+type MatchArm struct {
+	Token   Token
+	Pattern Expression
+	Body    *BlockStatement
+}
+
+type MatchExpression struct {
+	Token    Token
+	MatchKey Expression // mainly identifiers of different type
+	Arms     []MatchArm
+	Default  *MatchArm
+}
+
+func (rs *MatchExpression) expressionNode()      {}
+func (rs *MatchExpression) TokenLiteral() string { return rs.Token.Text }
+func (nt *MatchExpression) GetToken() Token      { return nt.Token }
+func (rs *MatchExpression) String() string {
+	var out bytes.Buffer
+	out.WriteString(rs.TokenLiteral() + " ")
+	out.WriteString(rs.MatchKey.String())
+	out.WriteString("{ ")
+	if rs.Arms != nil {
+		for _, arm := range rs.Arms {
+			out.WriteString(arm.Pattern.String())
+			out.WriteString(" => {")
+			out.WriteString(arm.Body.String())
+			out.WriteString(" }")
+		}
+	}
+	// default case (catch all)
+	if rs.Default != nil {
+		out.WriteString(rs.Default.Pattern.String())
+		out.WriteString(" => {")
+		out.WriteString(rs.Default.Body.String())
+		out.WriteString(" }")
+	}
+	out.WriteString(" } ")
 	return out.String()
 }
 
@@ -273,25 +352,23 @@ func (fs *ForStatement) String() string {
 	return out.String()
 }
 
-type FunctionStatement struct {
+type FunctionExpression struct {
 	Token      Token
-	Name       *Identifier
 	Args       []*ArgExpression
 	ReturnType Expression
 	Body       *BlockStatement
 }
 
-func (fn *FunctionStatement) statementNode()       {}
-func (fn *FunctionStatement) TokenLiteral() string { return fn.Token.Text }
-func (nt *FunctionStatement) GetToken() Token      { return nt.Token }
-func (fn *FunctionStatement) String() string {
+func (fn *FunctionExpression) expressionNode()      {}
+func (fn *FunctionExpression) TokenLiteral() string { return fn.Token.Text }
+func (nt *FunctionExpression) GetToken() Token      { return nt.Token }
+func (fn *FunctionExpression) String() string {
 	var out bytes.Buffer
 	params := []string{}
 	for _, p := range fn.Args {
 		params = append(params, p.String())
 	}
 	out.WriteString(fn.TokenLiteral())
-	out.WriteString(fmt.Sprintf(" %v ", fn.Name))
 	out.WriteString("(")
 	out.WriteString(strings.Join(params, ", "))
 	out.WriteString(")")
