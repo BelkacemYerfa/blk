@@ -45,7 +45,7 @@ fn main() {
 
 ## ✅ Language Features
 
-- **Static types**: `int`, `float`, `bool`, `string`, `[]type`, `array(type)`, `map(k, v)`, `fn(...) -> ...`
+- **Static types**: `int`, `float`, `bool`, `string`, `[]type`, `array(type)`, `map(k, v)`, `fn(...) ...`
 - **No `let/var` required**: use `:=` for all variable bindings
 - **Top-level constants**: use `name :: value` syntax (Jai-style)
 - **Structs with methods** using embedded functions
@@ -209,13 +209,29 @@ double := fn(x: int) int {
 }
 ```
 
+### Function calls
+
+```blk
+result := add(5, 10)
+```
+
+### Scopes
+
+````blk
+scopeName :
+{
+    x := 10
+    y := 20
+    result := x + y
+    print(result) // 30
+}
+
 ---
 
 ## 🛠️ Development Roadmap
 
 - [x] Lexer and Tokenizer
 - [x] Parser and AST Generator
-- [ ] Expression-based syntax model
 - [ ] Semantic analysis and type system
 - [ ] Pattern matcher and tag-dispatcher
 - [ ] LLVM IR backend
@@ -231,7 +247,7 @@ double := fn(x: int) int {
 
 ```bash
 blk compile main.blk -o out
-```
+````
 
 ### Run
 
