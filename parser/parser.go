@@ -1237,8 +1237,7 @@ func (p *Parser) parseBindExpression() (Statement, error) {
 
 	switch tok.Kind {
 	case TokenWalrus, TokenBind:
-		// consume the operator
-		p.nextToken()
+		// fall through
 	case TokenColon:
 		// parse the type
 		stmt.ExplicitType = p.ParseType()

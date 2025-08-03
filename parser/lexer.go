@@ -106,11 +106,13 @@ func (l *Lexer) NextToken() Token {
 		nextChar := string(l.Content[l.Cur])
 		switch nextChar {
 		case ":":
+			l.readChar()
 			token.LiteralToken = LiteralToken{
 				Kind: TokenBind,
 				Text: "::",
 			}
 		case "=":
+			l.readChar()
 			token.LiteralToken = LiteralToken{
 				Kind: TokenWalrus,
 				Text: ":=",

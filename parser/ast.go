@@ -159,26 +159,6 @@ func (ls *ImportStatement) String() string {
 	return out.String()
 }
 
-type TypeStatement struct {
-	Token Token // the token.LET token
-	Name  *Identifier
-	Value Expression
-}
-
-func (ts *TypeStatement) statementNode()       {}
-func (ts *TypeStatement) TokenLiteral() string { return ts.Token.Text }
-func (nt *TypeStatement) GetToken() Token      { return nt.Token }
-func (ts *TypeStatement) String() string {
-	var out bytes.Buffer
-	out.WriteString(ts.TokenLiteral() + " ")
-	out.WriteString(ts.Name.String())
-	out.WriteString(" = ")
-	if ts.Value != nil {
-		out.WriteString(ts.Value.String())
-	}
-	return out.String()
-}
-
 type Field struct {
 	Key   *Identifier
 	Value Expression // any value type

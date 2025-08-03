@@ -4,6 +4,7 @@ import (
 	"blk/internals"
 	"blk/parser"
 	"fmt"
+	"reflect"
 	"strconv"
 )
 
@@ -72,21 +73,22 @@ func (tar *typeAliasResolver) resolveAlias(typeName string) string {
 		}
 
 		// get the value of the type alias
-		typeName = tar.normalizeType(alias.DeclNode.(*parser.TypeStatement).Value.(parser.Type)).String()
+		// typeName = tar.normalizeType(alias.DeclNode.(*parser.TypeStatement).Value.(parser.Type)).String()
+		typeName = alias.Name
 	}
 	return typeName
 }
 
 type TypeInference struct {
 	CurrSymbol    *SymbolInfo
-	Collector     *internals.ErrorCollector
+	collector     *internals.ErrorCollector
 	aliasResolver *typeAliasResolver
 	symbols       *symbolResolver
 }
 
 func NewTypeInference(errCollector *internals.ErrorCollector, aliasRs *typeAliasResolver, symbolRs *symbolResolver) *TypeInference {
 	return &TypeInference{
-		Collector:     errCollector,
+		collector:     errCollector,
 		aliasResolver: aliasRs,
 		symbols:       symbolRs,
 	}
@@ -98,7 +100,7 @@ func (ti *TypeInference) visitIdentifier(expr *parser.Identifier) *SymbolInfo {
 
 	if !isMatched {
 		errMsg := ("ERROR: identifier, needs to be declared before it gets used")
-		ti.Collector.Add(ti.Collector.Error(expr.Token, errMsg))
+		ti.collector.Add(ti.collector.Error(expr.Token, errMsg))
 	}
 
 	return ident
@@ -141,6 +143,8 @@ func (ti *TypeInference) inferAssociatedValueType(expr parser.Expression) parser
 		return ti.inferUnaryExpressionType(ep)
 	case *parser.BinaryExpression:
 		return ti.inferBinaryExpressionType(ep)
+	case *parser.MemberShipExpression:
+		return ti.inferMembershipExpressionType(ep)
 	}
 
 	return &parser.NodeType{}
@@ -163,7 +167,7 @@ func (ti *TypeInference) inferArrayType(expr *parser.ArrayLiteral) parser.Type {
 		if firstElem.Type != resType.(*parser.NodeType).Type {
 			errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", firstElem, resType)
 			expr.Token.Text = expr.String()
-			ti.Collector.Add(ti.Collector.Error(expr.Token, errMsg))
+			ti.collector.Add(ti.collector.Error(expr.Token, errMsg))
 		}
 	}
 
@@ -197,12 +201,12 @@ func (ti *TypeInference) inferMapType(expr *parser.MapLiteral) parser.Type {
 		case *parser.NodeType:
 			if rst.Type != resType.GetType() {
 				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
-				ti.Collector.Add(ti.Collector.Error(key.GetToken(), errMsg))
+				ti.collector.Add(ti.collector.Error(key.GetToken(), errMsg))
 			}
 		case *parser.MapType:
 			if rst.Type != resType.GetType() {
 				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
-				ti.Collector.Add(ti.Collector.Error(key.GetToken(), errMsg))
+				ti.collector.Add(ti.collector.Error(key.GetToken(), errMsg))
 			}
 		default:
 		}
@@ -218,12 +222,12 @@ func (ti *TypeInference) inferMapType(expr *parser.MapLiteral) parser.Type {
 		case *parser.NodeType:
 			if rst.Type != resType.GetType() {
 				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
-				ti.Collector.Add(ti.Collector.Error(value.GetToken(), errMsg))
+				ti.collector.Add(ti.collector.Error(value.GetToken(), errMsg))
 			}
 		case *parser.MapType:
 			if rst.Type != resType.GetType() {
 				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
-				ti.Collector.Add(ti.Collector.Error(value.GetToken(), errMsg))
+				ti.collector.Add(ti.collector.Error(value.GetToken(), errMsg))
 			}
 		default:
 		}
@@ -246,7 +250,7 @@ func (ti *TypeInference) inferIdentifierType(expr *parser.Identifier) parser.Typ
 	}
 
 	switch node := sym.DeclNode.(type) {
-	case *parser.LetStatement:
+	case *parser.VarDeclaration:
 		return ti.inferAssociatedValueType(node.Value)
 	case *parser.StructInstanceExpression:
 		return ti.inferAssociatedValueType(node.Left)
@@ -272,26 +276,26 @@ func (ti *TypeInference) inferStructInstanceType(expr *parser.StructInstanceExpr
 		errMsg := fmt.Sprintf("ERROR: (%v) type can't be used here, only identifiers", lf)
 		// TODO: enhance the token position placement
 		tok := expr.Left.GetToken()
-		ti.Collector.Add(ti.Collector.Error(tok, errMsg))
+		ti.collector.Add(ti.collector.Error(tok, errMsg))
 		return nil
 	}
 
 	sym := ti.visitIdentifier(expr.Left.(*parser.Identifier))
-	structDef := &parser.StructStatement{}
+	structDef := &parser.StructExpression{}
 
 	if sym == nil {
 		return nil
 	}
 
-	switch structDf := sym.DeclNode.(type) {
-	case *parser.StructStatement:
+	switch structDf := sym.DeclNode.(*parser.VarDeclaration).Value.(type) {
+	case *parser.StructExpression:
 		structDef = structDf
-	case *parser.TypeStatement:
-		structDef = ti.visitIdentifier(
-			&parser.Identifier{
-				Value: structDf.Value.(*parser.NodeType).Type,
-			},
-		).DeclNode.(*parser.StructStatement)
+	// case *parser.TypeStatement:
+	// 	structDef = ti.visitIdentifier(
+	// 		&parser.Identifier{
+	// 			Value: structDf.Value.(*parser.NodeType).Type,
+	// 		},
+	// 	).DeclNode.(*parser.StructStatement)
 	default:
 	}
 
@@ -308,12 +312,12 @@ func (ti *TypeInference) inferStructInstanceType(expr *parser.StructInstanceExpr
 		case *parser.NodeType:
 			if rst.Type != resType.Value.String() {
 				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
-				ti.Collector.Add(ti.Collector.Error(elem.Value.GetToken(), errMsg))
+				ti.collector.Add(ti.collector.Error(elem.Value.GetToken(), errMsg))
 			}
 		case *parser.MapType:
 			if rst.Type != resType.Value.String() {
 				errMsg := fmt.Sprintf("ERROR: multitude of different types in the array (%v,%v,...etc), remove incompatible types", keyElem, resType)
-				ti.Collector.Add(ti.Collector.Error(elem.Value.GetToken(), errMsg))
+				ti.collector.Add(ti.collector.Error(elem.Value.GetToken(), errMsg))
 			}
 		default:
 		}
@@ -338,7 +342,7 @@ func (ti *TypeInference) inferIndexAccessType(expr *parser.IndexExpression) pars
 			if index > fixedSized-1 {
 				errMsg := fmt.Sprintf("ERROR: index out of bound, array size %d", fixedSized)
 				expr.Token.Text = expr.String()
-				ti.Collector.Add(ti.Collector.Error(expr.Token, errMsg))
+				ti.collector.Add(ti.collector.Error(expr.Token, errMsg))
 			}
 		}
 		// break at this point, when using the array map
@@ -346,11 +350,11 @@ func (ti *TypeInference) inferIndexAccessType(expr *parser.IndexExpression) pars
 		if indexType.String() != "int" && rst.Type == "array" {
 			errMsg := fmt.Sprintf("ERROR: can't use %v as index, index should be of type int %v", indexType, rst)
 			expr.Token.Text = expr.String()
-			ti.Collector.Add(ti.Collector.Error(expr.Token, errMsg))
+			ti.collector.Add(ti.collector.Error(expr.Token, errMsg))
 			return nil
 		}
 		// problem is here
-		// ti.Collector.Add(rst.Type) // prints array(int) instead of array
+		// ti.collector.Add(rst.Type) // prints array(int) instead of array
 		if rst.ChildType != nil {
 			return rst.ChildType
 		} else {
@@ -391,7 +395,7 @@ func (ti *TypeInference) inferIndexAccessType(expr *parser.IndexExpression) pars
 		if indexType.String() != tempType.String() {
 			errMsg := fmt.Sprintf("ERROR: can't use type (%v) as key in a map, key should be of same type as one defined in map (%s)", indexType, tempType)
 			expr.Token.Text = expr.String()
-			ti.Collector.Add(ti.Collector.Error(expr.Token, errMsg))
+			ti.collector.Add(ti.collector.Error(expr.Token, errMsg))
 			return nil
 		}
 
@@ -403,10 +407,29 @@ func (ti *TypeInference) inferIndexAccessType(expr *parser.IndexExpression) pars
 }
 
 func (ti *TypeInference) inferCallExpressionType(expr *parser.CallExpression) parser.Type {
-	sym := ti.visitIdentifier(&expr.Function)
+	// check if this function is method or is a function
+	sym := ti.CurrSymbol
+	if structDef, ok := ti.CurrSymbol.DeclNode.(*parser.VarDeclaration).Value.(*parser.StructExpression); ok {
+		// get the idx of the field
 
-	if sym == nil {
-		return nil
+		for idx := range structDef.Body {
+			field := structDef.Body[idx]
+
+			if field.Key.Value == expr.Function.Value {
+				// cast the key to the function definition
+				if functionDef, ok := field.Value.(*parser.FunctionExpression); ok {
+					return internals.ParseToNodeType(ti.aliasResolver.normalizeType(functionDef.ReturnType))
+				} else {
+
+				}
+			}
+		}
+	} else {
+		sym = ti.visitIdentifier(&expr.Function)
+
+		if sym == nil {
+			return nil
+		}
 	}
 
 	// calls may return hashMaps, check for that also
@@ -416,7 +439,7 @@ func (ti *TypeInference) inferCallExpressionType(expr *parser.CallExpression) pa
 func (ti *TypeInference) inferUnaryExpressionType(expr *parser.UnaryExpression) parser.Type {
 	if ti.CurrSymbol.Type.(*parser.NodeType).Type == parser.BoolType && expr.Operator == "-" {
 		errMsg := "ERROR: can't use operator (-) with boolean types, only operator (!) is allowed"
-		ti.Collector.Add(ti.Collector.Error(expr.Token, errMsg))
+		ti.collector.Add(ti.collector.Error(expr.Token, errMsg))
 	}
 
 	return ti.inferAssociatedValueType(expr.Right)
@@ -434,7 +457,7 @@ func (ti *TypeInference) inferBinaryExpressionType(expr *parser.BinaryExpression
 			"ERROR: type mismatch, we can't compare 2 different types in a binary expression, left (%v), right (%v)", leftType, rightType,
 		)
 		expr.Token.Col++
-		ti.Collector.Add(ti.Collector.Error(expr.Token, errMsg))
+		ti.collector.Add(ti.collector.Error(expr.Token, errMsg))
 		return nil
 	}
 
@@ -451,7 +474,7 @@ func (ti *TypeInference) inferBinaryExpressionType(expr *parser.BinaryExpression
 			errMsg := fmt.Sprintf(
 				"ERROR: (%s) isn't allowed on (%v) type", operator, leftType.String(),
 			)
-			ti.Collector.Add(ti.Collector.Error(expr.Token, errMsg))
+			ti.collector.Add(ti.collector.Error(expr.Token, errMsg))
 			return nil
 		} else {
 			return &parser.NodeType{
@@ -470,7 +493,7 @@ func (ti *TypeInference) inferBinaryExpressionType(expr *parser.BinaryExpression
 			errMsg := fmt.Sprintf(
 				"ERROR: (%s) isn't allowed on (%v) type", operator, leftType.String(),
 			)
-			ti.Collector.Add(ti.Collector.Error(expr.Token, errMsg))
+			ti.collector.Add(ti.collector.Error(expr.Token, errMsg))
 			return nil
 		}
 		return &parser.NodeType{
@@ -482,7 +505,7 @@ func (ti *TypeInference) inferBinaryExpressionType(expr *parser.BinaryExpression
 			errMsg := fmt.Sprintf(
 				"ERROR: (%s) isn't allowed on %s type", operator, leftType.String(),
 			)
-			ti.Collector.Add(ti.Collector.Error(expr.Token, errMsg))
+			ti.collector.Add(ti.collector.Error(expr.Token, errMsg))
 		}
 	default:
 		// this will return the first part if nothing there matched
@@ -496,4 +519,68 @@ func (ti *TypeInference) inferBinaryExpressionType(expr *parser.BinaryExpression
 		Token: expr.Token,
 		Type:  parser.BoolType,
 	}
+}
+
+func (ti *TypeInference) inferMembershipExpressionType(expr *parser.MemberShipExpression) parser.Type {
+	start, ok := expr.Object.(*parser.Identifier)
+
+	if !ok {
+		errMsg := "ERROR: blk language doesn't support bind besides on struct definitions"
+		ti.collector.Add(ti.collector.Error(expr.Object.GetToken(), errMsg))
+		return nil
+	}
+
+	sym, found := ti.symbols.Resolve(start.Value)
+
+	if !found {
+		errMsg := fmt.Sprintf(
+			"ERROR: (%s) needs to be declare an initialized first", expr.Object)
+		ti.collector.Add(ti.collector.Error(expr.Token, errMsg))
+		return nil
+	}
+
+	// check if it is a struct instance
+	instance, isStructInstance := sym.Type.(*parser.StructInstanceExpression)
+
+	if !isStructInstance {
+		errMsg := fmt.Sprintf(
+			"ERROR: (%s) needs to be of a valid struct instance", expr.Object)
+		ti.collector.Add(ti.collector.Error(expr.Token, errMsg))
+		return nil
+	}
+
+	// check if the property type is built into that struct definition
+	ident := ti.visitIdentifier(instance.Left.(*parser.Identifier))
+
+	if ident == nil {
+		return nil
+	}
+
+	structDef := ident.DeclNode.(*parser.VarDeclaration).Value.(*parser.StructExpression)
+
+	found = false
+
+	for idx := range structDef.Body {
+		field := structDef.Body[idx]
+
+		if field.Key.Value == expr.Property.GetToken().Text {
+			// use reflect to compare
+			cast := reflect.TypeOf(field.Value)
+			property := reflect.TypeOf(expr.Property)
+			if cast == property {
+				found = true
+			}
+		}
+	}
+
+	if !found {
+		errMsg := fmt.Sprintf(
+			"ERROR: (%s) needs to exist on the struct definition", expr.Property)
+		ti.collector.Add(ti.collector.Error(expr.Property.GetToken(), errMsg))
+		return nil
+	}
+
+	ti.CurrSymbol = ident
+
+	return ti.inferAssociatedValueType(expr.Property)
 }

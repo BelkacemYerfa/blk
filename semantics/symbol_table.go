@@ -49,6 +49,10 @@ func NewSymbolResolver() *symbolResolver {
 }
 
 func (s *symbolResolver) Define(name string, sym *SymbolInfo) {
+	if _, ok := s.current.Store[name]; ok {
+		// if already exist we skip
+		return
+	}
 	s.current.Store[name] = *sym
 }
 
