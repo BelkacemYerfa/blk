@@ -1,7 +1,9 @@
 package semantics
 
 import (
+	"blk/ast"
 	"blk/internals"
+	"blk/lexer"
 	"blk/parser"
 	"fmt"
 	"slices"
@@ -29,7 +31,7 @@ func NewTypeChecker(errCollector *internals.ErrorCollector) *TypeChecker {
 	return tp
 }
 
-func (s *TypeChecker) SymbolBuilder(ast *parser.Program) {
+func (s *TypeChecker) SymbolBuilder(ast *ast.Program) {
 	// insert prebuilt func later on
 	for _, node := range ast.Statements {
 		s.symbolReader(node)
@@ -44,61 +46,61 @@ func (s *TypeChecker) SymbolBuilder(ast *parser.Program) {
 	}
 }
 
-func (s *TypeChecker) symbolReader(node parser.Statement) {
+func (s *TypeChecker) symbolReader(node ast.Statement) {
 	switch node := node.(type) {
-	case *parser.VarDeclaration:
+	case *ast.VarDeclaration:
 		s.visitVarDCL(node)
-	case *parser.WhileStatement:
+	case *ast.WhileStatement:
 		s.visitWhileLoopDCL(node)
-	case *parser.ForStatement:
+	case *ast.ForStatement:
 		s.visitForLoopDCL(node)
-	case *parser.ReturnStatement:
+	case *ast.ReturnStatement:
 		s.visitReturnDCL(node)
-	case *parser.ScopeStatement:
+	case *ast.ScopeStatement:
 		s.visitScopeDCL(node)
-	case *parser.ImportStatement:
+	case *ast.ImportStatement:
 		// TODO: implement later
 
 	default:
 		// type is an expression statement
-		stmt := node.(*parser.ExpressionStatement)
+		stmt := node.(*ast.ExpressionStatement)
 		s.symbolReaderExpression(stmt.Expression)
 	}
 }
 
-func (s *TypeChecker) symbolReaderExpression(node parser.Expression) {
+func (s *TypeChecker) symbolReaderExpression(node ast.Expression) {
 	switch expr := node.(type) {
-	case *parser.Identifier:
+	case *ast.Identifier:
 		s.visitIdentifier(expr)
-	case *parser.CallExpression:
+	case *ast.CallExpression:
 		s.visitCallExpression(expr)
-	case *parser.UnaryExpression:
+	case *ast.UnaryExpression:
 		s.visitUnaryExpression(expr)
-	case *parser.BinaryExpression:
+	case *ast.BinaryExpression:
 		s.visitBinaryExpression(expr)
-	case *parser.IfExpression:
+	case *ast.IfExpression:
 		s.visitIfExpression(expr)
-	case *parser.StructInstanceExpression:
+	case *ast.StructInstanceExpression:
 		s.visitStructInstanceExpression(expr)
-	case *parser.ArrayLiteral:
+	case *ast.ArrayLiteral:
 		s.visitArrayLiteral(expr)
-	case *parser.MapLiteral:
+	case *ast.MapLiteral:
 		s.visitMapLiteral(expr)
-	case *parser.IndexExpression:
+	case *ast.IndexExpression:
 		s.visitIndexExpression(expr)
-	case *parser.MemberShipExpression:
+	case *ast.MemberShipExpression:
 		s.visitMemberShipAccess(expr)
 	// TODO: add missing expressions
-	case *parser.FunctionExpression:
+	case *ast.FunctionExpression:
 		s.visitFuncDCL(expr)
-	case *parser.StructExpression:
+	case *ast.StructExpression:
 		s.visitStructDCL(expr)
 
 	default:
 	}
 }
 
-func (s *TypeChecker) visitFuncDCL(expr *parser.FunctionExpression) {
+func (s *TypeChecker) visitFuncDCL(expr *ast.FunctionExpression) {
 
 	// check the args and body
 	newScope := s.symbols.EnterScope()
@@ -113,7 +115,7 @@ func (s *TypeChecker) visitFuncDCL(expr *parser.FunctionExpression) {
 			DeclNode: arg,
 			Kind:     SymbolIdentifier,
 			Depth:    s.symbols.current.Depth,
-			Type:     arg.Type.(parser.Type),
+			Type:     arg.Type.(ast.Type),
 		}
 		s.symbols.Define(sym.Name, sym)
 	}
@@ -135,7 +137,7 @@ func (s *TypeChecker) visitFuncDCL(expr *parser.FunctionExpression) {
 				s.symbolReader(nd)
 				// check happens only on the last instruction
 				if idx == len(block.Body)-1 && expr.ReturnType.String() != "void" {
-					if _, ok := nd.(*parser.ReturnStatement); !ok {
+					if _, ok := nd.(*ast.ReturnStatement); !ok {
 						errMsg := fmt.Sprintf("ERROR: a function that has (%v) as return type, needs always a return statement", expr.ReturnType)
 						s.collector.Add(s.collector.Error(nd.GetToken(), errMsg))
 					}
@@ -147,19 +149,9 @@ func (s *TypeChecker) visitFuncDCL(expr *parser.FunctionExpression) {
 	s.symbols.ExitScope(newScope)
 	s.visitFieldType(expr.ReturnType)
 
-	// entry point function
-	// if sym.Name == "main" {
-	// 	// the return type needs to be void explicitly
-	// 	if node.ReturnType.String() != "void" {
-	// 		errMsg := fmt.Sprintf("ERROR: fn (%v) return type needs to be void", sym.Name)
-	// 		s.collector.Add(s.collector.Error(node.ReturnType.GetToken(), errMsg))
-	// 	}
-	// }
-
-	// s.symbols.Define(sym.Name, sym)
 }
 
-func (s *TypeChecker) visitVarDCL(node *parser.VarDeclaration) {
+func (s *TypeChecker) visitVarDCL(node *ast.VarDeclaration) {
 	kind := SymbolLet
 
 	isMutable := false
@@ -185,7 +177,7 @@ func (s *TypeChecker) visitVarDCL(node *parser.VarDeclaration) {
 		s.collector.Add(s.collector.Error(node.Token, errMsg))
 	}
 
-	if _, ok := node.Value.(*parser.StructInstanceExpression); ok {
+	if _, ok := node.Value.(*ast.StructInstanceExpression); ok {
 		sym.Type = node.Value
 		s.symbols.Define(sym.Name, sym)
 	}
@@ -193,7 +185,7 @@ func (s *TypeChecker) visitVarDCL(node *parser.VarDeclaration) {
 	// this is for to save the last current node if we're in function scope
 	tempCurr := s.currNode
 	s.currNode = sym
-	s.inference.CurrSymbol = sym
+	s.inference.currSymbol = sym
 	s.visitFieldType(node.ExplicitType)
 	s.symbolReaderExpression(node.Value)
 	gotType := s.inference.inferAssociatedValueType(node.Value)
@@ -205,29 +197,11 @@ func (s *TypeChecker) visitVarDCL(node *parser.VarDeclaration) {
 	}
 
 	s.currNode = tempCurr
-	s.inference.CurrSymbol = tempCurr
+	s.inference.currSymbol = tempCurr
 	s.symbols.Define(sym.Name, sym)
 }
 
-func (s *TypeChecker) visitStructDCL(expr *parser.StructExpression) {
-
-	// sym := &SymbolInfo{
-	// 	Name:     node.Name.Value,
-	// 	Kind:     SymbolStruct,
-	// 	Depth:    s.symbols.current.Depth,
-	// 	DeclNode: node,
-	// 	Type: &parser.NodeType{
-	// 		Type: node.Name.Value,
-	// 	},
-	// }
-
-	// _, ok := s.symbols.current.Store[sym.Name]
-
-	// if ok {
-	// 	errMsg := fmt.Sprintf("ERROR: %v identifier is already declared", sym.Name)
-	// 	s.collector.Add(s.collector.Error(node.Token, errMsg))
-	// }
-
+func (s *TypeChecker) visitStructDCL(expr *ast.StructExpression) {
 	// we define the struct here, in case if it is used in an inner field(s)
 	if len(expr.Body) > 0 {
 		newScope := s.symbols.EnterScope()
@@ -246,20 +220,38 @@ func (s *TypeChecker) visitStructDCL(expr *parser.StructExpression) {
 					DeclNode: field.Key,
 				})
 			}
+			switch ftp := field.Value.(type) {
+			case *ast.Identifier:
+				// do something
+				fmt.Println(ftp)
+			case *ast.FunctionExpression:
+				// do something
+				s.currNode = &SymbolInfo{
+					Name:     fieldName,
+					Kind:     SymbolFunc,
+					Depth:    s.symbols.current.Depth,
+					DeclNode: field.Value,
+					Type:     ftp.ReturnType,
+				}
+				s.inference.currSymbol = s.currNode
+				s.visitFuncDCL(ftp)
 
+			case *ast.MapType, *ast.NodeType:
+				s.visitFieldType(ftp)
+			default:
+				errMsg := fmt.Sprintf("ERROR: can't use %v as type of field in a given struct", ftp)
+				s.collector.Add(s.collector.Error(field.Key.Token, errMsg))
+			}
 			// check for if the type is custom type
-			// and if it is check if it already in the table or not
-			fieldType := field.Value
-			s.visitFieldType(fieldType)
 		}
 		s.symbols.ExitScope(newScope)
 	}
 }
 
-func (s *TypeChecker) visitFieldType(fieldType parser.Expression) {
+func (s *TypeChecker) visitFieldType(fieldType ast.Expression) {
 
 	switch tp := fieldType.(type) {
-	case *parser.NodeType:
+	case *ast.NodeType:
 		if _, ok := parser.AtomicTypes[tp.Type]; !ok {
 			if tp.Type != "array" {
 				_, exist := s.symbols.Resolve(tp.Type)
@@ -275,7 +267,7 @@ func (s *TypeChecker) visitFieldType(fieldType parser.Expression) {
 			s.visitFieldType(tp.ChildType)
 		}
 
-	case *parser.MapType:
+	case *ast.MapType:
 		if _, ok := parser.AtomicTypes[tp.Type]; !ok {
 			if tp.Type != "map" {
 				_, exist := s.symbols.Resolve(tp.Type)
@@ -301,7 +293,7 @@ func (s *TypeChecker) visitFieldType(fieldType parser.Expression) {
 
 }
 
-// func (s *TypeChecker) visitTypeDCL(node *parser.TypeStatement) {
+// func (s *TypeChecker) visitTypeDCL(node *ast.TypeStatement) {
 // 	sym := &SymbolInfo{
 // 		Name:     node.Name.Value,
 // 		Kind:     SymbolType,
@@ -323,7 +315,7 @@ func (s *TypeChecker) visitFieldType(fieldType parser.Expression) {
 
 // }
 
-func (s *TypeChecker) visitBlockDCL(block *parser.BlockStatement) {
+func (s *TypeChecker) visitBlockDCL(block *ast.BlockStatement) {
 
 	// save the return type for the func
 	currentFunction := s.currNode
@@ -343,7 +335,7 @@ func (s *TypeChecker) visitBlockDCL(block *parser.BlockStatement) {
 			s.symbolReader(nd)
 			// check happens only on the last instruction
 			if currentFunction.Kind == SymbolFunc && idx == len(block.Body)-1 && currentFunction.Type.String() != "void" {
-				if _, ok := nd.(*parser.ReturnStatement); !ok {
+				if _, ok := nd.(*ast.ReturnStatement); !ok {
 					errMsg := fmt.Sprintf("ERROR: a function that has (%v) as return type, needs always a return statement", currentFunction.Type)
 					s.collector.Add(s.collector.Error(nd.GetToken(), errMsg))
 				}
@@ -354,15 +346,15 @@ func (s *TypeChecker) visitBlockDCL(block *parser.BlockStatement) {
 
 }
 
-func (s *TypeChecker) visitWhileLoopDCL(node *parser.WhileStatement) {
+func (s *TypeChecker) visitWhileLoopDCL(node *ast.WhileStatement) {
 	// check if the condition
 	condition := node.Condition
 
 	switch cnd := condition.(type) {
-	case *parser.Identifier:
+	case *ast.Identifier:
 		// later on check if the identifier will get evaluated to a boolean
 		s.visitIdentifier(cnd)
-	case *parser.UnaryExpression:
+	case *ast.UnaryExpression:
 		s.visitUnaryExpression(cnd)
 	default:
 		// do nothing
@@ -372,7 +364,7 @@ func (s *TypeChecker) visitWhileLoopDCL(node *parser.WhileStatement) {
 	s.visitBlockDCL(node.Body)
 }
 
-func (s *TypeChecker) visitForLoopDCL(node *parser.ForStatement) {
+func (s *TypeChecker) visitForLoopDCL(node *ast.ForStatement) {
 	for _, ident := range node.Identifiers {
 		sym := &SymbolInfo{
 			Name:     ident.Value,
@@ -391,7 +383,7 @@ func (s *TypeChecker) visitForLoopDCL(node *parser.ForStatement) {
 	s.visitBlockDCL(node.Body)
 }
 
-func (s *TypeChecker) visitReturnDCL(node *parser.ReturnStatement) {
+func (s *TypeChecker) visitReturnDCL(node *ast.ReturnStatement) {
 	if s.symbols.current.Depth == 0 {
 		// means it is on the global scope not in a function
 		errMsg := "ERROR: return statement, can't be on the global scope, needs to be inside of a function"
@@ -406,14 +398,14 @@ func (s *TypeChecker) visitReturnDCL(node *parser.ReturnStatement) {
 	s.typeEquals(returnType, functionReturnType, node.ReturnValue)
 }
 
-func (s *TypeChecker) visitScopeDCL(node *parser.ScopeStatement) {
+func (s *TypeChecker) visitScopeDCL(node *ast.ScopeStatement) {
 	// TODO: check if the name already exists here later on
 	if node.Body != nil {
 		s.visitBlockDCL(node.Body)
 	}
 }
 
-func (s *TypeChecker) visitCallExpression(expr *parser.CallExpression) {
+func (s *TypeChecker) visitCallExpression(expr *ast.CallExpression) {
 	functionName := expr.Function.Value
 
 	function, isMatched := s.symbols.Resolve(functionName)
@@ -426,7 +418,7 @@ func (s *TypeChecker) visitCallExpression(expr *parser.CallExpression) {
 		return
 	}
 
-	dclNode := function.DeclNode.(*parser.VarDeclaration).Value.(*parser.FunctionExpression)
+	dclNode := function.DeclNode.(*ast.VarDeclaration).Value.(*ast.FunctionExpression)
 	returnValue := dclNode.ReturnType
 	s.visitFieldType(returnValue)
 
@@ -443,12 +435,12 @@ func (s *TypeChecker) visitCallExpression(expr *parser.CallExpression) {
 
 	if len(args) > len(dclNode.Args) {
 		errMsg := "ERROR: function call is receiving more args than it should, consider removing them, or add them into the function signature"
-		tok := parser.Token{}
+		tok := lexer.Token{}
 		startIdx := len(dclNode.Args)
 
 		for idx, arg := range args[startIdx:] {
 
-			if expr, ok := arg.(parser.Node); ok {
+			if expr, ok := arg.(ast.Node); ok {
 				tok.Text += expr.String()
 				tok.Row = expr.GetToken().Row
 				if idx == 0 {
@@ -468,7 +460,7 @@ func (s *TypeChecker) visitCallExpression(expr *parser.CallExpression) {
 	// and also tries to infer the type and do the comparison between the definition and the provided ones
 	for idx, arg := range args {
 		switch ag := arg.(type) {
-		case *parser.IfExpression:
+		case *ast.IfExpression:
 			errMsg := "ERROR: can't use if expression as an arg of a call function"
 			tok := ag.GetToken()
 			tok.Text = ag.String()
@@ -477,19 +469,19 @@ func (s *TypeChecker) visitCallExpression(expr *parser.CallExpression) {
 		default:
 			// handle only atomic types (strings, booleans, floats, ints)
 			returnType := s.inference.inferAssociatedValueType(ag)
-			tp := dclNode.Args[idx].Type.(parser.Type)
+			tp := dclNode.Args[idx].Type.(ast.Type)
 			s.typeEquals(tp, returnType, arg)
 		}
 	}
 
 }
 
-func (s *TypeChecker) typeEquals(tp, returnType parser.Type, arg parser.Expression) {
+func (s *TypeChecker) typeEquals(tp, returnType ast.Type, arg ast.Expression) {
 
 	switch ept := tp.(type) {
-	case *parser.NodeType:
+	case *ast.NodeType:
 		switch ift := returnType.(type) {
-		case *parser.NodeType:
+		case *ast.NodeType:
 			if isMatching, errNode := internals.DeepEqualOnNodeType(ept, ift); !isMatching {
 				errMsg := ""
 				if returnType.String() == "nil" {
@@ -517,9 +509,9 @@ func (s *TypeChecker) typeEquals(tp, returnType parser.Type, arg parser.Expressi
 			tok.Text = arg.String()
 			s.collector.Add(s.collector.Error(tok, errMsg))
 		}
-	case *parser.MapType:
+	case *ast.MapType:
 		switch ift := returnType.(type) {
-		case *parser.MapType:
+		case *ast.MapType:
 			if isMatching, errNode := internals.DeepEqualOnMapType(ept, ift); !isMatching {
 				errMsg := ""
 				if returnType.String() == "nil" {
@@ -549,9 +541,9 @@ func (s *TypeChecker) typeEquals(tp, returnType parser.Type, arg parser.Expressi
 	}
 }
 
-func (s *TypeChecker) visitUnaryExpression(expr *parser.UnaryExpression) {
+func (s *TypeChecker) visitUnaryExpression(expr *ast.UnaryExpression) {
 	// check if the type is boolean or not
-	if s.currNode.Type.(*parser.NodeType).Type == parser.BoolType && expr.Operator == "-" {
+	if s.currNode.Type.(*ast.NodeType).Type == ast.BoolType && expr.Operator == "-" {
 		errMsg := "ERROR: can't use operator (-) with boolean types, only operator (!) is allowed"
 		s.collector.Add(s.collector.Error(expr.Token, errMsg))
 		return
@@ -559,11 +551,11 @@ func (s *TypeChecker) visitUnaryExpression(expr *parser.UnaryExpression) {
 
 	errMsg := ""
 	switch expr.Right.(type) {
-	case *parser.IfExpression:
+	case *ast.IfExpression:
 		errMsg = "ERROR: can't have an if expression as the right side of a unary expression"
-	case *parser.ArrayLiteral:
+	case *ast.ArrayLiteral:
 		errMsg = "ERROR: can't have an array literal as the right side of a unary expression"
-	case *parser.MapLiteral:
+	case *ast.MapLiteral:
 		errMsg = "ERROR: can't have a map literal as the right side of a unary expression"
 	default:
 		s.symbolReaderExpression(expr.Right)
@@ -576,15 +568,15 @@ func (s *TypeChecker) visitUnaryExpression(expr *parser.UnaryExpression) {
 	}
 }
 
-func (s *TypeChecker) visitBinaryExpression(expr *parser.BinaryExpression) {
+func (s *TypeChecker) visitBinaryExpression(expr *ast.BinaryExpression) {
 	// check if the type is boolean or not
 	errMsg := ""
 	switch expr.Left.(type) {
-	case *parser.IfExpression:
+	case *ast.IfExpression:
 		errMsg = "ERROR: can't have an if expression as the left side of a binary expression"
-	case *parser.ArrayLiteral:
+	case *ast.ArrayLiteral:
 		errMsg = "ERROR: can't have an array literal as the left side of a binary expression"
-	case *parser.MapLiteral:
+	case *ast.MapLiteral:
 		errMsg = "ERROR: can't have a map literal as the left side of a binary expression"
 	default:
 		s.symbolReaderExpression(expr.Right)
@@ -597,11 +589,11 @@ func (s *TypeChecker) visitBinaryExpression(expr *parser.BinaryExpression) {
 	}
 
 	switch expr.Right.(type) {
-	case *parser.IfExpression:
+	case *ast.IfExpression:
 		errMsg = "ERROR: can't have an if expression as the right side of a binary expression"
-	case *parser.ArrayLiteral:
+	case *ast.ArrayLiteral:
 		errMsg = "ERROR: can't have an array literal as the right side of a binary expression"
-	case *parser.MapLiteral:
+	case *ast.MapLiteral:
 		errMsg = "ERROR: can't have a map literal as the right side of a binary expression"
 	default:
 		s.symbolReaderExpression(expr.Right)
@@ -614,14 +606,14 @@ func (s *TypeChecker) visitBinaryExpression(expr *parser.BinaryExpression) {
 	}
 }
 
-func (s *TypeChecker) visitIfExpression(expr *parser.IfExpression) {
+func (s *TypeChecker) visitIfExpression(expr *ast.IfExpression) {
 	conditionExpression := expr.Condition
 
 	errMsg := ""
 	switch cExpr := conditionExpression.(type) {
-	case *parser.ArrayLiteral:
+	case *ast.ArrayLiteral:
 		errMsg = "ERROR: can't use an array literal as condition in if expression"
-	case *parser.MapLiteral:
+	case *ast.MapLiteral:
 		errMsg = "ERROR: can't use a map literal as condition in if expression"
 	default:
 		// rest of allowed operation
@@ -634,23 +626,23 @@ func (s *TypeChecker) visitIfExpression(expr *parser.IfExpression) {
 		s.collector.Add(s.collector.Error(tok, errMsg))
 	}
 
-	s.inference.inferAssociatedValueType(conditionExpression)
+	// s.inference.inferAssociatedValueType(conditionExpression)
 
 	// check the body of if
 	s.visitBlockDCL(expr.Consequence)
 
 	// check the body of the else, if it exists
 	switch alt := expr.Alternative.(type) {
-	case *parser.BlockStatement:
+	case *ast.BlockStatement:
 		s.visitBlockDCL(alt)
-	case *parser.IfExpression:
+	case *ast.IfExpression:
 		s.visitIfExpression(alt)
 	default:
 		// Do nothing
 	}
 }
 
-func (s *TypeChecker) visitIdentifier(expr *parser.Identifier) *SymbolInfo {
+func (s *TypeChecker) visitIdentifier(expr *ast.Identifier) *SymbolInfo {
 	// if (identifier) check if it declared or not
 	ident, isMatched := s.symbols.Resolve(expr.Value)
 
@@ -663,9 +655,9 @@ func (s *TypeChecker) visitIdentifier(expr *parser.Identifier) *SymbolInfo {
 	return ident
 }
 
-func (s *TypeChecker) visitStructInstanceExpression(expr *parser.StructInstanceExpression) {
+func (s *TypeChecker) visitStructInstanceExpression(expr *ast.StructInstanceExpression) {
 
-	identifier, ok := expr.Left.(*parser.Identifier)
+	identifier, ok := expr.Left.(*ast.Identifier)
 
 	if ok {
 		structDef, isMatched := s.symbols.Resolve(identifier.Value)
@@ -678,29 +670,29 @@ func (s *TypeChecker) visitStructInstanceExpression(expr *parser.StructInstanceE
 
 		body := expr.Body
 
-		keys := &parser.StructExpression{}
+		keys := &ast.StructExpression{}
 
-		switch strcDf := structDef.DeclNode.(*parser.VarDeclaration).Value.(type) {
-		case *parser.StructExpression:
+		switch strcDf := structDef.DeclNode.(*ast.VarDeclaration).Value.(type) {
+		case *ast.StructExpression:
 			keys = strcDf
-			// case *parser.TypeStatement:
+			// case *ast.TypeStatement:
 			// 	keys = s.visitIdentifier(
-			// 		&parser.Identifier{
-			// 			Value: strcDf.Value.(*parser.NodeType).Type,
+			// 		&ast.Identifier{
+			// 			Value: strcDf.Value.(*ast.NodeType).Type,
 			// 		},
-			// 	).DeclNode.(*parser.StructStatement)
+			// 	).DeclNode.(*ast.StructStatement)
 		}
 
 		// means that some fields are left out of the having an associated value
 		for _, field := range keys.Body {
 			// find the key in the struct instance
-			idx := slices.IndexFunc(body, func(f parser.FieldInstance) bool {
+			idx := slices.IndexFunc(body, func(f ast.FieldInstance) bool {
 				return f.Key.Value == field.Key.Value
 			})
 
 			// the field only gets initialized if it a valid type and not a build in method (function)
 
-			_, isFieldMethod := field.Value.(*parser.FunctionExpression)
+			_, isFieldMethod := field.Value.(*ast.FunctionExpression)
 
 			if idx == -1 && !isFieldMethod {
 				errMsg := fmt.Sprintf("ERROR: field (%v) needs to be instantiated with a value, cause it exists on the struct definition", field.Key.Value)
@@ -715,7 +707,7 @@ func (s *TypeChecker) visitStructInstanceExpression(expr *parser.StructInstanceE
 
 		for _, field := range body {
 			// find the key in the struct instance
-			idx := slices.IndexFunc(keys.Body, func(f parser.Field) bool {
+			idx := slices.IndexFunc(keys.Body, func(f ast.Field) bool {
 				return f.Key.Value == field.Key.Value
 			})
 
@@ -727,12 +719,12 @@ func (s *TypeChecker) visitStructInstanceExpression(expr *parser.StructInstanceE
 	}
 }
 
-func (s *TypeChecker) visitArrayLiteral(expr *parser.ArrayLiteral) {
+func (s *TypeChecker) visitArrayLiteral(expr *ast.ArrayLiteral) {
 	elements := expr.Elements
 
 	for _, elem := range elements {
 		switch elem.(type) {
-		case *parser.IfExpression:
+		case *ast.IfExpression:
 			errMsg := "ERROR: can't use an if expression as value in array literal"
 			tok := elem.GetToken()
 			tok.Text = elem.String()
@@ -743,16 +735,16 @@ func (s *TypeChecker) visitArrayLiteral(expr *parser.ArrayLiteral) {
 	}
 }
 
-func (s *TypeChecker) visitMapLiteral(expr *parser.MapLiteral) {
+func (s *TypeChecker) visitMapLiteral(expr *ast.MapLiteral) {
 	pairs := expr.Pairs
 	errMsg := ""
 	for key, value := range pairs {
 		switch k := key.(type) {
-		case *parser.IfExpression:
+		case *ast.IfExpression:
 			errMsg = "ERROR: can't use an if expression as key in a map literal"
-		case *parser.MapLiteral:
+		case *ast.MapLiteral:
 			errMsg = "ERROR: can't use an map literal as key of a map literal"
-		case *parser.ArrayLiteral:
+		case *ast.ArrayLiteral:
 			errMsg = "ERROR: can't use an array literal as key in map literal"
 		default:
 			s.symbolReaderExpression(k)
@@ -763,7 +755,7 @@ func (s *TypeChecker) visitMapLiteral(expr *parser.MapLiteral) {
 			s.collector.Add(s.collector.Error(tok, errMsg))
 		}
 		switch v := value.(type) {
-		case *parser.IfExpression:
+		case *ast.IfExpression:
 			errMsg = "ERROR: can't use an if expression as value in a map literal"
 			tok := key.GetToken()
 			tok.Text = key.String()
@@ -774,93 +766,67 @@ func (s *TypeChecker) visitMapLiteral(expr *parser.MapLiteral) {
 	}
 }
 
-func (s *TypeChecker) visitIndexExpression(expr *parser.IndexExpression) {
+func (s *TypeChecker) visitIndexExpression(expr *ast.IndexExpression) {
 	// check if the lest side is a valid
-	tok := parser.Token{}
 	errMsg := ""
 	switch lf := expr.Left.(type) {
-	case *parser.IfExpression:
+	case *ast.IfExpression:
 		errMsg = "ERROR: can't use an if expression as left side of index expression"
-		tok = lf.Token
-		tok.Text = lf.String()
-	case *parser.BinaryExpression:
+	case *ast.BinaryExpression:
 		errMsg = "ERROR: can't use a binary expression as left side of index expression, cause it evaluates to a boolean"
 		// construct the token
-		tok = lf.Token
-		lf.Token.Col -= 1
-		tok.Text = lf.String()
-	case *parser.UnaryExpression:
+	case *ast.UnaryExpression:
 		errMsg = "ERROR: can't use a unary expression as left side of index expression, cause it evaluates to a boolean"
-		tok = lf.Token
-		tok.Text = lf.String()
-	case *parser.StructInstanceExpression:
+	case *ast.StructInstanceExpression:
 		errMsg = "ERROR: can't use a struct instance as left side of index expression"
-		tok = lf.Token
-		tok.Text = lf.String()
 	default:
 		// nothing
 		s.symbolReaderExpression(lf)
 	}
 
-	if len(tok.Text) > 0 {
+	if len(errMsg) > 0 {
+		tok := expr.Left.GetToken()
+		tok.Text = expr.Left.String()
 		s.collector.Add(s.collector.Error(tok, errMsg))
 	}
 
 	switch rf := expr.Index.(type) {
-	case *parser.BinaryExpression:
+	case *ast.BinaryExpression:
 		errMsg = "ERROR: can't use a binary expression, cause it evaluates to a boolean"
-		// construct the token
-		rf.Token.Text = rf.String()
-		tok = rf.Token
-		tok.Text = rf.String()
-	case *parser.UnaryExpression:
+	case *ast.UnaryExpression:
 		errMsg = "ERROR: can't use a unary expression, cause it evaluates to a boolean"
-		tok = rf.Token
-		tok.Text = rf.String()
-	case *parser.IfExpression:
+	case *ast.IfExpression:
 		errMsg = "ERROR: can't use an if expression as index, index can only be an int"
-		tok = rf.Token
-		tok.Text = rf.String()
 	default:
 		s.symbolReaderExpression(rf)
 	}
 
-	if len(tok.Text) > 0 {
+	if len(errMsg) > 0 {
+		tok := expr.Left.GetToken()
+		tok.Text = expr.Left.String()
 		s.collector.Add(s.collector.Error(tok, errMsg))
 	}
 }
 
-func (s *TypeChecker) visitMemberShipAccess(expr *parser.MemberShipExpression) {
-	errMsg := ""
-	switch expr.Object.(type) {
-	case *parser.IfExpression:
-		errMsg = "ERROR: can't use an if expression, as the object"
-	case *parser.BinaryExpression:
-		errMsg = "ERROR: can't use a a binary expression as the object"
-	case *parser.UnaryExpression:
-		errMsg = "ERROR: can't use a a unary expression as the object"
+func (s *TypeChecker) visitMemberShipAccess(expr *ast.MemberShipExpression) {
+	switch or := expr.Object.(type) {
+	case *ast.Identifier:
+		s.visitIdentifier(or)
+	case *ast.MemberShipExpression:
+		s.visitMemberShipAccess(or)
 	default:
-		s.symbolReaderExpression(expr.Object)
-	}
-
-	if len(errMsg) > 0 {
+		errMsg := fmt.Sprintf("ERROR: can't use %v as the main object", expr.Object)
 		tok := expr.Object.GetToken()
 		tok.Text = expr.Object.String()
 		s.collector.Add(s.collector.Error(tok, errMsg))
 	}
 
 	switch expr.Property.(type) {
-	case *parser.IfExpression:
-		errMsg = "ERROR: can't use an if expression, as the "
-	case *parser.BinaryExpression:
-		errMsg = "ERROR: can't use a a binary expression as the "
-	case *parser.UnaryExpression:
-		errMsg = "ERROR: can't use a a unary expression as the "
+	case *ast.Identifier, *ast.CallExpression:
+		// no need for checks, since the type inference will error if not found
 	default:
-		s.symbolReaderExpression(expr.Object)
-	}
-
-	if len(errMsg) > 0 {
+		// everything here is refused
+		errMsg := fmt.Sprintf("ERROR: can't use %v as the property, and access it", expr.Property)
 		tok := expr.Object.GetToken()
 		tok.Text = expr.Object.String()
 		s.collector.Add(s.collector.Error(tok, errMsg))

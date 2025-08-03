@@ -1,8 +1,6 @@
 package semantics
 
-import (
-	"blk/parser"
-)
+import "blk/ast"
 
 type SymbolKind = string
 
@@ -19,9 +17,9 @@ const (
 
 type SymbolInfo struct {
 	Name      string
-	DeclNode  parser.Node // pointer to node dcl in AST
-	Kind      SymbolKind  // func, var, param, let...
-	Type      parser.Expression
+	DeclNode  ast.Node   // pointer to node dcl in AST
+	Kind      SymbolKind // func, var, param, let...
+	Type      ast.Expression
 	IsMutable bool
 	Depth     int
 }

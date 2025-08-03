@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"blk/internals"
+	"blk/lexer"
 	"blk/parser"
 	"blk/semantics"
 	"encoding/json"
@@ -133,8 +134,8 @@ func Run(args []string) {
 
 	content := string(byteContent)
 
-	lexer := parser.NewLexer(targetFile, content)
-	tokens := lexer.Tokenize()
+	l := lexer.NewLexer(targetFile, content)
+	tokens := l.Tokenize()
 
 	// fmt.Println(tokens)
 

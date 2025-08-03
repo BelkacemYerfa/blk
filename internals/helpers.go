@@ -1,22 +1,24 @@
 package internals
 
 import (
+	"blk/ast"
+	"blk/lexer"
 	"blk/parser"
 	"strconv"
 )
 
-func ParseToNodeType(nodeType parser.Type) parser.Type {
+func ParseToNodeType(nodeType ast.Type) ast.Type {
 	// parse the structure and construct the node in NodeType interface
 	// ! WTF IS THIS, this works but no, since we're calling this just to parse the type cause it is returned as flat and in NodeTypeFormat
-	tokens := parser.NewLexer("", nodeType.String()).Tokenize()
+	tokens := lexer.NewLexer("", nodeType.String()).Tokenize()
 	returnType := parser.NewParser(tokens, "").ParseType()
-	return returnType.(parser.Type)
+	return returnType.(ast.Type)
 }
 
-func CountChildTypes(nodeType parser.Type) int {
+func CountChildTypes(nodeType ast.Type) int {
 	count := 0
 
-	ndType := nodeType.(*parser.NodeType)
+	ndType := nodeType.(*ast.NodeType)
 
 	if ndType.ChildType != nil {
 		return CountChildTypes(ndType.ChildType) + 1
@@ -28,7 +30,7 @@ func CountChildTypes(nodeType parser.Type) int {
 // checks equality recursively on v1 and v2
 // v1 is the user defined type, v2 is the inferred type
 // return a report on where the error happened
-func DeepEqualOnNodeType(v1, v2 *parser.NodeType) (bool, *parser.NodeType) {
+func DeepEqualOnNodeType(v1, v2 *ast.NodeType) (bool, *ast.NodeType) {
 
 	if v1 == nil || v2 == nil {
 		if v1 == nil {
@@ -67,15 +69,15 @@ func DeepEqualOnNodeType(v1, v2 *parser.NodeType) (bool, *parser.NodeType) {
 	return DeepEqualOnNodeType(v1.ChildType, v2.ChildType)
 }
 
-func DeepEqualOnMapType(v1, v2 parser.Type) (bool, parser.Type) {
+func DeepEqualOnMapType(v1, v2 ast.Type) (bool, ast.Type) {
 	if v1.GetType() != v2.GetType() {
 		return false, v2
 	}
 
 	switch tp1 := v1.(type) {
-	case *parser.NodeType:
+	case *ast.NodeType:
 		switch tp2 := v2.(type) {
-		case *parser.NodeType:
+		case *ast.NodeType:
 
 			if tp1.ChildType == nil && tp2.ChildType == nil {
 				return true, nil
@@ -90,12 +92,12 @@ func DeepEqualOnMapType(v1, v2 parser.Type) (bool, parser.Type) {
 			}
 
 			return DeepEqualOnNodeType(tp1.ChildType, tp2.ChildType)
-		case *parser.MapType:
+		case *ast.MapType:
 			return false, v2
 		}
-	case *parser.MapType:
+	case *ast.MapType:
 		switch tp2 := v2.(type) {
-		case *parser.MapType:
+		case *ast.MapType:
 			if tp1.Left == nil && tp2.Left == nil {
 				// fallthrough
 			} else if tp1.Left == nil || tp2.Left == nil {
@@ -128,7 +130,7 @@ func DeepEqualOnMapType(v1, v2 parser.Type) (bool, parser.Type) {
 				// Both right sides exist, check if they're equal
 				return DeepEqualOnMapType(tp1.Right, tp2.Right)
 			}
-		case *parser.NodeType:
+		case *ast.NodeType:
 			return false, v2
 		}
 	}

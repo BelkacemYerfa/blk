@@ -1,4 +1,4 @@
-package parser
+package lexer
 
 type TokenKind = string
 

@@ -1,9 +1,9 @@
-package parser
+package lexer
 
 type Operator = string
 
 var (
-	keywords = map[string]TokenKind{
+	Keywords = map[string]TokenKind{
 		"let":    TokenLet,
 		"struct": TokenStruct,
 		"enum":   TokenEnum,
@@ -23,15 +23,7 @@ var (
 		"false":  TokenBool,
 	}
 
-	AtomicTypes = map[string]TYPE{
-		"int":    IntType,
-		"float":  FloatType,
-		"string": StringType,
-		"bool":   BoolType,
-		"void":   VoidType,
-	}
-
-	binOperators = map[TokenKind]Operator{
+	BinOperators = map[TokenKind]Operator{
 		TokenEquals:         "==",
 		TokenGreater:        ">",
 		TokenGreaterOrEqual: ">=",
@@ -48,7 +40,7 @@ var (
 		TokenOr:             "||",
 	}
 
-	unaryOperators = map[TokenKind]Operator{
+	UnaryOperators = map[TokenKind]Operator{
 		TokenExclamation: "!",
 		TokenMinus:       "-",
 	}

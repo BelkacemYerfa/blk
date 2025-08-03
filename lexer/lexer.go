@@ -1,4 +1,4 @@
-package parser
+package lexer
 
 import (
 	"fmt"
@@ -333,7 +333,7 @@ func (l *Lexer) readIdentifier() Token {
 
 	text := strings.TrimSpace(string(l.Content[startPos:l.Cur]))
 
-	if tokenKind, isKeyword := keywords[text]; isKeyword {
+	if tokenKind, isKeyword := Keywords[text]; isKeyword {
 		return Token{LiteralToken: LiteralToken{
 			Kind: tokenKind,
 			Text: text,
