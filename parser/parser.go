@@ -86,8 +86,6 @@ func NewParser(tokens []lexer.Token, filepath string) *Parser {
 
 	// prefix/unary operators
 	p.registerPrefix(lexer.TokenIdentifier, p.parseIdentifier)
-	p.registerPrefix(lexer.TokenArray, p.ParseType)
-	p.registerPrefix(lexer.TokenMap, p.ParseType)
 	p.registerPrefix(lexer.TokenInt, p.parseIntLiteral)
 	p.registerPrefix(lexer.TokenFloat, p.parseFloatLiteral)
 	p.registerPrefix(lexer.TokenString, p.parseStringLiteral)
@@ -346,8 +344,6 @@ func (p *Parser) parseVarDeclaration() (*ast.VarDeclaration, error) {
 		return nil, p.error(tok, "ERROR: expected colon (:), got shit")
 	}
 
-	stmt.ExplicitType = p.ParseType()
-
 	tok = p.currentToken()
 
 	if tok.Kind != lexer.TokenAssign {
@@ -410,39 +406,39 @@ func (p *Parser) parseStructExpression() ast.Expression {
 	if tok.Kind == lexer.TokenBracketClose {
 		p.nextToken()
 		return &ast.StructExpression{
-			Token: expr.Token,
-			Body:  []ast.Field{},
+			Token:   expr.Token,
+			Fields:  []*ast.Identifier{},
+			Methods: []*ast.Method{},
 		}
 	}
 
-	expr.Body = p.parseFields()
+	expr.Fields, expr.Methods = p.parseFields()
 
 	return expr
 }
 
-func (p *Parser) parseFields() []ast.Field {
-	fields := make([]ast.Field, 0)
+func (p *Parser) parseFields() ([]*ast.Identifier, []*ast.Method) {
+	fields := make([]*ast.Identifier, 0)
+	methods := make([]*ast.Method, 0)
 
 	field, ok := p.parseIdentifier().(*ast.Identifier)
 
 	if !ok {
 		p.Errors = append(p.Errors, p.error(p.lookToken(-1), "ERROR: expected an identifier, got shit"))
-		return nil
+		return nil, nil
 	}
 
 	tok := p.nextToken()
 
-	if tok.Kind != lexer.TokenColon {
-		p.Errors = append(p.Errors, p.error(tok, "ERROR: expected colon ( : ), got shit"))
-		return nil
+	if tok.Kind == lexer.TokenColon {
+		methods = append(methods, &ast.Method{
+			Key:   field,
+			Value: p.parseFunctionExpression().(*ast.FunctionExpression),
+		})
+	} else {
+		fields = append(fields, field)
+		p.Pos--
 	}
-
-	fieldValue := p.parseExpression(LOWEST)
-
-	fields = append(fields, ast.Field{
-		Key:   field,
-		Value: fieldValue,
-	})
 
 	for p.currentToken().Kind == lexer.TokenComma {
 		p.nextToken()
@@ -450,30 +446,28 @@ func (p *Parser) parseFields() []ast.Field {
 
 		if !ok {
 			p.Errors = append(p.Errors, p.error(p.lookToken(-1), "ERROR: expected an identifier, got shit"))
-			return nil
+			return nil, nil
 		}
 
 		tok := p.nextToken()
 
-		if tok.Kind != lexer.TokenColon {
-			p.Errors = append(p.Errors, p.error(tok, "ERROR: expected colon ( : ), got shit"))
-			return nil
+		if tok.Kind == lexer.TokenColon {
+			methods = append(methods, &ast.Method{
+				Key:   field,
+				Value: p.parseFunctionExpression().(*ast.FunctionExpression),
+			})
+		} else {
+			fields = append(fields, field)
+			p.Pos--
 		}
-
-		fieldValue := p.parseExpression(LOWEST)
-
-		fields = append(fields, ast.Field{
-			Key:   field,
-			Value: fieldValue,
-		})
 	}
 
 	if !p.expect([]lexer.TokenKind{lexer.TokenCurlyBraceClose}) {
 		p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: expected close curly brace ( } ), got shit"))
-		return nil
+		return nil, nil
 	}
 
-	return fields
+	return fields, methods
 }
 
 func (p *Parser) parseEnumExpression() ast.Expression {
@@ -585,98 +579,6 @@ func (p *Parser) parseForStatement() (*ast.ForStatement, error) {
 
 	stmt.Body = p.parseBlockStatement().(*ast.BlockStatement)
 	return stmt, nil
-}
-
-func (p *Parser) ParseType() ast.Expression {
-	nodeType := &ast.NodeType{Token: p.currentToken()}
-
-	tok := p.nextToken()
-
-	switch tok.Kind {
-	case lexer.TokenIdentifier:
-		nodeType.Type = p.typeMapper(tok.Text)
-	case lexer.TokenArray:
-		tok = p.nextToken() // consume (
-
-		if p.currentToken().Kind != lexer.TokenArray {
-			childType := p.ParseType()
-			return &ast.NodeType{
-				Token:     p.currentToken(),
-				Type:      "array",
-				ChildType: childType.(*ast.NodeType),
-			}
-		}
-
-		for p.currentToken().Kind == lexer.TokenArray {
-			childType := p.ParseType()
-			return &ast.NodeType{
-				Token:     p.currentToken(),
-				Type:      "array",
-				ChildType: childType.(*ast.NodeType),
-			}
-		}
-
-	case lexer.TokenMap:
-		tok = p.nextToken() // consume (
-
-		if p.currentToken().Kind != lexer.TokenMap {
-			keyType := p.ParseType()
-			p.nextToken()
-			valueType := p.ParseType()
-			return &ast.MapType{
-				Token: p.currentToken(),
-				Type:  "map",
-				Left:  keyType.(ast.Type),
-				Right: valueType.(ast.Type),
-			}
-		}
-
-		for p.currentToken().Kind == lexer.TokenMap {
-			keyType := p.ParseType()
-			p.nextToken()
-			valueType := p.ParseType()
-			return &ast.MapType{
-				Token: p.currentToken(),
-				Type:  "map",
-				Left:  keyType.(ast.Type),
-				Right: valueType.(ast.Type),
-			}
-		}
-
-	case lexer.TokenBracketOpen:
-		tok = p.currentToken()
-		p.nextToken()
-		p.nextToken()
-		childType := p.ParseType()
-		return &ast.NodeType{
-			Token:     p.currentToken(),
-			Type:      "array",
-			ChildType: childType.(*ast.NodeType),
-			Size:      tok.Text,
-		}
-	default:
-		p.Pos--
-		// if there is no type, empty, we return what we already have in the node type
-		return nodeType
-	}
-
-	if p.nextToken().Kind == lexer.TokenBraceClose {
-		for p.currentToken().Kind == lexer.TokenBraceClose {
-			p.nextToken()
-		}
-	} else {
-		p.Pos--
-	}
-
-	return nodeType
-}
-
-func (p *Parser) typeMapper(typ string) ast.TYPE {
-	if mappedType, isMatching := AtomicTypes[typ]; isMatching {
-		return mappedType
-	} else {
-		return typ
-	}
 }
 
 func (p *Parser) parseIdentifier() ast.Expression {
@@ -1007,9 +909,6 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 
 	expr.Args = args
 
-	returnType := p.ParseType()
-	expr.ReturnType = returnType
-
 	if !p.expect([]lexer.TokenKind{lexer.TokenCurlyBraceOpen}) {
 		p.Errors = append(p.Errors, fmt.Errorf("ERROR: expected curly brace open ( { ), got shit"))
 		return nil
@@ -1027,32 +926,21 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 	return expr
 }
 
-func (p *Parser) parseArguments() []*ast.ArgExpression {
-	args := make([]*ast.ArgExpression, 0)
+func (p *Parser) parseArguments() []*ast.Identifier {
+	args := make([]*ast.Identifier, 0)
 
 	if p.currentToken().Kind == lexer.TokenBraceClose {
 		p.nextToken()
 		return args
 	}
+
 	ident := &ast.Identifier{
 		Token: p.currentToken(),
 		Value: p.currentToken().Text,
 	}
 
+	args = append(args, ident)
 	p.nextToken()
-	if !p.expect([]lexer.TokenKind{lexer.TokenColon}) {
-		return nil
-	}
-
-	if !p.expect([]lexer.TokenKind{lexer.TokenIdentifier}) {
-		return nil
-	}
-
-	p.Pos--
-	args = append(args, &ast.ArgExpression{
-		Identifier: ident,
-		Type:       p.ParseType(),
-	})
 
 	for p.currentToken().Kind == lexer.TokenComma {
 		p.nextToken()
@@ -1061,22 +949,9 @@ func (p *Parser) parseArguments() []*ast.ArgExpression {
 			Value: p.currentToken().Text,
 		}
 
-		p.nextToken()
-		if !p.expect([]lexer.TokenKind{lexer.TokenColon}) {
-			return nil
-		}
-
-		if !p.expect([]lexer.TokenKind{lexer.TokenIdentifier}) {
-			return nil
-		}
-		p.Pos--
-		args = append(args, &ast.ArgExpression{
-			Identifier: ident,
-			Type:       p.ParseType(),
-		})
+		args = append(args, ident)
 	}
 
-	p.Pos--
 	if !p.expect([]lexer.TokenKind{lexer.TokenBraceClose}) {
 		return nil
 	}
@@ -1259,13 +1134,6 @@ func (p *Parser) parseBindExpression() (ast.Statement, error) {
 	switch tok.Kind {
 	case lexer.TokenWalrus, lexer.TokenBind:
 		// fall through
-	case lexer.TokenColon:
-		// parse the type
-		stmt.ExplicitType = p.ParseType()
-		// checks for =
-		if !p.expect([]lexer.TokenKind{lexer.TokenAssign}) {
-			return nil, p.error(p.currentToken(), "ERROR: expected =, got shit")
-		}
 	default:
 		return nil, p.error(tok, "ERROR: expected (:= or ::) operators, got shit")
 	}

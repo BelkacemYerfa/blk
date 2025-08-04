@@ -33,12 +33,6 @@ type Expression interface {
 	expressionNode()
 }
 
-type Type interface {
-	Node
-	Expression
-	GetType() TYPE
-}
-
 type Program struct {
 	Statements []Statement
 }
@@ -59,76 +53,10 @@ func (p *Program) String() string {
 	return out.String()
 }
 
-type NodeType struct {
-	Token     lexer.Token
-	Type      TYPE
-	ChildType *NodeType
-	Size      string
-}
-
-func (nt *NodeType) expressionNode()       {}
-func (nt *NodeType) TokenLiteral() string  { return nt.Token.Text }
-func (nt *NodeType) GetToken() lexer.Token { return nt.Token }
-func (nt *NodeType) GetType() TYPE         { return nt.Type }
-func (nt *NodeType) String() string {
-	var out bytes.Buffer
-
-	if nt == nil {
-		out.WriteString("nil")
-		return out.String()
-	}
-
-	// used for fixed size arrays
-	if len(nt.Size) > 0 {
-		out.WriteString("[")
-		out.WriteString(nt.Size)
-		out.WriteString("]")
-		out.WriteString(nt.ChildType.String())
-
-		return out.String()
-	}
-	if nt.ChildType == nil {
-		out.WriteString(nt.Type)
-	} else {
-		out.WriteString(nt.Type)
-		out.WriteString("(")
-		out.WriteString(nt.ChildType.String())
-		out.WriteString(")")
-	}
-	return out.String()
-}
-
-type MapType struct {
-	Token lexer.Token
-	Type  TYPE
-	Left  Type
-	Right Type
-}
-
-func (mt *MapType) expressionNode()       {}
-func (mt *MapType) TokenLiteral() string  { return mt.Token.Text }
-func (nt *MapType) GetToken() lexer.Token { return nt.Token }
-func (nt *MapType) GetType() TYPE         { return nt.Type }
-func (mt *MapType) String() string {
-	var out bytes.Buffer
-	out.WriteString(mt.Type)
-	out.WriteString("(")
-	if mt.Left != nil {
-		out.WriteString(mt.Left.String())
-	}
-	if mt.Right != nil {
-		out.WriteString(", ")
-		out.WriteString(mt.Right.String())
-	}
-	out.WriteString(")")
-	return out.String()
-}
-
 type VarDeclaration struct {
-	Token        lexer.Token // the token.LET token
-	Name         *Identifier
-	ExplicitType Expression
-	Value        Expression
+	Token lexer.Token // the token.LET token
+	Name  *Identifier
+	Value Expression
 }
 
 func (ls *VarDeclaration) statementNode()        {}
@@ -160,14 +88,15 @@ func (ls *ImportStatement) String() string {
 	return out.String()
 }
 
-type Field struct {
+type Method struct {
 	Key   *Identifier
-	Value Expression // any value type
+	Value *FunctionExpression // any value type
 }
 
 type StructExpression struct {
-	Token lexer.Token // the token.LET token
-	Body  []Field
+	Token   lexer.Token // the token.LET token
+	Fields  []*Identifier
+	Methods []*Method
 }
 
 func (ss *StructExpression) expressionNode()       {}
@@ -177,12 +106,21 @@ func (ss *StructExpression) String() string {
 	var out bytes.Buffer
 	out.WriteString(ss.TokenLiteral() + " ")
 	out.WriteString(" { ")
-	if ss.Body != nil {
-		for idx, field := range ss.Body {
+	if ss.Fields != nil {
+		for idx, field := range ss.Fields {
+			out.WriteString(field.Value)
+			if idx+1 <= len(ss.Fields)-1 {
+				out.WriteString(", ")
+			}
+		}
+	}
+
+	if ss.Methods != nil {
+		for idx, field := range ss.Methods {
 			out.WriteString(field.Key.Value)
 			out.WriteString(":")
-			out.WriteString(fmt.Sprintf("%v", field.Value))
-			if idx+1 <= len(ss.Body)-1 {
+			out.WriteString(field.Value.String())
+			if idx+1 <= len(ss.Fields)-1 {
 				out.WriteString(", ")
 			}
 		}
@@ -334,10 +272,9 @@ func (fs *ForStatement) String() string {
 }
 
 type FunctionExpression struct {
-	Token      lexer.Token
-	Args       []*ArgExpression
-	ReturnType Expression
-	Body       *BlockStatement
+	Token lexer.Token
+	Args  []*Identifier
+	Body  *BlockStatement
 }
 
 func (fn *FunctionExpression) expressionNode()       {}
@@ -387,16 +324,6 @@ func (i *Identifier) expressionNode()        {}
 func (i *Identifier) TokenLiteral() string   { return i.Token.Text }
 func (nt *Identifier) GetToken() lexer.Token { return nt.Token }
 func (i *Identifier) String() string         { return i.Value }
-
-type ArgExpression struct {
-	*Identifier
-	Type Expression
-}
-
-func (i *ArgExpression) expressionNode()        {}
-func (i *ArgExpression) TokenLiteral() string   { return i.Token.Text }
-func (nt *ArgExpression) GetToken() lexer.Token { return nt.Token }
-func (i *ArgExpression) String() string         { return i.Value }
 
 type IntegerLiteral struct {
 	Token lexer.Token

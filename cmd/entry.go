@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"blk/internals"
 	"blk/lexer"
 	"blk/parser"
-	"blk/semantics"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -160,15 +158,9 @@ func Run(args []string) {
 		fmt.Printf("ERROR: failed to write AST to file: %v\n", err)
 		return
 	}
+	fmt.Println(ast)
+	// errCollector := internals.NewErrorCollector(tokens)
 
-	errCollector := internals.NewErrorCollector(tokens)
-
-	typeChecker := semantics.NewTypeChecker(errCollector)
-	typeChecker.SymbolBuilder(ast)
-
-	for _, err := range errCollector.Errors {
-		fmt.Println(err)
-	}
 }
 
 func Execute() {

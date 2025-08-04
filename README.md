@@ -1,17 +1,18 @@
-# blk — A Minimalist Systems Programming Language
+# blk — A Minimalist Dynamic Systems Language
 
-`blk` is a statically typed, compiled systems programming language focused on simplicity, predictability, and a clean developer experience. Inspired by Jai, Zig, Odin, and C — but designed to be minimal, expressive, and powerful for tooling, low-level system utilities, and experimentation.
+`blk` is a dynamically typed, interpreted language focused on simplicity, expression-oriented design, and minimal syntax. Inspired by Jai, Zig, Odin, and C — but reimagined with flexible semantics and runtime evaluation at its core. Designed for quick scripting, tooling, and prototyping with low ceremony and high expressiveness.
 
 ---
 
 ## ✨ Why blk?
 
-- Minimal syntax: easy to read, easy to parse
-- Expression-oriented core
-- No classes or objects — just functions, types, and blocks
-- Native targets (no runtime)
-- Explicit memory control
-- Uniform code blocks and low keyword count
+- Expression-oriented: every block returns a value
+- Minimal syntax: easy to read and parse
+- Dynamically typed, no explicit type declarations
+- Interpreted: fast feedback, no build steps required
+- Structs, enums, maps, arrays — all built-in
+- Powerful block scoping and control flow
+- Unified declaration model using `::` and `:=`
 
 ---
 
@@ -21,8 +22,8 @@
 import "math"
 
 User :: struct {
-    name: string,
-    age: int,
+    name,
+    age,
 
     greet: fn() {
         print("Hi, I'm " + name)
@@ -45,16 +46,15 @@ fn main() {
 
 ## ✅ Language Features
 
-- **Static types**: `int`, `float`, `bool`, `string`, `[]type`, `array(type)`, `map(k, v)`, `fn(...) ...`
-- **No `let/var` required**: use `:=` for all variable bindings
-- **Top-level constants**: use `name :: value` syntax (Jai-style)
-- **Structs with methods** using embedded functions
-- **Enums** with optional values
-- **Pattern matching** via `match` expressions
-- **Struct and map literals** share `{}` syntax (based on context)
-- **Minimal control flow**: `if`, `match`, `while`, `for`, `skip`
-- **No `return` required** in last expression
-- **Functions as first-class values**
+- **Dynamic values**: no static type annotations
+- **All variables** declared with `:=`
+- **Top-level constants** via `::`
+- **Structs with inline methods**
+- **Enums and tagged unions**
+- **Pattern matching** via `match` expression
+- **Expression-based blocks and control flow**
+- **Unified literals**: maps and structs share `{}` syntax
+- **No distinction between expressions and statements**
 
 ---
 
@@ -64,33 +64,36 @@ fn main() {
 
 ```blk
 x := 42
-name :: "blk"
-add :: fn(a: int, b: int) int { a + b }
+msg :: "Welcome to blk"
+greet :: fn(name) {
+    print("Hello " + name)
+}
 ```
 
 ### Structs
 
 ```blk
 Vec2 :: struct {
-    x: float,
-    y: float,
-
-    length: fn() float {
-        return sqrt(x * x + y * y)
+    x,
+    y,
+    len: fn() {
+        sqrt(x * x + y * y)
     }
 }
 
-p := Vec2{ x: 3.0, y: 4.0 }
-len := p.length()
+v := Vec2{
+    x: 3,
+    y: 4
+}
+print(v.len())
 ```
 
 ### Enums
 
 ```blk
-Color :: enum {
-    Red,
-    Green,
-    Blue
+Result :: enum {
+    Ok,
+    Error
 }
 ```
 
@@ -101,20 +104,20 @@ Color :: enum {
 ### If expressions
 
 ```blk
-msg := if x > 10 {
-    "Large"
+name := if loggedIn {
+    "User"
 } else {
-    "Small"
+    "Guest"
 }
 ```
 
 ### Match expressions
 
 ```blk
-kind := match value {
+kind := match x {
+    0 => "zero",
     1 => "one",
-    2 => "two",
-    _ => "many"
+    _ => "other"
 }
 ```
 
@@ -122,7 +125,7 @@ kind := match value {
 
 ```blk
 i := 0
-while i < 10 {
+while i < 5 {
     print(i)
     i += 1
 }
@@ -131,26 +134,23 @@ while i < 10 {
 ### For loops
 
 ```blk
-# Iterate over an array
-for idx, value in [1, 2, 3] {
-    print(idx, value)
+for idx, val in [1, 2, 3] {
+    print(idx, val)
 }
 
-# Iterate over a map
-for key, value in {"a": 1, "b": 2} {
-    print(key, value)
+for k, v in {a: 1, b: 2} {
+    print(k, v)
 }
 ```
 
 ### Skip
 
 ```blk
-while x < 10 {
-    x += 1
-    if x % 2 == 0 {
+while true {
+    if shouldSkip() {
         skip
     }
-    print(x)
+    doStuff()
 }
 ```
 
@@ -160,8 +160,10 @@ while x < 10 {
 
 ```blk
 import "math"
-import "io"
+import "utils"
 ```
+
+No aliasing needed — always access via `utils::fn`.
 
 ---
 
@@ -171,83 +173,79 @@ import "io"
 
 ```blk
 nums := [1, 2, 3]
-names := ["Alice", "Bob"]
+names := ["foo", "bar"]
 ```
-
-### Fixed-size arrays
-
-```blk
-coords: [3]int = [1, 2, 3]
-```
-
-### Dynamic arrays
-
-```blk
-items: array(string) = ["a", "b", "c"]
-```
-
-**Note:** Inferred type from an array literal is `array(type)` (i.e dynamic array) where `type` is the element type.
 
 ### Maps
 
 ```blk
-settings := {
-    volume: 100,
-    brightness: 80
+config := {
+    host: "localhost",
+    port: 8080
+}
+```
+
+### Struct literals
+
+```blk
+person := Person{
+    name: "Zed",
+    age: 20
 }
 ```
 
 ---
 
-## 🧠 Expression Orientation
+## 🧠 Expression-Based Semantics
 
-Every block and control flow structure returns a value. Last expression in a block is implicitly returned.
+Every code block is an expression. The last expression is the return value of the block — no `return` keyword required.
 
 ```blk
-double := fn(x: int) int {
+double := fn(x) {
     x * 2
 }
 ```
 
-### Function calls
+---
+
+## 🧪 Example Evaluation
 
 ```blk
-result := add(5, 10)
+result := fn(x, y) {
+    if x > y {
+        x
+    } else {
+        y
+    }
+}(10, 20)
+
+print(result)  # 20
 ```
 
-### Scopes
+---
 
-````blk
-scopeName :
-{
-    x := 10
-    y := 20
-    result := x + y
-    print(result) // 30
-}
+## 📐 Data Shape & Reflection
+
+Types are tracked at runtime via introspection:
+
+```blk
+typeOf(x) == "int"
+```
 
 ---
 
 ## 🛠️ Development Roadmap
 
 - [x] Lexer and Tokenizer
-- [x] Parser and AST Generator
-- [ ] Semantic analysis and type system
-- [ ] Pattern matcher and tag-dispatcher
-- [ ] LLVM IR backend
-- [ ] Standard library (math, io, array, etc.)
-- [ ] Macros and compile-time evaluation
-- [ ] Error reporting and diagnostics
+- [x] Parser and AST
+- [ ] Core Interpreter Engine
+- [ ] Error System and Stack Traces
+- [ ] REPL and Debugger
+- [ ] Built-in Modules (math, io, time, etc.)
 
 ---
 
 ## ⚙️ Tooling
-
-### Compile
-
-```bash
-blk compile main.blk -o out
-````
 
 ### Run
 
@@ -255,12 +253,12 @@ blk compile main.blk -o out
 blk run main.blk
 ```
 
-### Build (Go-based Compiler)
+### Build
 
 ```bash
 git clone https://github.com/yourname/blk
 cd blk
-go build -o blk cmd/main.go
-./blk compile main.blk -o main
-./main
+go run cmd/main.go run examples/main.blk
 ```
+
+REPL support planned in future versions.
