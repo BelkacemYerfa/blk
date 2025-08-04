@@ -3,6 +3,7 @@ package cmd
 import (
 	"blk/lexer"
 	"blk/parser"
+	"blk/repl"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -43,7 +44,17 @@ func init() {
 			Function:    Help,
 			Flags:       []FlagInfo{},
 		},
+		"repl": {
+			Description: "Opens the blk lang REPL",
+			Function:    Repl,
+			Flags:       []FlagInfo{},
+		},
 	}
+}
+
+func Repl(args []string) {
+	fmt.Println("REPL of blk lang is ready.")
+	repl.Start(os.Stdin, os.Stdout)
 }
 
 func Help(args []string) {
