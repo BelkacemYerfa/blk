@@ -1,10 +1,11 @@
-struct Vec2 {
-    x: float
-    y: float
+Vec2 :: struct {
+    x,
+    y,
+
+    length: fn() {
+        return sqrt(x * x + y * y)
+    }
 }
 
-type Vec2 = Vector2
+Vec2 :: Vector2
 
-fn length(v: Vec2): float {
-    return sqrt(v.x * v.x + v.y * v.y)
-}

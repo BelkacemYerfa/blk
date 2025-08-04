@@ -1,6 +1,6 @@
-fn sum_to(n: int): int {
-    var sum: int = 0
-    var i: int = 1
+fn sum_to(n) {
+    var sum = 0
+    var i = 1
     while i <= n {
         sum = sum + i
         i = i + 1
@@ -8,7 +8,7 @@ fn sum_to(n: int): int {
     return sum
 }
 
-fn print_numbers(): void {
+fn print_numbers() {
     for i, val in arr {
         print(i)
     }
