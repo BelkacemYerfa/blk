@@ -12,14 +12,26 @@ var (
 	FALSE = &object.Boolean{Value: false}
 )
 
-func Eval(node ast.Node) object.Object {
+type Interpreter struct {
+	env *object.Environment
+}
 
+func NewInterpreter(env *object.Environment) *Interpreter {
+	if env == nil {
+		env = object.NewEnvironment(nil)
+	}
+	return &Interpreter{
+		env: env,
+	}
+}
+
+func (i *Interpreter) Eval(node ast.Node) object.Object {
 	switch nd := node.(type) {
 	case *ast.Program:
-		return evalProgram(nd.Statements)
+		return i.evalProgram(nd.Statements)
 
 	case *ast.ExpressionStatement:
-		return Eval(nd.Expression)
+		return i.Eval(nd.Expression)
 
 	case *ast.IntegerLiteral:
 		return &object.Integer{
@@ -32,34 +44,58 @@ func Eval(node ast.Node) object.Object {
 	case *ast.BooleanLiteral:
 		return nativeBooleanObject(nd.Value)
 
+	case *ast.VarDeclaration:
+		val := i.Eval(nd.Value)
+		// define it in the scope
+		i.env.Define(nd.Name.Value, val)
+
+	case *ast.Identifier:
+		return i.evalIdentifier(nd)
+
+	case *ast.FunctionExpression:
+		params := nd.Args
+		body := nd.Body
+		return &object.Function{Parameters: params, Env: i.env, Body: body}
+
+	case *ast.CallExpression:
+		function := i.Eval(&nd.Function)
+		args := i.evalExpressions(nd.Args)
+		if len(args) == 1 {
+			return args[0]
+		}
+		return i.applyFunction(function, args)
+
 	case *ast.ReturnStatement:
-		val := Eval(nd.ReturnValue)
+		val := i.Eval(nd.ReturnValue)
 		return &object.ReturnValue{Value: val}
 
+	case *ast.ScopeStatement:
+		return i.evalBlockStatement(nd.Body)
+
 	case *ast.BlockStatement:
-		return evalBlockStatement(nd)
+		return i.evalBlockStatement(nd)
 
 	case *ast.IfExpression:
-		return evalIfExpression(nd)
+		return i.evalIfExpression(nd)
 
 	case *ast.UnaryExpression:
-		right := Eval(nd.Right)
-		return evalUnaryExpression(nd.Operator, right)
+		right := i.Eval(nd.Right)
+		return i.evalUnaryExpression(nd.Operator, right)
 
 	case *ast.BinaryExpression:
-		left := Eval(nd.Left)
-		right := Eval(nd.Right)
-		return evalBinaryExpression(nd.Operator, left, right)
+		left := i.Eval(nd.Left)
+		right := i.Eval(nd.Right)
+		return i.evalBinaryExpression(nd.Operator, left, right)
 
 	}
 
 	return nil
 }
 
-func evalProgram(stmts []ast.Statement) object.Object {
+func (i *Interpreter) evalProgram(stmts []ast.Statement) object.Object {
 	var result object.Object
 	for _, statement := range stmts {
-		result = Eval(statement)
+		result = i.Eval(statement)
 
 		if returnValue, ok := result.(*object.ReturnValue); ok {
 			return returnValue.Value
@@ -76,10 +112,67 @@ func nativeBooleanObject(val bool) *object.Boolean {
 	}
 }
 
-func evalBlockStatement(block *ast.BlockStatement) object.Object {
+func (i *Interpreter) evalExpressions(exps []ast.Expression) []object.Object {
+	var result []object.Object
+	for _, e := range exps {
+		evaluated := i.Eval(e)
+		if evaluated == nil {
+			return []object.Object{}
+		}
+		result = append(result, evaluated)
+	}
+	return result
+}
+
+func (i *Interpreter) evalIdentifier(identifier *ast.Identifier) object.Object {
+
+	if obj, ok := i.env.Resolve(identifier.Value); ok {
+		return obj
+	} else {
+		fmt.Printf("ERROR: identifier not found, %v\n", identifier)
+	}
+
+	return nil
+}
+
+func (i *Interpreter) applyFunction(fn object.Object, args []object.Object) object.Object {
+	function, ok := fn.(*object.Function)
+
+	if !ok {
+		fmt.Println("not a function:", fn.Type())
+		return nil
+	}
+
+	extendedEnv := extendFunctionEnv(function, args)
+
+	i.env = extendedEnv
+	evaluated := i.Eval(function.Body)
+	i.env = extendedEnv.GetParentEnv()
+	return unwrapReturnValue(evaluated)
+}
+
+func extendFunctionEnv(
+	fn *object.Function,
+	args []object.Object,
+) *object.Environment {
+	env := object.NewEnvironment(fn.Env)
+	for paramIdx, param := range fn.Parameters {
+		env.Define(param.Value, args[paramIdx])
+	}
+	return env
+}
+
+func unwrapReturnValue(obj object.Object) object.Object {
+	if returnValue, ok := obj.(*object.ReturnValue); ok {
+		return returnValue.Value
+	}
+	return obj
+}
+
+func (i *Interpreter) evalBlockStatement(block *ast.BlockStatement) object.Object {
 	var result object.Object
 	for _, statement := range block.Body {
-		result = Eval(statement)
+		result = i.Eval(statement)
 		if result != nil && result.Type() == object.RETURN_VALUE_OBJ {
 			return result
 		}
@@ -87,18 +180,18 @@ func evalBlockStatement(block *ast.BlockStatement) object.Object {
 	return result
 }
 
-func evalIfExpression(nd *ast.IfExpression) object.Object {
-	condition := Eval(nd.Condition)
+func (i *Interpreter) evalIfExpression(nd *ast.IfExpression) object.Object {
+	condition := i.Eval(nd.Condition)
 
 	switch cdn := condition.(type) {
 	case *object.Boolean:
 		// continue
 		if cdn.Value {
 			// eval the consequence
-			return Eval(nd.Consequence)
+			return i.Eval(nd.Consequence)
 		} else {
 			// eval the alternative
-			return Eval(nd.Alternative)
+			return i.Eval(nd.Alternative)
 		}
 	default:
 		// error out
@@ -108,18 +201,18 @@ func evalIfExpression(nd *ast.IfExpression) object.Object {
 	return nil
 }
 
-func evalUnaryExpression(op string, right object.Object) object.Object {
+func (i *Interpreter) evalUnaryExpression(op string, right object.Object) object.Object {
 	switch op {
 	case lexer.TokenExclamation:
 		// check the right side
 		if right.Type() == object.BOOLEAN_OBJ {
-			return evalBangOperatorExpression(right.(*object.Boolean))
+			return i.evalBangOperatorExpression(right.(*object.Boolean))
 		}
 		// throw an error
 		fmt.Println("ERROR: ! operator can only be applied on boolean values")
 	case lexer.TokenMinus:
 		// support for both ints and floats
-		return evalMinusPrefixOperatorExpression(right)
+		return i.evalMinusPrefixOperatorExpression(right)
 	default:
 		return FALSE
 	}
@@ -127,7 +220,7 @@ func evalUnaryExpression(op string, right object.Object) object.Object {
 	return nil
 }
 
-func evalBangOperatorExpression(right *object.Boolean) *object.Boolean {
+func (i *Interpreter) evalBangOperatorExpression(right *object.Boolean) *object.Boolean {
 	if right.Value {
 		return FALSE
 	} else {
@@ -135,7 +228,7 @@ func evalBangOperatorExpression(right *object.Boolean) *object.Boolean {
 	}
 }
 
-func evalMinusPrefixOperatorExpression(right object.Object) object.Object {
+func (i *Interpreter) evalMinusPrefixOperatorExpression(right object.Object) object.Object {
 	switch right := right.(type) {
 	case *object.Integer:
 		value := right.Value
@@ -155,18 +248,18 @@ func evalMinusPrefixOperatorExpression(right object.Object) object.Object {
 	return nil
 }
 
-func evalBinaryExpression(op string, left, right object.Object) object.Object {
+func (i *Interpreter) evalBinaryExpression(op string, left, right object.Object) object.Object {
 	switch {
 	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
-		return evalIntegerInfixExpression(op, left.(*object.Integer), right.(*object.Integer))
+		return i.evalIntegerInfixExpression(op, left.(*object.Integer), right.(*object.Integer))
 
 	case left.Type() == object.Float_OBJ && right.Type() == object.Float_OBJ:
-		return evalFloatInfixExpression(op, left.(*object.Float), right.(*object.Float))
+		return i.evalFloatInfixExpression(op, left.(*object.Float), right.(*object.Float))
 
 	case left.Type() == object.BOOLEAN_OBJ && right.Type() == object.BOOLEAN_OBJ:
 		// this not allowed at all (no operations on booleans)
 		// the only op allowed are (&&, ||)
-		return evalBooleanInfixExpression(op, left.(*object.Boolean), right.(*object.Boolean))
+		return i.evalBooleanInfixExpression(op, left.(*object.Boolean), right.(*object.Boolean))
 
 	default:
 		fmt.Println("NOT SUPPORTED YET", op)
@@ -175,7 +268,7 @@ func evalBinaryExpression(op string, left, right object.Object) object.Object {
 	return nil
 }
 
-func evalIntegerInfixExpression(op string, left, right *object.Integer) object.Object {
+func (i *Interpreter) evalIntegerInfixExpression(op string, left, right *object.Integer) object.Object {
 	switch op {
 	// arithmetic operations
 	case lexer.TokenMultiply:
@@ -216,7 +309,7 @@ func evalIntegerInfixExpression(op string, left, right *object.Integer) object.O
 	return nil
 }
 
-func evalFloatInfixExpression(op string, left, right *object.Float) object.Object {
+func (i *Interpreter) evalFloatInfixExpression(op string, left, right *object.Float) object.Object {
 	switch op {
 	case lexer.TokenMultiply:
 		return &object.Float{
@@ -255,7 +348,7 @@ func evalFloatInfixExpression(op string, left, right *object.Float) object.Objec
 	return nil
 }
 
-func evalBooleanInfixExpression(op string, left, right *object.Boolean) object.Object {
+func (i *Interpreter) evalBooleanInfixExpression(op string, left, right *object.Boolean) object.Object {
 	switch op {
 	case lexer.TokenEquals:
 		return nativeBooleanObject(left.Value == right.Value)

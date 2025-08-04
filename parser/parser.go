@@ -338,19 +338,13 @@ func (p *Parser) parseVarDeclaration() (*ast.VarDeclaration, error) {
 	}
 
 	stmt.Name = identifier.(*ast.Identifier)
+
 	tok := p.nextToken()
-
-	if tok.Kind != lexer.TokenColon {
-		return nil, p.error(tok, "ERROR: expected colon (:), got shit")
-	}
-
-	tok = p.currentToken()
 
 	if tok.Kind != lexer.TokenAssign {
 		return nil, p.error(tok, "ERROR: expected assign (=), got shit")
 	}
 
-	p.nextToken()
 	stmt.Value = p.parseExpression(LOWEST)
 
 	return stmt, nil
@@ -950,6 +944,7 @@ func (p *Parser) parseArguments() []*ast.Identifier {
 		}
 
 		args = append(args, ident)
+		p.nextToken()
 	}
 
 	if !p.expect([]lexer.TokenKind{lexer.TokenBraceClose}) {

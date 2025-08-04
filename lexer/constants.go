@@ -17,8 +17,6 @@ var (
 		"import": TokenImport,
 		"return": TokenReturn,
 		"skip":   TokenSkip,
-		"array":  TokenArray,
-		"map":    TokenMap,
 		"true":   TokenBool,
 		"false":  TokenBool,
 	}

@@ -66,8 +66,6 @@ const (
 	TokenInt    TokenKind = "int"
 	TokenFloat  TokenKind = "float"
 	TokenBool   TokenKind = "bool"
-	TokenArray  TokenKind = "array"
-	TokenMap    TokenKind = "map"
 
 	// Error
 	TokenError TokenKind = "error"

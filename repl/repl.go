@@ -3,6 +3,7 @@ package repl
 import (
 	"blk/interpreter"
 	"blk/lexer"
+	"blk/object"
 	"blk/parser"
 	"bufio"
 	"fmt"
@@ -13,6 +14,8 @@ const PROMPT = `>>>`
 
 func Start(in io.Reader, out io.Writer) {
 	scanner := bufio.NewScanner(in)
+	env := object.NewEnvironment(nil)
+
 	for {
 		fmt.Print(PROMPT)
 		scanned := scanner.Scan()
@@ -29,7 +32,8 @@ func Start(in io.Reader, out io.Writer) {
 			}
 			continue
 		}
-		evaluated := interpreter.Eval(program)
+		i := interpreter.NewInterpreter(env)
+		evaluated := i.Eval(program)
 		if evaluated != nil {
 			io.WriteString(out, evaluated.Inspect())
 			io.WriteString(out, "\n")
