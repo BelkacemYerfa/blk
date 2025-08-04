@@ -5,9 +5,10 @@ import "fmt"
 type ObjectType string
 
 const (
-	INTEGER_OBJ = "INTEGER"
-	BOOLEAN_OBJ = "BOOLEAN"
-	Float_OBJ   = "FLOAT"
+	INTEGER_OBJ      = "INTEGER"
+	BOOLEAN_OBJ      = "BOOLEAN"
+	Float_OBJ        = "FLOAT"
+	RETURN_VALUE_OBJ = "RETURN_VALUE"
 )
 
 type Object interface {
@@ -35,3 +36,10 @@ type Float struct {
 
 func (b *Float) Type() ObjectType { return Float_OBJ }
 func (b *Float) Inspect() string  { return fmt.Sprintf("%f", b.Value) }
+
+type ReturnValue struct {
+	Value Object
+}
+
+func (rv *ReturnValue) Type() ObjectType { return RETURN_VALUE_OBJ }
+func (rv *ReturnValue) Inspect() string  { return rv.Value.Inspect() }

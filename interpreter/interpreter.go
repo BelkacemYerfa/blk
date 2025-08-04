@@ -16,7 +16,7 @@ func Eval(node ast.Node) object.Object {
 
 	switch nd := node.(type) {
 	case *ast.Program:
-		return evalStatements(nd.Statements)
+		return evalProgram(nd.Statements)
 
 	case *ast.ExpressionStatement:
 		return Eval(nd.Expression)
@@ -29,9 +29,18 @@ func Eval(node ast.Node) object.Object {
 		return &object.Float{
 			Value: nd.Value,
 		}
-
 	case *ast.BooleanLiteral:
 		return nativeBooleanObject(nd.Value)
+
+	case *ast.ReturnStatement:
+		val := Eval(nd.ReturnValue)
+		return &object.ReturnValue{Value: val}
+
+	case *ast.BlockStatement:
+		return evalBlockStatement(nd)
+
+	case *ast.IfExpression:
+		return evalIfExpression(nd)
 
 	case *ast.UnaryExpression:
 		right := Eval(nd.Right)
@@ -47,10 +56,14 @@ func Eval(node ast.Node) object.Object {
 	return nil
 }
 
-func evalStatements(stmts []ast.Statement) object.Object {
+func evalProgram(stmts []ast.Statement) object.Object {
 	var result object.Object
 	for _, statement := range stmts {
 		result = Eval(statement)
+
+		if returnValue, ok := result.(*object.ReturnValue); ok {
+			return returnValue.Value
+		}
 	}
 	return result
 }
@@ -61,6 +74,38 @@ func nativeBooleanObject(val bool) *object.Boolean {
 	} else {
 		return FALSE
 	}
+}
+
+func evalBlockStatement(block *ast.BlockStatement) object.Object {
+	var result object.Object
+	for _, statement := range block.Body {
+		result = Eval(statement)
+		if result != nil && result.Type() == object.RETURN_VALUE_OBJ {
+			return result
+		}
+	}
+	return result
+}
+
+func evalIfExpression(nd *ast.IfExpression) object.Object {
+	condition := Eval(nd.Condition)
+
+	switch cdn := condition.(type) {
+	case *object.Boolean:
+		// continue
+		if cdn.Value {
+			// eval the consequence
+			return Eval(nd.Consequence)
+		} else {
+			// eval the alternative
+			return Eval(nd.Alternative)
+		}
+	default:
+		// error out
+		fmt.Println("ERROR: evaluation of the condition needs to return a boolean not", cdn)
+	}
+
+	return nil
 }
 
 func evalUnaryExpression(op string, right object.Object) object.Object {
@@ -118,7 +163,7 @@ func evalBinaryExpression(op string, left, right object.Object) object.Object {
 	case left.Type() == object.Float_OBJ && right.Type() == object.Float_OBJ:
 		return evalFloatInfixExpression(op, left.(*object.Float), right.(*object.Float))
 
-	case left.Type() == object.BOOLEAN_OBJ || right.Type() == object.BOOLEAN_OBJ:
+	case left.Type() == object.BOOLEAN_OBJ && right.Type() == object.BOOLEAN_OBJ:
 		// this not allowed at all (no operations on booleans)
 		// the only op allowed are (&&, ||)
 		return evalBooleanInfixExpression(op, left.(*object.Boolean), right.(*object.Boolean))
