@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"blk/interpreter"
 	"blk/lexer"
 	"blk/parser"
 	"blk/repl"
@@ -171,6 +172,11 @@ func Run(args []string) {
 	}
 	fmt.Println(ast)
 	// errCollector := internals.NewErrorCollector(tokens)
+
+	i := interpreter.NewInterpreter(nil)
+	evaluated := i.Eval(ast)
+
+	fmt.Println(evaluated)
 
 }
 

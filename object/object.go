@@ -12,9 +12,12 @@ type ObjectType string
 const (
 	INTEGER_OBJ      = "INTEGER"
 	BOOLEAN_OBJ      = "BOOLEAN"
-	Float_OBJ        = "FLOAT"
+	FLOAT_OBJ        = "FLOAT"
 	RETURN_VALUE_OBJ = "RETURN_VALUE"
 	FUNCTION_OBJ     = "FUNCTION"
+
+	// errors
+	ERROR_OBJ = "ERROR"
 )
 
 type Object interface {
@@ -40,7 +43,7 @@ type Float struct {
 	Value float64
 }
 
-func (b *Float) Type() ObjectType { return Float_OBJ }
+func (b *Float) Type() ObjectType { return FLOAT_OBJ }
 func (b *Float) Inspect() string  { return fmt.Sprintf("%f", b.Value) }
 
 type ReturnValue struct {
@@ -71,3 +74,10 @@ func (f *Function) Inspect() string {
 	out.WriteString("\n}")
 	return out.String()
 }
+
+type Error struct {
+	Message string
+}
+
+func (e *Error) Type() ObjectType { return ERROR_OBJ }
+func (e *Error) Inspect() string  { return "ERROR: " + e.Message }

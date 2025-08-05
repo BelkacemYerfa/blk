@@ -25,6 +25,17 @@ func NewInterpreter(env *object.Environment) *Interpreter {
 	}
 }
 
+func newError(format string, a ...interface{}) *object.Error {
+	return &object.Error{Message: fmt.Sprintf(format, a...)}
+}
+
+func isError(obj object.Object) bool {
+	if obj != nil {
+		return obj.Type() == object.ERROR_OBJ
+	}
+	return false
+}
+
 func (i *Interpreter) Eval(node ast.Node) object.Object {
 	switch nd := node.(type) {
 	case *ast.Program:
@@ -47,6 +58,9 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 	case *ast.VarDeclaration:
 		val := i.Eval(nd.Value)
 		// define it in the scope
+		if isError(val) {
+			return val
+		}
 		i.env.Define(nd.Name.Value, val)
 
 	case *ast.Identifier:
@@ -59,14 +73,21 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 
 	case *ast.CallExpression:
 		function := i.Eval(&nd.Function)
+		if isError(function) {
+			return function
+		}
 		args := i.evalExpressions(nd.Args)
-		if len(args) == 1 {
+		if len(args) == 1 && isError(args[0]) {
+			// error out
 			return args[0]
 		}
 		return i.applyFunction(function, args)
 
 	case *ast.ReturnStatement:
 		val := i.Eval(nd.ReturnValue)
+		if isError(val) {
+			return val
+		}
 		return &object.ReturnValue{Value: val}
 
 	case *ast.ScopeStatement:
@@ -80,11 +101,20 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 
 	case *ast.UnaryExpression:
 		right := i.Eval(nd.Right)
+		if isError(right) {
+			return right
+		}
 		return i.evalUnaryExpression(nd.Operator, right)
 
 	case *ast.BinaryExpression:
 		left := i.Eval(nd.Left)
+		if isError(left) {
+			return left
+		}
 		right := i.Eval(nd.Right)
+		if isError(right) {
+			return right
+		}
 		return i.evalBinaryExpression(nd.Operator, left, right)
 
 	}
@@ -97,10 +127,14 @@ func (i *Interpreter) evalProgram(stmts []ast.Statement) object.Object {
 	for _, statement := range stmts {
 		result = i.Eval(statement)
 
-		if returnValue, ok := result.(*object.ReturnValue); ok {
-			return returnValue.Value
+		switch res := result.(type) {
+		case *object.ReturnValue:
+			return res.Value
+		case *object.Error:
+			return result
 		}
 	}
+
 	return result
 }
 
@@ -116,8 +150,8 @@ func (i *Interpreter) evalExpressions(exps []ast.Expression) []object.Object {
 	var result []object.Object
 	for _, e := range exps {
 		evaluated := i.Eval(e)
-		if evaluated == nil {
-			return []object.Object{}
+		if isError(evaluated) {
+			return []object.Object{evaluated}
 		}
 		result = append(result, evaluated)
 	}
@@ -128,11 +162,9 @@ func (i *Interpreter) evalIdentifier(identifier *ast.Identifier) object.Object {
 
 	if obj, ok := i.env.Resolve(identifier.Value); ok {
 		return obj
-	} else {
-		fmt.Printf("ERROR: identifier not found, %v\n", identifier)
 	}
 
-	return nil
+	return newError("identifier not found: %s", identifier.Value)
 }
 
 func (i *Interpreter) applyFunction(fn object.Object, args []object.Object) object.Object {
@@ -147,6 +179,7 @@ func (i *Interpreter) applyFunction(fn object.Object, args []object.Object) obje
 
 	i.env = extendedEnv
 	evaluated := i.Eval(function.Body)
+	// restore the old scope after function
 	i.env = extendedEnv.GetParentEnv()
 	return unwrapReturnValue(evaluated)
 }
@@ -173,15 +206,25 @@ func (i *Interpreter) evalBlockStatement(block *ast.BlockStatement) object.Objec
 	var result object.Object
 	for _, statement := range block.Body {
 		result = i.Eval(statement)
-		if result != nil && result.Type() == object.RETURN_VALUE_OBJ {
-			return result
+
+		if result != nil {
+			rt := result.Type()
+			if rt == object.RETURN_VALUE_OBJ || rt == object.ERROR_OBJ {
+				return result
+			}
 		}
+
 	}
+
 	return result
 }
 
 func (i *Interpreter) evalIfExpression(nd *ast.IfExpression) object.Object {
 	condition := i.Eval(nd.Condition)
+
+	if isError(condition) {
+		return condition
+	}
 
 	switch cdn := condition.(type) {
 	case *object.Boolean:
@@ -214,10 +257,9 @@ func (i *Interpreter) evalUnaryExpression(op string, right object.Object) object
 		// support for both ints and floats
 		return i.evalMinusPrefixOperatorExpression(right)
 	default:
-		return FALSE
 	}
 
-	return nil
+	return newError("unknown operator: %s%s", op, right.Type())
 }
 
 func (i *Interpreter) evalBangOperatorExpression(right *object.Boolean) *object.Boolean {
@@ -242,10 +284,8 @@ func (i *Interpreter) evalMinusPrefixOperatorExpression(right object.Object) obj
 		}
 	default:
 		// throw an error
-		fmt.Println("ERROR: - operator can only be applied on integer or float values")
+		return newError("unknown operator: -%s", right.Type())
 	}
-
-	return nil
 }
 
 func (i *Interpreter) evalBinaryExpression(op string, left, right object.Object) object.Object {
@@ -253,7 +293,7 @@ func (i *Interpreter) evalBinaryExpression(op string, left, right object.Object)
 	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
 		return i.evalIntegerInfixExpression(op, left.(*object.Integer), right.(*object.Integer))
 
-	case left.Type() == object.Float_OBJ && right.Type() == object.Float_OBJ:
+	case left.Type() == object.FLOAT_OBJ && right.Type() == object.FLOAT_OBJ:
 		return i.evalFloatInfixExpression(op, left.(*object.Float), right.(*object.Float))
 
 	case left.Type() == object.BOOLEAN_OBJ && right.Type() == object.BOOLEAN_OBJ:
@@ -261,11 +301,15 @@ func (i *Interpreter) evalBinaryExpression(op string, left, right object.Object)
 		// the only op allowed are (&&, ||)
 		return i.evalBooleanInfixExpression(op, left.(*object.Boolean), right.(*object.Boolean))
 
+	case left.Type() != right.Type():
+		return newError("type mismatch: %s %s %s",
+			left.Type(), op, right.Type())
+
 	default:
-		fmt.Println("NOT SUPPORTED YET", op)
+		return newError("unknown operator: %s %s %s",
+			left.Type(), op, right.Type())
 	}
 
-	return nil
 }
 
 func (i *Interpreter) evalIntegerInfixExpression(op string, left, right *object.Integer) object.Object {
@@ -301,12 +345,16 @@ func (i *Interpreter) evalIntegerInfixExpression(op string, left, right *object.
 		return nativeBooleanObject(left.Value != right.Value)
 	case lexer.TokenEquals:
 		return nativeBooleanObject(left.Value == right.Value)
+	case lexer.TokenAssign:
+		left.Value = right.Value
+		return left
 
 	default:
-		fmt.Printf("ERROR: %v operator, isn't allowed on integers\n", op)
+		return newError("unknown operator: %s %s %s",
+			left.Type(), op, right.Type())
+
 	}
 
-	return nil
 }
 
 func (i *Interpreter) evalFloatInfixExpression(op string, left, right *object.Float) object.Object {
@@ -340,12 +388,15 @@ func (i *Interpreter) evalFloatInfixExpression(op string, left, right *object.Fl
 		return nativeBooleanObject(left.Value != right.Value)
 	case lexer.TokenEquals:
 		return nativeBooleanObject(left.Value == right.Value)
+	case lexer.TokenAssign:
+		left.Value = right.Value
+		return left
 
 	default:
-		fmt.Printf("ERROR: %v operator, isn't allowed on floats\n", op)
+		return newError("unknown operator: %s %s %s",
+			left.Type(), op, right.Type())
 	}
 
-	return nil
 }
 
 func (i *Interpreter) evalBooleanInfixExpression(op string, left, right *object.Boolean) object.Object {
@@ -358,6 +409,10 @@ func (i *Interpreter) evalBooleanInfixExpression(op string, left, right *object.
 		return nativeBooleanObject(left.Value && right.Value)
 	case lexer.TokenOr:
 		return nativeBooleanObject(left.Value || right.Value)
+
+	case lexer.TokenAssign:
+		left.Value = right.Value
+		return left
 
 	default:
 		// error
