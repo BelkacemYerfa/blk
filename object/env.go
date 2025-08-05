@@ -1,22 +1,22 @@
 package object
 
 type Environment struct {
-	parent *Environment
-	store  map[string]Object
+	outer *Environment
+	store map[string]Object
 }
 
-func NewEnvironment(parent *Environment) *Environment {
+func NewEnvironment(outer *Environment) *Environment {
 	s := make(map[string]Object)
 	return &Environment{
-		parent: parent,
-		store:  s,
+		outer: outer,
+		store: s,
 	}
 }
 
 func (e *Environment) Resolve(name string) (Object, bool) {
 	obj, ok := e.store[name]
-	if !ok && e.parent != nil {
-		obj, ok = e.parent.Resolve(name)
+	if !ok && e.outer != nil {
+		obj, ok = e.outer.Resolve(name)
 	}
 	return obj, ok
 }
@@ -28,8 +28,4 @@ func (e *Environment) Define(name string, val Object) Object {
 	// define if there no value already bound to it
 	e.store[name] = val
 	return val
-}
-
-func (e *Environment) GetParentEnv() *Environment {
-	return e.parent
 }

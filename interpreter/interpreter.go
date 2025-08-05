@@ -57,10 +57,10 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 
 	case *ast.VarDeclaration:
 		val := i.Eval(nd.Value)
-		// define it in the scope
 		if isError(val) {
 			return val
 		}
+		// define it in the scope
 		i.env.Define(nd.Name.Value, val)
 
 	case *ast.Identifier:
@@ -118,7 +118,6 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		return i.evalBinaryExpression(nd.Operator, left, right)
 
 	}
-
 	return nil
 }
 
@@ -177,10 +176,12 @@ func (i *Interpreter) applyFunction(fn object.Object, args []object.Object) obje
 
 	extendedEnv := extendFunctionEnv(function, args)
 
+	// saves the current env
+	previousEnv := i.env
 	i.env = extendedEnv
 	evaluated := i.Eval(function.Body)
-	// restore the old scope after function
-	i.env = extendedEnv.GetParentEnv()
+	// restore the old env
+	i.env = previousEnv
 	return unwrapReturnValue(evaluated)
 }
 
@@ -416,8 +417,7 @@ func (i *Interpreter) evalBooleanInfixExpression(op string, left, right *object.
 
 	default:
 		// error
-		fmt.Printf("ERROR: %v operator, isn't allowed on booleans\n", op)
+		return newError("Unsupported operator: %s %s %s",
+			left.Type(), op, right.Type())
 	}
-
-	return nil
 }
