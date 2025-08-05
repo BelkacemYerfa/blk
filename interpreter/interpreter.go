@@ -52,6 +52,10 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		return &object.Float{
 			Value: nd.Value,
 		}
+	case *ast.StringLiteral:
+		return &object.String{
+			Value: nd.Value,
+		}
 	case *ast.BooleanLiteral:
 		return nativeBooleanObject(nd.Value)
 
@@ -302,6 +306,10 @@ func (i *Interpreter) evalBinaryExpression(op string, left, right object.Object)
 		// the only op allowed are (&&, ||)
 		return i.evalBooleanInfixExpression(op, left.(*object.Boolean), right.(*object.Boolean))
 
+	case left.Type() == object.STRING_OBJ || right.Type() == object.STRING_OBJ:
+		// allow addition with anything
+		return i.evalStringInfixExpression(op, left, right)
+
 	case left.Type() != right.Type():
 		return newError("type mismatch: %s %s %s",
 			left.Type(), op, right.Type())
@@ -420,4 +428,48 @@ func (i *Interpreter) evalBooleanInfixExpression(op string, left, right *object.
 		return newError("Unsupported operator: %s %s %s",
 			left.Type(), op, right.Type())
 	}
+}
+
+func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Object) object.Object {
+
+	switch op {
+
+	case lexer.TokenPlus:
+		// cool do the concat
+		return &object.String{
+			Value: left.Inspect() + " " + right.Inspect(),
+		}
+
+	// comparison
+	case lexer.TokenEquals:
+		return &object.Boolean{
+			Value: left.Inspect() == right.Inspect(),
+		}
+	case lexer.TokenNotEquals:
+		return &object.Boolean{
+			Value: left.Inspect() != right.Inspect(),
+		}
+
+	// value assign
+	case lexer.TokenAssign:
+		switch left := left.(type) {
+		case *object.String:
+			// associate the right if it gets evaluated to a string
+			if right, ok := right.(*object.String); ok {
+				left.Value = right.Value
+				fmt.Println(left)
+				return left
+			}
+			return newError("Can't assign a value of different type %s, %s",
+				left.Type(), right.Type())
+
+		default:
+			// this checks for other values check when the get a string as right side
+			return newError("Can't assign a value of different type %s, %s",
+				left.Type(), right.Type())
+		}
+	}
+
+	return newError("Unsupported operator: %s %s %s",
+		left.Type(), op, right.Type())
 }

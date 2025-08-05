@@ -13,6 +13,7 @@ const (
 	INTEGER_OBJ      = "INTEGER"
 	BOOLEAN_OBJ      = "BOOLEAN"
 	FLOAT_OBJ        = "FLOAT"
+	STRING_OBJ       = "STRING"
 	RETURN_VALUE_OBJ = "RETURN_VALUE"
 	FUNCTION_OBJ     = "FUNCTION"
 
@@ -45,6 +46,13 @@ type Float struct {
 
 func (b *Float) Type() ObjectType { return FLOAT_OBJ }
 func (b *Float) Inspect() string  { return fmt.Sprintf("%f", b.Value) }
+
+type String struct {
+	Value string
+}
+
+func (b *String) Type() ObjectType { return STRING_OBJ }
+func (b *String) Inspect() string  { return b.Value }
 
 type ReturnValue struct {
 	Value Object
