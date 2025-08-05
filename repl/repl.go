@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-const PROMPT = `>>>`
+const PROMPT = `>>> `
 
 func Start(in io.Reader, out io.Writer) {
 	scanner := bufio.NewScanner(in)
@@ -24,7 +24,7 @@ func Start(in io.Reader, out io.Writer) {
 			return
 		}
 		line := scanner.Text()
-		if strings.Contains("exit()", line) {
+		if strings.Contains(line, "exit()") {
 			break
 		}
 		l := lexer.NewLexer("", line)

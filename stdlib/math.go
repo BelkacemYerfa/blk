@@ -2,28 +2,64 @@ package stdlib
 
 import (
 	"blk/object"
-	"fmt"
+	"math"
 )
-
-func newError(format string, a ...interface{}) *object.Error {
-	return &object.Error{Message: fmt.Sprintf(format, a...)}
-}
 
 // math module definition
 var mathModule = object.Module{
-	"len": {
-		Fn: func(args ...object.Object) object.Object {
-			if len(args) != 1 {
-				return newError("wrong number of arguments. got=%d, want=1",
-					len(args))
-			}
-			switch arg := args[0].(type) {
-			case *object.String:
-				return &object.Integer{Value: int64(len(arg.Value))}
-			default:
-				return newError("argument to `len` not supported, got %s",
-					args[0].Type())
-			}
-		},
-	},
+	// math constants
+	// TODO: consider adding more
+	"PI": &object.BuiltinConst{Const: &object.Float{Value: math.Pi}},
+	"e":  &object.BuiltinConst{Const: &object.Float{Value: math.E}},
+	// math functions
+	// TODO: consider adding more
+	"abs": &object.BuiltinFn{Fn: ABS},
+	"pow": &object.BuiltinFn{Fn: POW},
+}
+
+func ABS(args ...object.Object) object.Object {
+	if len(args) != 1 {
+		return newError("wrong number of arguments. got=%d, want=1",
+			len(args))
+	}
+
+	switch arg := args[0].(type) {
+	case *object.Integer:
+		return &object.Integer{Value: int64(math.Abs(float64(arg.Value)))}
+	case *object.Float:
+		return &object.Float{Value: math.Abs(float64(arg.Value))}
+
+	default:
+		return newError("wrong type, expected an integer or float, got %s",
+			args[0].Type())
+	}
+}
+
+func POW(args ...object.Object) object.Object {
+	if len(args) != 2 {
+		return newError("wrong number of arguments. got=%d, want=1",
+			len(args))
+	}
+
+	// values either they're int or float
+	pow := float64(1)
+	switch p := args[1].(type) {
+	case *object.Integer:
+		pow = float64(p.Value)
+	case *object.Float:
+		pow = p.Value
+	default:
+		return newError("wrong type, expected the pow to be an integer or float, got %s", args[1].Type())
+	}
+
+	switch arg := args[0].(type) {
+	case *object.Integer:
+		return &object.Float{Value: math.Pow(float64(arg.Value), pow)}
+	case *object.Float:
+		return &object.Float{Value: math.Pow(arg.Value, pow)}
+
+	default:
+		return newError("wrong type, expected an integer or float, got %s",
+			args[0].Type())
+	}
 }

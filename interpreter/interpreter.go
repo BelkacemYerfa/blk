@@ -7,6 +7,7 @@ import (
 	"blk/stdlib"
 	"fmt"
 	"reflect"
+	"strings"
 )
 
 var (
@@ -50,7 +51,12 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			return newError("Module Not found %s", nd.ModuleName)
 		}
 		for name, fn := range module {
-			// register every function so u it can be used
+			// means that this function is internal and can't be used
+			// doesn't make so much sense cause u can just not register them
+			if strings.HasPrefix(name, "_") {
+				continue
+			}
+			// register function so u it can be used
 			i.env.Define(name, fn)
 		}
 
@@ -182,6 +188,14 @@ func (i *Interpreter) evalIdentifier(identifier *ast.Identifier) object.Object {
 		return obj
 	}
 
+	if buildInFunc, ok := builtInFunction[identifier.Value]; ok {
+		return buildInFunc
+	}
+
+	if builtInCons, ok := builtInConstants[identifier.Value]; ok {
+		return builtInCons
+	}
+
 	return newError("identifier not found: %s", identifier.Value)
 }
 
@@ -197,7 +211,7 @@ func (i *Interpreter) applyFunction(fn object.Object, args []object.Object) obje
 		i.env = previousEnv
 		return unwrapReturnValue(evaluated)
 
-	case *object.Builtin:
+	case *object.BuiltinFn:
 		return fn.Fn(args...)
 
 	default:
@@ -346,8 +360,10 @@ func (i *Interpreter) evalIntegerInfixExpression(op string, left, right *object.
 			Value: left.Value * right.Value,
 		}
 	case lexer.TokenSlash:
-		return &object.Integer{
-			Value: left.Value / right.Value,
+		// needs to be this way so the output of math operations like pow work properly
+		res := float64(left.Value) / float64(right.Value)
+		return &object.Float{
+			Value: res,
 		}
 	case lexer.TokenPlus:
 		return &object.Integer{

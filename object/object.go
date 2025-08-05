@@ -94,11 +94,19 @@ func (e *Error) Inspect() string  { return "ERROR: " + e.Message }
 
 type BuiltinFunction func(args ...Object) Object
 
-type Builtin struct {
+type BuiltinFn struct {
 	Fn BuiltinFunction
 }
 
-func (b *Builtin) Type() ObjectType { return BUILTIN_OBJ }
-func (b *Builtin) Inspect() string  { return "builtin function" }
+func (b *BuiltinFn) Type() ObjectType { return BUILTIN_OBJ }
+func (b *BuiltinFn) Inspect() string  { return "builtin function" }
 
-type Module = map[string]*Builtin
+type BuiltinConst struct {
+	Const Object
+}
+
+func (b *BuiltinConst) Type() ObjectType { return BUILTIN_OBJ }
+func (b *BuiltinConst) Inspect() string  { return b.Const.Inspect() }
+
+// this for module type which can be constants, functions (for now)
+type Module = map[string]Object
