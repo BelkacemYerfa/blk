@@ -3,7 +3,6 @@ package cmd
 import (
 	"blk/interpreter"
 	"blk/lexer"
-	"blk/object"
 	"blk/parser"
 	"blk/repl"
 	"encoding/json"
@@ -177,12 +176,7 @@ func Run(args []string) {
 	i := interpreter.NewInterpreter(nil)
 	evaluated := i.Eval(ast)
 
-	switch evaluated := evaluated.(type) {
-	case *object.Error:
-		evaluated.Inspect()
-	default:
-		fmt.Println(evaluated)
-	}
+	fmt.Println(evaluated.Inspect())
 }
 
 func Execute() {

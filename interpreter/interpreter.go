@@ -4,7 +4,9 @@ import (
 	"blk/ast"
 	"blk/lexer"
 	"blk/object"
+	"blk/stdlib"
 	"fmt"
+	"reflect"
 )
 
 var (
@@ -40,6 +42,17 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 	switch nd := node.(type) {
 	case *ast.Program:
 		return i.evalProgram(nd.Statements)
+
+	case *ast.ImportStatement:
+		// search for the module
+		module, ok := stdlib.BuiltinModules[nd.ModuleName.Value]
+		if !ok {
+			return newError("Module Not found %s", nd.ModuleName)
+		}
+		for name, fn := range module {
+			// register every function so u it can be used
+			i.env.Define(name, fn)
+		}
 
 	case *ast.ExpressionStatement:
 		return i.Eval(nd.Expression)
@@ -121,6 +134,8 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		}
 		return i.evalBinaryExpression(nd.Operator, left, right)
 
+	default:
+		fmt.Println("yehoo", reflect.TypeOf(nd))
 	}
 	return nil
 }
@@ -171,22 +186,24 @@ func (i *Interpreter) evalIdentifier(identifier *ast.Identifier) object.Object {
 }
 
 func (i *Interpreter) applyFunction(fn object.Object, args []object.Object) object.Object {
-	function, ok := fn.(*object.Function)
+	switch fn := fn.(type) {
+	case *object.Function:
+		extendedEnv := extendFunctionEnv(fn, args)
+		// save the current env
+		previousEnv := i.env
+		i.env = extendedEnv
+		evaluated := i.Eval(fn.Body)
+		// restore the old env
+		i.env = previousEnv
+		return unwrapReturnValue(evaluated)
 
-	if !ok {
-		fmt.Println("not a function:", fn.Type())
-		return nil
+	case *object.Builtin:
+		return fn.Fn(args...)
+
+	default:
+		return newError("not a function: %s", fn.Type())
 	}
 
-	extendedEnv := extendFunctionEnv(function, args)
-
-	// saves the current env
-	previousEnv := i.env
-	i.env = extendedEnv
-	evaluated := i.Eval(function.Body)
-	// restore the old env
-	i.env = previousEnv
-	return unwrapReturnValue(evaluated)
 }
 
 func extendFunctionEnv(
