@@ -1,19 +1,24 @@
 package object
 
+type ItemObject struct {
+	Object
+	IsMutable bool
+}
+
 type Environment struct {
 	outer *Environment
-	store map[string]Object
+	store map[string]ItemObject
 }
 
 func NewEnvironment(outer *Environment) *Environment {
-	s := make(map[string]Object)
+	s := make(map[string]ItemObject)
 	return &Environment{
 		outer: outer,
 		store: s,
 	}
 }
 
-func (e *Environment) Resolve(name string) (Object, bool) {
+func (e *Environment) Resolve(name string) (ItemObject, bool) {
 	obj, ok := e.store[name]
 	if !ok && e.outer != nil {
 		obj, ok = e.outer.Resolve(name)
@@ -21,7 +26,7 @@ func (e *Environment) Resolve(name string) (Object, bool) {
 	return obj, ok
 }
 
-func (e *Environment) Define(name string, val Object) Object {
+func (e *Environment) Define(name string, val ItemObject) Object {
 	if _, ok := e.store[name]; ok {
 		return val
 	}

@@ -302,7 +302,7 @@ func (p *Parser) Parse() *ast.Program {
 func (p *Parser) parseStatement() (ast.Statement, error) {
 	stmtToken := p.currentToken() // Consume stmt
 	switch stmtToken.Kind {
-	case lexer.TokenLet:
+	case lexer.TokenLet, lexer.TokenConst:
 		return p.parseVarDeclaration()
 	case lexer.TokenReturn:
 		return p.parseReturnStatement()
@@ -1114,7 +1114,14 @@ func (p *Parser) parseMemberShipAccess(left ast.Expression) ast.Expression {
 }
 
 func (p *Parser) parseBindExpression() (ast.Statement, error) {
-	stmt := &ast.VarDeclaration{Token: p.currentToken()}
+	stmt := &ast.VarDeclaration{Token: lexer.Token{
+		LiteralToken: lexer.LiteralToken{
+			Text: "let",
+			Kind: lexer.TokenLet,
+		},
+		Col: p.currentToken().Col,
+		Row: p.currentToken().Row,
+	}}
 
 	identifier, ok := p.parseIdentifier().(*ast.Identifier)
 
@@ -1127,7 +1134,15 @@ func (p *Parser) parseBindExpression() (ast.Statement, error) {
 	tok := p.nextToken()
 
 	switch tok.Kind {
-	case lexer.TokenWalrus, lexer.TokenBind:
+	case lexer.TokenBind:
+		stmt.Token = lexer.Token{
+			LiteralToken: lexer.LiteralToken{
+				Text: "const",
+				Kind: lexer.TokenConst,
+			},
+		}
+		// fall through
+	case lexer.TokenWalrus:
 		// fall through
 	default:
 		return nil, p.error(tok, "ERROR: expected (:= or ::) operators, got shit")

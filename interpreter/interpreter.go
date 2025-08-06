@@ -57,7 +57,10 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 				continue
 			}
 			// register function so u it can be used
-			i.env.Define(name, fn)
+			i.env.Define(name, object.ItemObject{
+				Object:    fn,
+				IsMutable: false,
+			})
 		}
 
 	case *ast.ExpressionStatement:
@@ -84,7 +87,18 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			return val
 		}
 		// define it in the scope
-		i.env.Define(nd.Name.Value, val)
+		if nd.Token.Text == "let" {
+			i.env.Define(nd.Name.Value, object.ItemObject{
+				Object:    val,
+				IsMutable: true,
+			})
+		} else {
+			// constant
+			i.env.Define(nd.Name.Value, object.ItemObject{
+				Object:    val,
+				IsMutable: false,
+			})
+		}
 
 	case *ast.Identifier:
 		return i.evalIdentifier(nd)
@@ -177,13 +191,15 @@ func (i *Interpreter) evalExpressions(exps []ast.Expression) []object.Object {
 		if isError(evaluated) {
 			return []object.Object{evaluated}
 		}
-		result = append(result, evaluated)
+		argEval, _ := cast(evaluated)
+		result = append(result, argEval)
 	}
 	return result
 }
 
 func (i *Interpreter) evalIdentifier(identifier *ast.Identifier) object.Object {
 
+	// do the check on the operation layer if the current treated value is mutable or not
 	if obj, ok := i.env.Resolve(identifier.Value); ok {
 		return obj
 	}
@@ -200,8 +216,22 @@ func (i *Interpreter) evalIdentifier(identifier *ast.Identifier) object.Object {
 }
 
 func (i *Interpreter) applyFunction(fn object.Object, args []object.Object) object.Object {
+
+	//
+	fn, _ = cast(fn)
+
 	switch fn := fn.(type) {
 	case *object.Function:
+
+		argSize := len(args)
+		fnParamSize := len(fn.Parameters)
+
+		// check that the number of params is the same
+		if argSize != fnParamSize {
+			return newError("wrong number of arguments. got=%d, want=%d",
+				argSize, fnParamSize)
+		}
+
 		extendedEnv := extendFunctionEnv(fn, args)
 		// save the current env
 		previousEnv := i.env
@@ -226,7 +256,11 @@ func extendFunctionEnv(
 ) *object.Environment {
 	env := object.NewEnvironment(fn.Env)
 	for paramIdx, param := range fn.Parameters {
-		env.Define(param.Value, args[paramIdx])
+		env.Define(param.Value, object.ItemObject{
+			Object: args[paramIdx],
+			// this makes the params mutable
+			IsMutable: true,
+		})
 	}
 	return env
 }
@@ -274,10 +308,8 @@ func (i *Interpreter) evalIfExpression(nd *ast.IfExpression) object.Object {
 		}
 	default:
 		// error out
-		fmt.Println("ERROR: evaluation of the condition needs to return a boolean not", cdn)
+		return newError("ERROR: evaluation of the condition needs to return a boolean not %s", cdn)
 	}
-
-	return nil
 }
 
 func (i *Interpreter) evalUnaryExpression(op string, right object.Object) object.Object {
@@ -327,15 +359,15 @@ func (i *Interpreter) evalMinusPrefixOperatorExpression(right object.Object) obj
 func (i *Interpreter) evalBinaryExpression(op string, left, right object.Object) object.Object {
 	switch {
 	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
-		return i.evalIntegerInfixExpression(op, left.(*object.Integer), right.(*object.Integer))
+		return i.evalIntegerInfixExpression(op, left, right)
 
 	case left.Type() == object.FLOAT_OBJ && right.Type() == object.FLOAT_OBJ:
-		return i.evalFloatInfixExpression(op, left.(*object.Float), right.(*object.Float))
+		return i.evalFloatInfixExpression(op, left, right)
 
 	case left.Type() == object.BOOLEAN_OBJ && right.Type() == object.BOOLEAN_OBJ:
 		// this not allowed at all (no operations on booleans)
 		// the only op allowed are (&&, ||)
-		return i.evalBooleanInfixExpression(op, left.(*object.Boolean), right.(*object.Boolean))
+		return i.evalBooleanInfixExpression(op, left, right)
 
 	case left.Type() == object.STRING_OBJ || right.Type() == object.STRING_OBJ:
 		// allow addition with anything
@@ -352,7 +384,15 @@ func (i *Interpreter) evalBinaryExpression(op string, left, right object.Object)
 
 }
 
-func (i *Interpreter) evalIntegerInfixExpression(op string, left, right *object.Integer) object.Object {
+func (i *Interpreter) evalIntegerInfixExpression(op string, lt, rt object.Object) object.Object {
+
+	l, leftMutable := cast(lt)
+	r, _ := cast(rt)
+	// cast them to integers
+
+	left := l.(*object.Integer)
+	right := r.(*object.Integer)
+
 	switch op {
 	// arithmetic operations
 	case lexer.TokenMultiply:
@@ -387,9 +427,15 @@ func (i *Interpreter) evalIntegerInfixExpression(op string, left, right *object.
 		return nativeBooleanObject(left.Value != right.Value)
 	case lexer.TokenEquals:
 		return nativeBooleanObject(left.Value == right.Value)
+
 	case lexer.TokenAssign:
-		left.Value = right.Value
-		return left
+		if leftMutable {
+			left.Value = right.Value
+			return left
+		} else {
+			// error saying this can't be mutable
+			return newError("%v can't be mutate, since it was defined as const", left)
+		}
 
 	default:
 		return newError("unknown operator: %s %s %s",
@@ -399,7 +445,15 @@ func (i *Interpreter) evalIntegerInfixExpression(op string, left, right *object.
 
 }
 
-func (i *Interpreter) evalFloatInfixExpression(op string, left, right *object.Float) object.Object {
+func (i *Interpreter) evalFloatInfixExpression(op string, lt, rt object.Object) object.Object {
+
+	l, leftMutable := cast(lt)
+	r, _ := cast(rt)
+
+	// cast them to floats
+	left := l.(*object.Float)
+	right := r.(*object.Float)
+
 	switch op {
 	case lexer.TokenMultiply:
 		return &object.Float{
@@ -431,8 +485,13 @@ func (i *Interpreter) evalFloatInfixExpression(op string, left, right *object.Fl
 	case lexer.TokenEquals:
 		return nativeBooleanObject(left.Value == right.Value)
 	case lexer.TokenAssign:
-		left.Value = right.Value
-		return left
+		if leftMutable {
+			left.Value = right.Value
+			return left
+		} else {
+			// error saying this can't be mutable
+			return newError("%v can't be mutate, since it was defined as const", left)
+		}
 
 	default:
 		return newError("unknown operator: %s %s %s",
@@ -441,7 +500,15 @@ func (i *Interpreter) evalFloatInfixExpression(op string, left, right *object.Fl
 
 }
 
-func (i *Interpreter) evalBooleanInfixExpression(op string, left, right *object.Boolean) object.Object {
+func (i *Interpreter) evalBooleanInfixExpression(op string, lt, rt object.Object) object.Object {
+
+	l, leftMutable := cast(lt)
+	r, _ := cast(rt)
+
+	// cast them to booleans
+	left := l.(*object.Boolean)
+	right := r.(*object.Boolean)
+
 	switch op {
 	case lexer.TokenEquals:
 		return nativeBooleanObject(left.Value == right.Value)
@@ -453,8 +520,13 @@ func (i *Interpreter) evalBooleanInfixExpression(op string, left, right *object.
 		return nativeBooleanObject(left.Value || right.Value)
 
 	case lexer.TokenAssign:
-		left.Value = right.Value
-		return left
+		if leftMutable {
+			left.Value = right.Value
+			return left
+		} else {
+			// error saying this can't be mutable
+			return newError("%v can't be mutate, since it was defined as const", left)
+		}
 
 	default:
 		// error
@@ -466,7 +538,6 @@ func (i *Interpreter) evalBooleanInfixExpression(op string, left, right *object.
 func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Object) object.Object {
 
 	switch op {
-
 	case lexer.TokenPlus:
 		// cool do the concat
 		return &object.String{
@@ -485,14 +556,24 @@ func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Ob
 
 	// value assign
 	case lexer.TokenAssign:
-		switch left := left.(type) {
+		// cast for this also
+
+		l, leftMutable := cast(left)
+
+		if !leftMutable {
+			return newError("%v can't be mutate, since it was defined as const", left)
+		}
+
+		r, _ := cast(right)
+
+		switch left := l.(type) {
 		case *object.String:
 			// associate the right if it gets evaluated to a string
-			if right, ok := right.(*object.String); ok {
+			if right, ok := r.(*object.String); ok {
 				left.Value = right.Value
-				fmt.Println(left)
 				return left
 			}
+
 			return newError("Can't assign a value of different type %s, %s",
 				left.Type(), right.Type())
 
@@ -505,4 +586,15 @@ func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Ob
 
 	return newError("Unsupported operator: %s %s %s",
 		left.Type(), op, right.Type())
+}
+
+func cast(obj object.Object) (object.Object, bool) {
+	switch obj := obj.(type) {
+	case object.ItemObject:
+		return obj.Object, obj.IsMutable
+	// case *object.ItemObject:
+	// 	return obj.Object, obj.IsMutable
+	default:
+		return obj, false
+	}
 }

@@ -6,6 +6,7 @@ const (
 
 	// Keywords
 	TokenLet    TokenKind = "let"
+	TokenConst  TokenKind = "const"
 	TokenStruct TokenKind = "struct"
 	TokenEnum   TokenKind = "enum"
 	TokenFn     TokenKind = "fn"

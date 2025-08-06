@@ -5,6 +5,7 @@ type Operator = string
 var (
 	Keywords = map[string]TokenKind{
 		"let":    TokenLet,
+		"const":  TokenConst,
 		"struct": TokenStruct,
 		"enum":   TokenEnum,
 		"if":     TokenIf,
