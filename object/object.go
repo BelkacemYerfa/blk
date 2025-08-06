@@ -4,6 +4,7 @@ import (
 	"blk/ast"
 	"bytes"
 	"fmt"
+	"hash/fnv"
 	"strings"
 )
 
@@ -18,10 +19,17 @@ const (
 	FUNCTION_OBJ     = "FUNCTION"
 	BUILTIN_OBJ      = "BUILTIN"
 	IMPORT_OBJ       = "IMPORT"
+	ARRAY_OBJ        = "ARRAY"
+	MAP_OBJ          = "MAP"
 
 	// errors
 	ERROR_OBJ = "ERROR"
 )
+
+type HashKey struct {
+	Type  ObjectType
+	Value float64
+}
 
 type Object interface {
 	Type() ObjectType
@@ -34,6 +42,9 @@ type Integer struct {
 
 func (i *Integer) Type() ObjectType { return INTEGER_OBJ }
 func (i *Integer) Inspect() string  { return fmt.Sprintf("%d", i.Value) }
+func (i *Integer) HashKey() HashKey {
+	return HashKey{Type: i.Type(), Value: float64(i.Value)}
+}
 
 type Boolean struct {
 	Value bool
@@ -41,6 +52,15 @@ type Boolean struct {
 
 func (b *Boolean) Type() ObjectType { return BOOLEAN_OBJ }
 func (b *Boolean) Inspect() string  { return fmt.Sprintf("%t", b.Value) }
+func (b *Boolean) HashKey() HashKey {
+	var value uint64
+	if b.Value {
+		value = 1
+	} else {
+		value = 0
+	}
+	return HashKey{Type: b.Type(), Value: float64(value)}
+}
 
 type Float struct {
 	Value float64
@@ -48,13 +68,21 @@ type Float struct {
 
 func (b *Float) Type() ObjectType { return FLOAT_OBJ }
 func (b *Float) Inspect() string  { return fmt.Sprintf("%f", b.Value) }
+func (b *Float) HashKey() HashKey {
+	return HashKey{Type: b.Type(), Value: b.Value}
+}
 
 type String struct {
 	Value string
 }
 
 func (b *String) Type() ObjectType { return STRING_OBJ }
-func (b *String) Inspect() string  { return b.Value }
+func (b *String) Inspect() string  { return fmt.Sprintf(`"%s"`, b.Value) }
+func (s *String) HashKey() HashKey {
+	h := fnv.New64a()
+	h.Write([]byte(s.Value))
+	return HashKey{Type: s.Type(), Value: float64(h.Sum64())}
+}
 
 type ReturnValue struct {
 	Value Object
@@ -82,6 +110,53 @@ func (f *Function) Inspect() string {
 	out.WriteString(") {\n")
 	out.WriteString(f.Body.String())
 	out.WriteString("\n}")
+	return out.String()
+}
+
+type Array struct {
+	Elements []Object
+}
+
+func (a *Array) Type() ObjectType { return ARRAY_OBJ }
+func (a *Array) Inspect() string {
+	var out bytes.Buffer
+	out.WriteString("[")
+	for idx, elem := range a.Elements {
+		out.WriteString(elem.Inspect())
+		if idx+1 <= len(a.Elements)-1 {
+			out.WriteString(", ")
+		}
+	}
+	out.WriteString("]")
+	return out.String()
+}
+
+type Hashable interface {
+	HashKey() HashKey
+}
+
+type HashPair struct {
+	Key   Object
+	Value Object
+}
+
+type PairsType = map[HashKey]HashPair
+
+type Map struct {
+	Pairs PairsType
+}
+
+func (a *Map) Type() ObjectType { return MAP_OBJ }
+func (a *Map) Inspect() string {
+	var out bytes.Buffer
+	pairs := []string{}
+	for _, pair := range a.Pairs {
+		pairs = append(pairs, fmt.Sprintf("%s: %s",
+			pair.Key.Inspect(), pair.Value.Inspect()))
+	}
+	out.WriteString("{")
+	out.WriteString(strings.Join(pairs, ", "))
+	out.WriteString("}")
 	return out.String()
 }
 

@@ -81,6 +81,27 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 	case *ast.BooleanLiteral:
 		return nativeBooleanObject(nd.Value)
 
+	case *ast.ArrayLiteral:
+		elements := i.evalArrayExpression(nd.Elements)
+		if len(elements) == 1 && isError(elements[0]) {
+			return elements[0]
+		}
+		return &object.Array{Elements: elements}
+
+	case *ast.MapLiteral:
+		return i.evalMapExpression(nd.Pairs)
+
+	case *ast.IndexExpression:
+		left := i.Eval(nd.Left)
+		if isError(left) {
+			return left
+		}
+		index := i.Eval(nd.Index)
+		if isError(index) {
+			return index
+		}
+		return i.evalIndexExpression(left, index)
+
 	case *ast.VarDeclaration:
 		val := i.Eval(nd.Value)
 		if isError(val) {
@@ -195,6 +216,120 @@ func (i *Interpreter) evalExpressions(exps []ast.Expression) []object.Object {
 		result = append(result, argEval)
 	}
 	return result
+}
+
+// this is used for evaluating array elements
+func (i *Interpreter) evalArrayExpression(exps []ast.Expression) []object.Object {
+	result := make([]object.Object, 0, len(exps))
+	var firstElem object.Object
+	for idx, e := range exps {
+		evaluated := i.Eval(e)
+		if isError(evaluated) {
+			return []object.Object{evaluated}
+		}
+		elemEval, _ := cast(evaluated)
+		if idx == 0 {
+			firstElem = elemEval
+		}
+		if firstElem.Type() != elemEval.Type() {
+			// throw an error here
+			return []object.Object{
+				newError("multitude of types, (%v,%v), array elements should be of one type", firstElem.Type(), elemEval.Type()),
+			}
+		}
+		// else push the element
+		result = append(result, evaluated)
+	}
+	return result
+}
+
+// this is used for evaluating map pairs (key, value)
+func (i *Interpreter) evalMapExpression(prs map[ast.Expression]ast.Expression) object.Object {
+	pairs := make(map[object.HashKey]object.HashPair, len(prs))
+	var keyEl, valEl object.Object
+	idx := 0
+	for keyNode, valueNode := range prs {
+		key := i.Eval(keyNode)
+		if isError(key) {
+			return key
+		}
+		key, _ = cast(key)
+		hashKey, ok := key.(object.Hashable)
+		if !ok {
+			return newError("unusable as hash key: %s", key.Type())
+		}
+		if idx == 0 {
+			keyEl = key
+		}
+		if keyEl.Type() != key.Type() {
+			return newError("multitude of types, (%v,%v), key elements of a map should be of one type", keyEl.Type(), key.Type())
+		}
+
+		value := i.Eval(valueNode)
+		if isError(value) {
+			return value
+		}
+		hashed := hashKey.HashKey()
+		value, _ = cast(value)
+		if idx == 0 {
+			valEl = value
+		}
+		if valEl.Type() != value.Type() {
+			return newError("multitude of types, (%v,%v), value elements of a map should be of one type", valEl.Type(), value.Type())
+		}
+		pairs[hashed] = object.HashPair{Key: key, Value: value}
+		idx++
+	}
+
+	return &object.Map{Pairs: pairs}
+}
+
+func (i *Interpreter) evalIndexExpression(lf, index object.Object) object.Object {
+	// make sure that the left is either a map or an array
+	lf, _ = cast(lf)
+	index, _ = cast(index)
+	switch lf := lf.(type) {
+	case *object.Array:
+		// fall through
+		if index.Type() != object.INTEGER_OBJ {
+			return newError("index side needs to be an integer, got %v", index.Type())
+		}
+
+		return i.evalArrayIndexExpression(lf, index)
+	case *object.Map:
+		return i.evalMapIndexExpression(lf, index)
+
+	default:
+		return newError("left side needs to be either an array or map, got %v", lf.Type())
+	}
+}
+
+func (i *Interpreter) evalArrayIndexExpression(array, index object.Object) object.Object {
+	arrayObject := array.(*object.Array)
+	idx := index.(*object.Integer).Value
+	max := int64(len(arrayObject.Elements) - 1)
+
+	if idx < 0 || idx > max {
+		return newError("index out of bound, %d", idx)
+	}
+
+	return arrayObject.Elements[idx]
+}
+
+func (i *Interpreter) evalMapIndexExpression(hashMap, index object.Object) object.Object {
+	mapObject := hashMap.(*object.Map)
+
+	key, ok := index.(object.Hashable)
+	if !ok {
+		return newError("unusable as hash key: %s", index.Type())
+	}
+
+	pair, ok := mapObject.Pairs[key.HashKey()]
+	if !ok {
+		return newError("index (%v) is not associated with any value", key.HashKey().Value)
+	}
+	return pair.Value
+
 }
 
 func (i *Interpreter) evalIdentifier(identifier *ast.Identifier) object.Object {
@@ -320,7 +455,7 @@ func (i *Interpreter) evalUnaryExpression(op string, right object.Object) object
 			return i.evalBangOperatorExpression(right.(*object.Boolean))
 		}
 		// throw an error
-		fmt.Println("ERROR: ! operator can only be applied on boolean values")
+		return newError("! operator can only be applied on boolean values")
 	case lexer.TokenMinus:
 		// support for both ints and floats
 		return i.evalMinusPrefixOperatorExpression(right)
@@ -592,8 +727,8 @@ func cast(obj object.Object) (object.Object, bool) {
 	switch obj := obj.(type) {
 	case object.ItemObject:
 		return obj.Object, obj.IsMutable
-	// case *object.ItemObject:
-	// 	return obj.Object, obj.IsMutable
+	case *object.ItemObject:
+		return obj.Object, obj.IsMutable
 	default:
 		return obj, false
 	}
