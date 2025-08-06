@@ -23,7 +23,9 @@ func ABS(args ...object.Object) object.Object {
 			len(args))
 	}
 
-	switch arg := args[0].(type) {
+	num, _ := object.Cast(args[0])
+
+	switch arg := num.(type) {
 	case *object.Integer:
 		return &object.Integer{Value: int64(math.Abs(float64(arg.Value)))}
 	case *object.Float:
@@ -37,13 +39,16 @@ func ABS(args ...object.Object) object.Object {
 
 func POW(args ...object.Object) object.Object {
 	if len(args) != 2 {
-		return newError("wrong number of arguments. got=%d, want=1",
+		return newError("wrong number of arguments. got=%d, want=2",
 			len(args))
 	}
 
+	power, _ := object.Cast(args[1])
+	num, _ := object.Cast(args[0])
+
 	// values either they're int or float
 	pow := float64(1)
-	switch p := args[1].(type) {
+	switch p := power.(type) {
 	case *object.Integer:
 		pow = float64(p.Value)
 	case *object.Float:
@@ -52,7 +57,7 @@ func POW(args ...object.Object) object.Object {
 		return newError("wrong type, expected the pow to be an integer or float, got %s", args[1].Type())
 	}
 
-	switch arg := args[0].(type) {
+	switch arg := num.(type) {
 	case *object.Integer:
 		return &object.Float{Value: math.Pow(float64(arg.Value), pow)}
 	case *object.Float:

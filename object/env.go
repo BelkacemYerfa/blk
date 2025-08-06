@@ -3,6 +3,7 @@ package object
 type ItemObject struct {
 	Object
 	IsMutable bool
+	IsBuiltIn bool
 }
 
 type Environment struct {

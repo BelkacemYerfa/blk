@@ -185,3 +185,35 @@ func (b *BuiltinConst) Inspect() string  { return b.Const.Inspect() }
 
 // this for module type which can be constants, functions (for now)
 type Module = map[string]Object
+
+func Cast(obj Object) (Object, bool) {
+	switch obj := obj.(type) {
+	case ItemObject:
+		return obj.Object, obj.IsMutable
+	case *ItemObject:
+		return obj.Object, obj.IsMutable
+	default:
+		return obj, false
+	}
+}
+
+func ObjectEquals(a, b Object) bool {
+	switch aVal := a.(type) {
+	case *Integer:
+		bVal, ok := b.(*Integer)
+		return ok && aVal.Value == bVal.Value
+	case *Boolean:
+		bVal, ok := b.(*Boolean)
+		return ok && aVal.Value == bVal.Value
+	case *String:
+		bVal, ok := b.(*String)
+		return ok && aVal.Value == bVal.Value
+	case *Float:
+		bVal, ok := b.(*Float)
+		return ok && aVal.Value == bVal.Value
+	// TODO: needs to be extended for recursive compare later
+	default:
+		// fallback: not equal
+		return false
+	}
+}

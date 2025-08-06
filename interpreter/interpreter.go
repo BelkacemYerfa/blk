@@ -60,6 +60,7 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			i.env.Define(name, object.ItemObject{
 				Object:    fn,
 				IsMutable: false,
+				IsBuiltIn: true,
 			})
 		}
 
@@ -134,7 +135,9 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		if isError(function) {
 			return function
 		}
-		args := i.evalExpressions(nd.Args)
+		// function is always of type object.ItemObject
+		ableToCast := function.(object.ItemObject).IsBuiltIn
+		args := i.evalExpressions(nd.Args, !ableToCast)
 		if len(args) == 1 && isError(args[0]) {
 			// error out
 			return args[0]
@@ -205,14 +208,29 @@ func nativeBooleanObject(val bool) *object.Boolean {
 	}
 }
 
-func (i *Interpreter) evalExpressions(exps []ast.Expression) []object.Object {
+func (i *Interpreter) evalExpressions(exps []ast.Expression, ableToCast bool) []object.Object {
 	var result []object.Object
 	for _, e := range exps {
 		evaluated := i.Eval(e)
 		if isError(evaluated) {
 			return []object.Object{evaluated}
 		}
-		argEval, _ := cast(evaluated)
+		argEval := evaluated
+		switch ev := evaluated.(type) {
+		case object.ItemObject:
+			// leave it as it is cause it is in the proper shape
+		default:
+			// wrap it inside of ItemObject struct
+			argEval = object.ItemObject{
+				Object: ev,
+				// means any param that gets passed to the func is mutable
+				// predefined values that u pass are not affected by this
+				IsMutable: true,
+			}
+		}
+		if ableToCast {
+			argEval, _ = object.Cast(evaluated)
+		}
 		result = append(result, argEval)
 	}
 	return result
@@ -227,7 +245,7 @@ func (i *Interpreter) evalArrayExpression(exps []ast.Expression) []object.Object
 		if isError(evaluated) {
 			return []object.Object{evaluated}
 		}
-		elemEval, _ := cast(evaluated)
+		elemEval, _ := object.Cast(evaluated)
 		if idx == 0 {
 			firstElem = elemEval
 		}
@@ -253,7 +271,7 @@ func (i *Interpreter) evalMapExpression(prs map[ast.Expression]ast.Expression) o
 		if isError(key) {
 			return key
 		}
-		key, _ = cast(key)
+		key, _ = object.Cast(key)
 		hashKey, ok := key.(object.Hashable)
 		if !ok {
 			return newError("unusable as hash key: %s", key.Type())
@@ -270,7 +288,7 @@ func (i *Interpreter) evalMapExpression(prs map[ast.Expression]ast.Expression) o
 			return value
 		}
 		hashed := hashKey.HashKey()
-		value, _ = cast(value)
+		value, _ = object.Cast(value)
 		if idx == 0 {
 			valEl = value
 		}
@@ -286,11 +304,10 @@ func (i *Interpreter) evalMapExpression(prs map[ast.Expression]ast.Expression) o
 
 func (i *Interpreter) evalIndexExpression(lf, index object.Object) object.Object {
 	// make sure that the left is either a map or an array
-	lf, _ = cast(lf)
-	index, _ = cast(index)
+	lf, _ = object.Cast(lf)
+	index, _ = object.Cast(index)
 	switch lf := lf.(type) {
 	case *object.Array:
-		// fall through
 		if index.Type() != object.INTEGER_OBJ {
 			return newError("index side needs to be an integer, got %v", index.Type())
 		}
@@ -326,10 +343,10 @@ func (i *Interpreter) evalMapIndexExpression(hashMap, index object.Object) objec
 
 	pair, ok := mapObject.Pairs[key.HashKey()]
 	if !ok {
-		return newError("index (%v) is not associated with any value", key.HashKey().Value)
+		return newError("index (%v) is not associated with any value", index.Inspect())
 	}
-	return pair.Value
 
+	return pair.Value
 }
 
 func (i *Interpreter) evalIdentifier(identifier *ast.Identifier) object.Object {
@@ -353,7 +370,7 @@ func (i *Interpreter) evalIdentifier(identifier *ast.Identifier) object.Object {
 func (i *Interpreter) applyFunction(fn object.Object, args []object.Object) object.Object {
 
 	//
-	fn, _ = cast(fn)
+	fn, _ = object.Cast(fn)
 
 	switch fn := fn.(type) {
 	case *object.Function:
@@ -521,8 +538,8 @@ func (i *Interpreter) evalBinaryExpression(op string, left, right object.Object)
 
 func (i *Interpreter) evalIntegerInfixExpression(op string, lt, rt object.Object) object.Object {
 
-	l, leftMutable := cast(lt)
-	r, _ := cast(rt)
+	l, leftMutable := object.Cast(lt)
+	r, _ := object.Cast(rt)
 	// cast them to integers
 
 	left := l.(*object.Integer)
@@ -582,8 +599,8 @@ func (i *Interpreter) evalIntegerInfixExpression(op string, lt, rt object.Object
 
 func (i *Interpreter) evalFloatInfixExpression(op string, lt, rt object.Object) object.Object {
 
-	l, leftMutable := cast(lt)
-	r, _ := cast(rt)
+	l, leftMutable := object.Cast(lt)
+	r, _ := object.Cast(rt)
 
 	// cast them to floats
 	left := l.(*object.Float)
@@ -637,8 +654,8 @@ func (i *Interpreter) evalFloatInfixExpression(op string, lt, rt object.Object) 
 
 func (i *Interpreter) evalBooleanInfixExpression(op string, lt, rt object.Object) object.Object {
 
-	l, leftMutable := cast(lt)
-	r, _ := cast(rt)
+	l, leftMutable := object.Cast(lt)
+	r, _ := object.Cast(rt)
 
 	// cast them to booleans
 	left := l.(*object.Boolean)
@@ -693,13 +710,13 @@ func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Ob
 	case lexer.TokenAssign:
 		// cast for this also
 
-		l, leftMutable := cast(left)
+		l, leftMutable := object.Cast(left)
 
 		if !leftMutable {
 			return newError("%v can't be mutate, since it was defined as const", left)
 		}
 
-		r, _ := cast(right)
+		r, _ := object.Cast(right)
 
 		switch left := l.(type) {
 		case *object.String:
@@ -721,15 +738,4 @@ func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Ob
 
 	return newError("Unsupported operator: %s %s %s",
 		left.Type(), op, right.Type())
-}
-
-func cast(obj object.Object) (object.Object, bool) {
-	switch obj := obj.(type) {
-	case object.ItemObject:
-		return obj.Object, obj.IsMutable
-	case *object.ItemObject:
-		return obj.Object, obj.IsMutable
-	default:
-		return obj, false
-	}
 }
