@@ -77,7 +77,7 @@ type String struct {
 }
 
 func (b *String) Type() ObjectType { return STRING_OBJ }
-func (b *String) Inspect() string  { return fmt.Sprintf(`"%s"`, b.Value) }
+func (b *String) Inspect() string  { return b.Value }
 func (s *String) HashKey() HashKey {
 	h := fnv.New64a()
 	h.Write([]byte(s.Value))
@@ -215,5 +215,36 @@ func ObjectEquals(a, b Object) bool {
 	default:
 		// fallback: not equal
 		return false
+	}
+}
+
+func DeepCopy(obj Object) Object {
+	switch val := obj.(type) {
+	case *Integer:
+		return &Integer{Value: val.Value}
+	case *String:
+		return &String{Value: val.Value}
+	case *Boolean:
+		return &Boolean{Value: val.Value}
+	case *Float:
+		return &Float{Value: val.Value}
+	case *Array:
+		elements := make([]Object, 0, len(val.Elements))
+		for i, elem := range val.Elements {
+			elements[i] = DeepCopy(elem)
+		}
+		return &Array{Elements: elements}
+	case *Map:
+		pairs := make(PairsType, len(val.Pairs))
+		for i, elem := range val.Pairs {
+			pairs[i] = HashPair{
+				Key:   DeepCopy(elem.Key),
+				Value: DeepCopy(elem.Value),
+			}
+		}
+		return &Map{Pairs: pairs}
+	// Add other types as needed...
+	default:
+		return val // For immutable or not-clonable types (like Error, etc.)
 	}
 }

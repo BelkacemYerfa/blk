@@ -59,7 +59,6 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			// register function so u it can be used
 			i.env.Define(name, object.ItemObject{
 				Object:    fn,
-				IsMutable: false,
 				IsBuiltIn: true,
 			})
 		}
@@ -103,23 +102,39 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		}
 		return i.evalIndexExpression(left, index)
 
+	case *ast.WhileStatement:
+		return i.evalWhileStatement(nd)
+
+	case *ast.ForStatement:
+		panic("UNIMPLEMENTED")
+
 	case *ast.VarDeclaration:
 		val := i.Eval(nd.Value)
 		if isError(val) {
 			return val
 		}
-		// define it in the scope
-		if nd.Token.Text == "let" {
-			i.env.Define(nd.Name.Value, object.ItemObject{
-				Object:    val,
-				IsMutable: true,
-			})
-		} else {
-			// constant
-			i.env.Define(nd.Name.Value, object.ItemObject{
-				Object:    val,
-				IsMutable: false,
-			})
+
+		switch v := val.(type) {
+		// this is in case for the val is another var declaration
+		// this ensures to make a copy of the value and not the
+		case object.ItemObject:
+			valueClone := object.DeepCopy(v.Object)
+			newVal := object.ItemObject{
+				Object: valueClone,
+			}
+			if nd.Token.Text == "let" {
+				newVal.IsMutable = true
+			}
+			i.env.Define(nd.Name.Value, newVal)
+		default:
+			// define it in the scope
+			newVal := object.ItemObject{
+				Object: v,
+			}
+			if nd.Token.Text == "let" {
+				newVal.IsMutable = true
+			}
+			i.env.Define(nd.Name.Value, newVal)
 		}
 
 	case *ast.Identifier:
@@ -357,11 +372,17 @@ func (i *Interpreter) evalIdentifier(identifier *ast.Identifier) object.Object {
 	}
 
 	if buildInFunc, ok := builtInFunction[identifier.Value]; ok {
-		return buildInFunc
+		return object.ItemObject{
+			Object:    buildInFunc,
+			IsBuiltIn: true,
+		}
 	}
 
 	if builtInCons, ok := builtInConstants[identifier.Value]; ok {
-		return builtInCons
+		return object.ItemObject{
+			Object:    builtInCons,
+			IsBuiltIn: true,
+		}
 	}
 
 	return newError("identifier not found: %s", identifier.Value)
@@ -426,6 +447,10 @@ func unwrapReturnValue(obj object.Object) object.Object {
 
 func (i *Interpreter) evalBlockStatement(block *ast.BlockStatement) object.Object {
 	var result object.Object
+	prev := i.env
+	// update the current env
+	i.env = object.NewEnvironment(i.env)
+
 	for _, statement := range block.Body {
 		result = i.Eval(statement)
 
@@ -435,10 +460,34 @@ func (i *Interpreter) evalBlockStatement(block *ast.BlockStatement) object.Objec
 				return result
 			}
 		}
+	}
+	// restore the env
+	i.env = prev
+	return result
+}
 
+func (i *Interpreter) evalWhileStatement(nd *ast.WhileStatement) object.Object {
+	condition := i.Eval(nd.Condition)
+
+	if isError(condition) {
+		return condition
 	}
 
-	return result
+	switch cdn := condition.(type) {
+	case *object.Boolean:
+		// continue until the condition is broken
+		for cdn.Value {
+			i.Eval(nd.Body)
+			// ? need to check if the casting is cool maybe, not sure
+			cdn = i.Eval(nd.Condition).(*object.Boolean)
+		}
+	default:
+		// error out
+		return newError("ERROR: evaluation of the condition in a while loop needs to return a boolean not %s", cdn)
+	}
+
+	// maybe
+	return nil
 }
 
 func (i *Interpreter) evalIfExpression(nd *ast.IfExpression) object.Object {
@@ -540,8 +589,8 @@ func (i *Interpreter) evalIntegerInfixExpression(op string, lt, rt object.Object
 
 	l, leftMutable := object.Cast(lt)
 	r, _ := object.Cast(rt)
-	// cast them to integers
 
+	// cast them to integers
 	left := l.(*object.Integer)
 	right := r.(*object.Integer)
 
@@ -693,7 +742,7 @@ func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Ob
 	case lexer.TokenPlus:
 		// cool do the concat
 		return &object.String{
-			Value: left.Inspect() + " " + right.Inspect(),
+			Value: left.Inspect() + right.Inspect(),
 		}
 
 	// comparison

@@ -14,7 +14,10 @@ func LEN(args ...object.Object) object.Object {
 		return newError("wrong number of arguments. got=%d, want=1",
 			len(args))
 	}
-	switch arg := args[0].(type) {
+
+	arg, _ := object.Cast(args[0])
+
+	switch arg := arg.(type) {
 	case *object.String:
 		return &object.Integer{Value: int64(len(arg.Value))}
 	case *object.Array:
