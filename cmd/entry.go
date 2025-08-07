@@ -176,7 +176,10 @@ func Run(args []string) {
 	i := interpreter.NewInterpreter(nil)
 	evaluated := i.Eval(ast)
 
-	fmt.Println(evaluated.Inspect())
+	if evaluated != nil {
+		fmt.Println(evaluated.Inspect())
+	}
+
 }
 
 func Execute() {

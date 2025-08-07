@@ -2,11 +2,13 @@ package interpreter
 
 import (
 	"blk/object"
+	"fmt"
 )
 
 // this offers built in function so u don't need module imports to use them
 var builtInFunction = object.Module{
-	"len": &object.BuiltinFn{Fn: LEN},
+	"len":   &object.BuiltinFn{Fn: LEN},
+	"print": &object.BuiltinFn{Fn: PRINT},
 }
 
 func LEN(args ...object.Object) object.Object {
@@ -25,6 +27,22 @@ func LEN(args ...object.Object) object.Object {
 	default:
 		return newError("argument to `len` not supported, got %s",
 			args[0].Type())
+	}
+}
+
+func PRINT(args ...object.Object) object.Object {
+	results := []object.Object{}
+	for _, arg := range args {
+		arg, _ = object.Cast(arg)
+		results = append(results, arg)
+		fmt.Print(arg.Inspect())
+		if len(args) > 1 {
+			fmt.Print(" ")
+		}
+	}
+	fmt.Println()
+	return &object.Array{
+		Elements: results,
 	}
 }
 

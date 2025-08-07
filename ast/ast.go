@@ -247,8 +247,8 @@ func (ws *WhileStatement) String() string {
 
 type ForStatement struct {
 	Token       lexer.Token
-	Identifiers []*Identifier
-	Target      Expression
+	Identifiers []*Identifier // mostly the variable
+	Target      Expression    // target, either a map or an array
 	Body        *BlockStatement
 }
 

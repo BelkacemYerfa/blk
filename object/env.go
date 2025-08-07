@@ -35,3 +35,12 @@ func (e *Environment) Define(name string, val ItemObject) Object {
 	e.store[name] = val
 	return val
 }
+
+func (e *Environment) OverrideDefine(name string, val ItemObject) Object {
+	e.store[name] = val
+	return val
+}
+
+func (e *Environment) GetOuterScope() *Environment {
+	return e.outer
+}

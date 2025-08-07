@@ -28,6 +28,15 @@ func NewInterpreter(env *object.Environment) *Interpreter {
 	}
 }
 
+func (i *Interpreter) enterScope() {
+	newScope := object.NewEnvironment(i.env)
+	i.env = newScope
+}
+
+func (i *Interpreter) exitScope() {
+	i.env = i.env.GetOuterScope()
+}
+
 func newError(format string, a ...interface{}) *object.Error {
 	return &object.Error{Message: fmt.Sprintf(format, a...)}
 }
@@ -106,7 +115,7 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		return i.evalWhileStatement(nd)
 
 	case *ast.ForStatement:
-		panic("UNIMPLEMENTED")
+		return i.evalForStatement(nd)
 
 	case *ast.VarDeclaration:
 		val := i.Eval(nd.Value)
@@ -167,10 +176,24 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		return &object.ReturnValue{Value: val}
 
 	case *ast.ScopeStatement:
-		return i.evalBlockStatement(nd.Body)
+		i.enterScope()
+		var evaluation object.Object
+		// scope makes it easier to understand
+		{
+			evaluation = i.evalBlockStatement(nd.Body)
+		}
+		i.exitScope()
+		return evaluation
 
 	case *ast.BlockStatement:
-		return i.evalBlockStatement(nd)
+		i.enterScope()
+		var evaluation object.Object
+		// scope makes it easier to understand
+		{
+			evaluation = i.evalBlockStatement(nd)
+		}
+		i.exitScope()
+		return evaluation
 
 	case *ast.IfExpression:
 		return i.evalIfExpression(nd)
@@ -447,9 +470,6 @@ func unwrapReturnValue(obj object.Object) object.Object {
 
 func (i *Interpreter) evalBlockStatement(block *ast.BlockStatement) object.Object {
 	var result object.Object
-	prev := i.env
-	// update the current env
-	i.env = object.NewEnvironment(i.env)
 
 	for _, statement := range block.Body {
 		result = i.Eval(statement)
@@ -462,8 +482,90 @@ func (i *Interpreter) evalBlockStatement(block *ast.BlockStatement) object.Objec
 		}
 	}
 	// restore the env
-	i.env = prev
 	return result
+}
+
+func (i *Interpreter) evalForStatement(nd *ast.ForStatement) object.Object {
+	// check that the target is either an array or a map
+	target, _ := object.Cast(i.Eval(nd.Target))
+
+	switch tg := target.(type) {
+	case *object.Array:
+		// max : 2 identifier
+		// 1: indicates the index of the current value
+		// 2: indicates the current value
+		if len(tg.Elements) == 0 {
+			// skip don't do anything
+			return nil
+		}
+
+		i.enterScope()
+		{
+			// init the index with value 0
+			// init the value with first elem value
+			for idx, elem := range tg.Elements {
+				for ix, ident := range nd.Identifiers {
+					if ix == 0 {
+						i.env.OverrideDefine(ident.Value, object.ItemObject{
+							Object: &object.Integer{
+								Value: int64(idx),
+							},
+						})
+					}
+
+					if ix == 1 {
+						// get the a copy of the current element value
+						newVal := object.DeepCopy(elem)
+						i.env.OverrideDefine(ident.Value, object.ItemObject{
+							Object: newVal,
+						})
+					}
+				}
+				// evaluate the body
+				i.evalBlockStatement(nd.Body)
+			}
+		}
+		i.exitScope()
+
+	case *object.Map:
+		// max : 2 identifier
+		// 1: indicates the key
+		// 2: indicates the value associated with the key
+
+		if len(tg.Pairs) == 0 {
+			// skip
+			return nil
+		}
+
+		i.enterScope()
+		{
+			for _, elem := range tg.Pairs {
+				for ix, ident := range nd.Identifiers {
+					if ix == 0 {
+						newVal := object.DeepCopy(elem.Key)
+						i.env.OverrideDefine(ident.Value, object.ItemObject{
+							Object: newVal,
+						})
+					}
+
+					if ix == 1 {
+						newVal := object.DeepCopy(elem.Value)
+						i.env.OverrideDefine(ident.Value, object.ItemObject{
+							Object: newVal,
+						})
+					}
+				}
+				// evaluate the body
+				i.evalBlockStatement(nd.Body)
+			}
+		}
+		i.exitScope()
+
+	default:
+		return newError("target needs to be either an array or a map, got %v", tg.Type())
+	}
+
+	return nil
 }
 
 func (i *Interpreter) evalWhileStatement(nd *ast.WhileStatement) object.Object {
@@ -483,7 +585,7 @@ func (i *Interpreter) evalWhileStatement(nd *ast.WhileStatement) object.Object {
 		}
 	default:
 		// error out
-		return newError("ERROR: evaluation of the condition in a while loop needs to return a boolean not %s", cdn)
+		return newError("evaluation of the condition in a while loop needs to return a boolean not %s", cdn)
 	}
 
 	// maybe
