@@ -54,11 +54,13 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		return i.evalProgram(nd.Statements)
 
 	case *ast.ImportStatement:
-		// search for the module
+		// define the module name as identifier
 		module, ok := stdlib.BuiltinModules[nd.ModuleName.Value]
 		if !ok {
 			return newError("Module Not found %s", nd.ModuleName)
 		}
+		attrs := make(map[string]object.Object, len(module))
+
 		for name, fn := range module {
 			// means that this function is internal and can't be used
 			// doesn't make so much sense cause u can just not register them
@@ -66,11 +68,19 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 				continue
 			}
 			// register function so u it can be used
-			i.env.Define(name, object.ItemObject{
+			attrs[name] = object.ItemObject{
 				Object:    fn,
 				IsBuiltIn: true,
-			})
+			}
 		}
+
+		i.env.Define(nd.ModuleName.Value, object.ItemObject{
+			Object: &object.BuiltInModule{
+				Name:  nd.ModuleName.Value,
+				Attrs: attrs,
+			},
+			IsBuiltIn: true,
+		})
 
 	case *ast.ExpressionStatement:
 		return i.Eval(nd.Expression)
@@ -215,6 +225,15 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			return right
 		}
 		return i.evalBinaryExpression(nd.Operator, left, right)
+
+	case *ast.MemberShipExpression:
+		// evaluate the owner
+		object := i.Eval(nd.Object)
+		if isError(object) {
+			return object
+		}
+
+		return i.evalMembershipExpression(object, nd.Property)
 
 	default:
 		fmt.Println("yehoo", reflect.TypeOf(nd))
@@ -413,12 +432,10 @@ func (i *Interpreter) evalIdentifier(identifier *ast.Identifier) object.Object {
 
 func (i *Interpreter) applyFunction(fn object.Object, args []object.Object) object.Object {
 
-	//
+	// function cast
 	fn, _ = object.Cast(fn)
-
 	switch fn := fn.(type) {
 	case *object.Function:
-
 		argSize := len(args)
 		fnParamSize := len(fn.Parameters)
 
@@ -889,4 +906,48 @@ func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Ob
 
 	return newError("Unsupported operator: %s %s %s",
 		left.Type(), op, right.Type())
+}
+
+func (i *Interpreter) evalMembershipExpression(owner object.Object, property ast.Expression) object.Object {
+	// switch on the object after cast
+
+	owner, _ = object.Cast(owner)
+
+	switch owner := owner.(type) {
+	case *object.BuiltInModule:
+		// evaluate the property
+		switch ownerProperty := property.(type) {
+		case *ast.CallExpression:
+			// search for the corresponding property call and invoke
+			function, ok := owner.Attrs[ownerProperty.Function.Value]
+			if !ok {
+				return newError("function doesn't exist on the module %s", owner.Name)
+			}
+			// invokes the call expression
+			ableToCast := function.(object.ItemObject).IsBuiltIn
+			args := i.evalExpressions(ownerProperty.Args, !ableToCast)
+			if len(args) == 1 && isError(args[0]) {
+				// error out
+				return args[0]
+			}
+			return i.applyFunction(function, args)
+
+		case *ast.Identifier:
+			// a given constant i a module
+			identifier, ok := owner.Attrs[ownerProperty.Value]
+			if !ok {
+				return newError("identifier doesn't exist on the module %s", ownerProperty.Value)
+			}
+			// cast it first
+			identifier, _ = object.Cast(identifier)
+			return identifier
+
+		default:
+			return newError("property needs to be of type call expression or identifier, for now")
+		}
+
+	// TODO: struct instance call will be handled here
+	default:
+		return newError("Unsupported evaluation on this type: %s", owner.Type())
+	}
 }

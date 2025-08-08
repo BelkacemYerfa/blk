@@ -176,7 +176,7 @@ func INSERT(args ...object.Object) object.Object {
 		value := val.Value
 
 		if key.Type() != newKey.Type() {
-			return newError("unusable as hash key: %s, doesn't math the current key(s) type(s)", newKey.Type(), key.Type())
+			return newError("unusable as hash key: %s, doesn't match the current key(s) type(s): %s", newKey.Type(), key.Type())
 		}
 
 		if value.Type() != newValue.Type() {

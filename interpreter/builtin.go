@@ -30,6 +30,7 @@ func LEN(args ...object.Object) object.Object {
 	}
 }
 
+// this is a print function for test only
 func PRINT(args ...object.Object) object.Object {
 	results := []object.Object{}
 	for _, arg := range args {

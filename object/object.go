@@ -17,10 +17,12 @@ const (
 	STRING_OBJ       = "STRING"
 	RETURN_VALUE_OBJ = "RETURN_VALUE"
 	FUNCTION_OBJ     = "FUNCTION"
-	BUILTIN_OBJ      = "BUILTIN"
 	IMPORT_OBJ       = "IMPORT"
 	ARRAY_OBJ        = "ARRAY"
 	MAP_OBJ          = "MAP"
+	STRUCT_OBJ       = "STRUCT"
+	BUILTIN_MODULE   = "BUILTIN_MODULE"
+	BUILTIN_OBJ      = "BUILTIN"
 
 	// errors
 	ERROR_OBJ = "ERROR"
@@ -185,6 +187,27 @@ func (b *BuiltinConst) Inspect() string  { return b.Const.Inspect() }
 
 // this for module type which can be constants, functions (for now)
 type Module = map[string]Object
+
+// proper module import with namespaces
+type BuiltInModule struct {
+	Name  string
+	Attrs map[string]Object
+}
+
+func (b *BuiltInModule) Type() ObjectType { return BUILTIN_MODULE }
+
+// TODO: update this method later
+func (b *BuiltInModule) Inspect() string { return b.Name }
+
+type Struct struct {
+	// Attrs are both variable and methods
+	Attrs map[string]Object
+}
+
+func (b *Struct) Type() ObjectType { return STRUCT_OBJ }
+
+// TODO: update this method later
+func (b *Struct) Inspect() string { return "am struct" }
 
 func Cast(obj Object) (Object, bool) {
 	switch obj := obj.(type) {
