@@ -4,7 +4,7 @@ import (
 	"blk/object"
 )
 
-// math module definition
+// type module definition
 var typeModule = object.Module{
 	"typeOf": &object.BuiltinFn{Fn: typeOf},
 }

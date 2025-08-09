@@ -82,6 +82,108 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			IsBuiltIn: true,
 		})
 
+	case *ast.StructExpression:
+		methods := make(map[string]object.Object, 0)
+		fields := make(map[string]object.Object, 0)
+
+		// var declaration such as (x := 0, name :: "john")
+		for _, decl := range nd.Fields {
+			val := i.Eval(decl.Value)
+			if isError(val) {
+				return val
+			}
+			varDecl := object.ItemObject{}
+			switch v := val.(type) {
+			// this is in case for the val is another var declaration
+			// this ensures to make a copy of the value and not the
+			case object.ItemObject:
+				valueClone := object.DeepCopy(v.Object)
+				varDecl = object.ItemObject{
+					Object: valueClone,
+				}
+				if decl.Token.Text == "let" {
+					varDecl.IsMutable = true
+				}
+			default:
+				// define it in the scope
+				varDecl = object.ItemObject{
+					Object: v,
+				}
+				if decl.Token.Text == "let" {
+					varDecl.IsMutable = true
+				}
+			}
+
+			fields[decl.Name.Value] = varDecl
+		}
+
+		// methods built in into the struct
+		for _, method := range nd.Methods {
+			// here we pass teh value cause it is of type ast.FunctionExpression
+			evaluated := i.Eval(method.Value)
+			methods[method.Key.Value] = object.ItemObject{
+				Object: evaluated,
+			}
+		}
+
+		return &object.Struct{
+			Fields:  fields,
+			Methods: methods,
+		}
+
+	case *ast.StructInstanceExpression:
+		// deal with this one
+		// get the current left side, since it is an identifier
+		val := i.Eval(nd.Left)
+		if isError(val) {
+			return val
+		}
+		// val mostly is struct name
+		// checks the fields also compare
+		// for now the fields are mutable, no support for const :: in fields
+		castDef, _ := object.Cast(val)
+		structDef := castDef.(*object.Struct)
+		copyOfStructDef := object.DeepCopy(structDef).(*object.Struct)
+
+		// only fields which are allowed to get mutated
+		// methods are not allowed
+		for _, field := range nd.Body {
+			_, ok := structDef.Methods[field.Key.Value]
+			if ok {
+				return newError("methods of a struct can't be mutated")
+			}
+
+			fieldDef, ok := structDef.Fields[field.Key.Value]
+			if !ok {
+				return newError("%s field doesn't exist on the struct definition, consider declaring it", field.Key.Value)
+			}
+
+			fieldValue := i.Eval(field.Value)
+
+			if fieldDef.Type() != fieldValue.Type() {
+				// type error
+				return newError("type mismatch on %s, definition type %s, got %s", field.Key.Value, fieldDef.Type(), fieldValue.Type())
+			}
+
+			varDecl := object.ItemObject{
+				IsMutable: true,
+			}
+			switch v := fieldValue.(type) {
+			// this is in case for the val is another var declaration
+			// this ensures to make a copy of the value and not use a reference to the value
+			case object.ItemObject:
+				varDecl.Object = object.DeepCopy(v.Object)
+			default:
+				// define it in the scope
+				varDecl.Object = v
+			}
+
+			copyOfStructDef.Fields[field.Key.Value] = varDecl
+
+		}
+
+		return copyOfStructDef
+
 	case *ast.ExpressionStatement:
 		return i.Eval(nd.Expression)
 
@@ -162,6 +264,9 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 	case *ast.FunctionExpression:
 		params := nd.Args
 		body := nd.Body
+		if len(nd.Self.Value) > 0 {
+			params = append([]*ast.Identifier{nd.Self}, params...)
+		}
 		return &object.Function{Parameters: params, Env: i.env, Body: body}
 
 	case *ast.CallExpression:
@@ -228,12 +333,13 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 
 	case *ast.MemberShipExpression:
 		// evaluate the owner
-		object := i.Eval(nd.Object)
-		if isError(object) {
-			return object
+		obj := i.Eval(nd.Object)
+		if isError(obj) {
+			fmt.Println(obj)
+			return obj
 		}
 
-		return i.evalMembershipExpression(object, nd.Property)
+		return i.evalMembershipExpression(obj, nd.Property)
 
 	default:
 		fmt.Println("yehoo", reflect.TypeOf(nd))
@@ -468,12 +574,20 @@ func extendFunctionEnv(
 	args []object.Object,
 ) *object.Environment {
 	env := object.NewEnvironment(fn.Env)
+
 	for paramIdx, param := range fn.Parameters {
-		env.Define(param.Value, object.ItemObject{
-			Object: args[paramIdx],
-			// this makes the params mutable
-			IsMutable: true,
-		})
+		if param.Value == lexer.TokenSelf {
+			// 0 is the first context of the current struct
+			env.Define(param.Value, object.ItemObject{
+				Object: args[0],
+			})
+		} else {
+			env.Define(param.Value, object.ItemObject{
+				Object: args[paramIdx],
+				// this makes the params mutable
+				IsMutable: true,
+			})
+		}
 	}
 	return env
 }
@@ -705,7 +819,6 @@ func (i *Interpreter) evalBinaryExpression(op string, left, right object.Object)
 }
 
 func (i *Interpreter) evalIntegerInfixExpression(op string, lt, rt object.Object) object.Object {
-
 	l, leftMutable := object.Cast(lt)
 	r, _ := object.Cast(rt)
 
@@ -861,7 +974,7 @@ func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Ob
 	case lexer.TokenPlus:
 		// cool do the concat
 		return &object.String{
-			Value: left.Inspect() + right.Inspect(),
+			Value: left.Inspect() + " " + right.Inspect(),
 		}
 
 	// comparison
@@ -933,20 +1046,74 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, property ast
 			return i.applyFunction(function, args)
 
 		case *ast.Identifier:
-			// a given constant i a module
+			// a given constant in a module
 			identifier, ok := owner.Attrs[ownerProperty.Value]
 			if !ok {
 				return newError("identifier doesn't exist on the module %s", ownerProperty.Value)
 			}
-			// cast it first
-			identifier, _ = object.Cast(identifier)
+			// no need for casting
 			return identifier
 
 		default:
 			return newError("property needs to be of type call expression or identifier, for now")
 		}
 
-	// TODO: struct instance call will be handled here
+	// ? More testing needed
+	case *object.Struct:
+		switch ownerProperty := property.(type) {
+		case *ast.CallExpression:
+			// search for the corresponding property call and invoke
+			methodItem, ok := owner.Methods[ownerProperty.Function.Value]
+			if !ok {
+				return newError("method doesn't exist on the struct %v", ownerProperty.Function)
+			}
+
+			// methodItem is object.ItemObject wrapping the *object.Function
+			castFn, _ := object.Cast(methodItem)
+			fn := castFn.(*object.Function)
+
+			// Evaluate method args normally (do not include self yet)
+			ableToCast := methodItem.(object.ItemObject).IsBuiltIn
+			args := i.evalExpressions(ownerProperty.Args, !ableToCast)
+			if len(args) == 1 && isError(args[0]) {
+				return args[0]
+			}
+
+			// PREPEND the instance as the first argument (self)
+			// Note: owner is already an object.Object (the struct instance)
+			args = append([]object.Object{owner}, args...)
+
+			// Now invoke the function using the normal applyFunction path.
+			return i.applyFunction(fn, args)
+
+		case *ast.Identifier:
+			// a given constant in a module
+			identifier, ok := owner.Fields[ownerProperty.Value]
+			if !ok {
+				return newError("identifier doesn't exist on the struct %v", ownerProperty)
+			}
+			// no need for casting
+			return identifier
+
+		case *ast.MemberShipExpression:
+
+			// the immediate property here is going to be the new part owner of the other property that u want to get access to
+			// example of this: self.person.greet()
+			// self.person is going to become the immediate property
+			// and the property is greet() method
+			immediateProperty := i.evalMembershipExpression(owner, ownerProperty.Object)
+			if isError(immediateProperty) {
+				return immediateProperty
+			}
+
+			// Then continue with the nested property
+			return i.evalMembershipExpression(immediateProperty, ownerProperty.Property)
+
+		default:
+			fmt.Println(ownerProperty)
+			return newError("struct only support call expression, or identifier access, what u're doing isn't allowed")
+		}
+
 	default:
 		return newError("Unsupported evaluation on this type: %s", owner.Type())
 	}

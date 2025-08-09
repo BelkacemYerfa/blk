@@ -96,7 +96,7 @@ type Method struct {
 
 type StructExpression struct {
 	Token   lexer.Token // the token.LET token
-	Fields  []*Identifier
+	Fields  []*VarDeclaration
 	Methods []*Method
 }
 
@@ -109,8 +109,8 @@ func (ss *StructExpression) String() string {
 	out.WriteString(" { ")
 	if ss.Fields != nil {
 		for idx, field := range ss.Fields {
-			out.WriteString(field.Value)
-			if idx+1 <= len(ss.Fields)-1 {
+			out.WriteString(field.String())
+			if idx <= len(ss.Fields)-1 {
 				out.WriteString(", ")
 			}
 		}
@@ -274,6 +274,7 @@ func (fs *ForStatement) String() string {
 
 type FunctionExpression struct {
 	Token lexer.Token
+	Self  *Identifier // this indicates the self key
 	Args  []*Identifier
 	Body  *BlockStatement
 }

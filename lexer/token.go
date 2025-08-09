@@ -8,6 +8,7 @@ const (
 	TokenLet    TokenKind = "let"
 	TokenConst  TokenKind = "const"
 	TokenStruct TokenKind = "struct"
+	TokenSelf   TokenKind = "self"
 	TokenEnum   TokenKind = "enum"
 	TokenFn     TokenKind = "fn"
 	TokenFor    TokenKind = "for"

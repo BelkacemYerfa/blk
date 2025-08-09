@@ -170,7 +170,7 @@ func Run(args []string) {
 		fmt.Printf("ERROR: failed to write AST to file: %v\n", err)
 		return
 	}
-	fmt.Println(ast)
+	// fmt.Println(ast)
 	// errCollector := internals.NewErrorCollector(tokens)
 
 	i := interpreter.NewInterpreter(nil)

@@ -25,8 +25,8 @@ User :: struct {
     name,
     age,
 
-    greet: fn() {
-        print("Hi, I'm " + name)
+    greet: fn(self) {
+        print("Hi, I'm " + self.name)
     }
 }
 
@@ -217,9 +217,9 @@ result := fn(x, y) {
     } else {
         y
     }
-}(10, 20)
+}
 
-print(result)  # 20
+print(result(10, 20))  # 20
 ```
 
 ---
@@ -260,5 +260,3 @@ git clone https://github.com/yourname/blk
 cd blk
 go run cmd/main.go run examples/main.blk
 ```
-
-REPL support planned in future versions.

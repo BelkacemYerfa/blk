@@ -3,7 +3,7 @@ package object
 type ItemObject struct {
 	Object
 	IsMutable bool
-	IsBuiltIn bool
+	IsBuiltIn bool // this is useful for builtin function & default value into the language it self
 }
 
 type Environment struct {

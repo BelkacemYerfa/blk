@@ -200,8 +200,10 @@ func (b *BuiltInModule) Type() ObjectType { return BUILTIN_MODULE }
 func (b *BuiltInModule) Inspect() string { return b.Name }
 
 type Struct struct {
-	// Attrs are both variable and methods
-	Attrs map[string]Object
+	// Fields are both variable decl
+	Fields map[string]Object
+	// Methods are the builtin function that u can use from the struct
+	Methods map[string]Object
 }
 
 func (b *Struct) Type() ObjectType { return STRUCT_OBJ }
@@ -266,7 +268,24 @@ func DeepCopy(obj Object) Object {
 			}
 		}
 		return &Map{Pairs: pairs}
-	// Add other types as needed...
+	case *Struct:
+		// Deep copy fields
+		fields := make(map[string]Object, len(val.Fields))
+		for k, v := range val.Fields {
+			fields[k] = DeepCopy(v)
+		}
+
+		// mostly methods are shared but we could use for closures and stuff
+		methods := make(map[string]Object, len(val.Methods))
+		for k, v := range val.Methods {
+			methods[k] = DeepCopy(v)
+		}
+
+		return &Struct{
+			Fields:  fields,
+			Methods: methods,
+		}
+
 	default:
 		return val // For immutable or not-clonable types (like Error, etc.)
 	}

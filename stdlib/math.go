@@ -59,8 +59,14 @@ func POW(args ...object.Object) object.Object {
 
 	switch arg := num.(type) {
 	case *object.Integer:
+		if arg.Value < 0 {
+			return newError("pow function doesn't accept values < 0")
+		}
 		return &object.Float{Value: math.Pow(float64(arg.Value), pow)}
 	case *object.Float:
+		if arg.Value < 0 {
+			return newError("pow function doesn't accept values < 0")
+		}
 		return &object.Float{Value: math.Pow(arg.Value, pow)}
 
 	default:

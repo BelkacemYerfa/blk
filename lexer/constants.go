@@ -7,6 +7,7 @@ var (
 		"let":    TokenLet,
 		"const":  TokenConst,
 		"struct": TokenStruct,
+		"self":   TokenSelf,
 		"enum":   TokenEnum,
 		"if":     TokenIf,
 		"else":   TokenElse,
