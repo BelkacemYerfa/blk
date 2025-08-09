@@ -54,7 +54,6 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		return i.evalProgram(nd.Statements)
 
 	case *ast.ImportStatement:
-		// define the module name as identifier
 		module, ok := stdlib.BuiltinModules[nd.ModuleName.Value]
 		if !ok {
 			return newError("Module Not found %s", nd.ModuleName)
@@ -336,7 +335,7 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			return obj
 		}
 
-		return i.evalMembershipExpression(obj, nd.Property)
+		return i.evalMembershipExpression(obj, nd.Object, nd.Property)
 
 	default:
 		fmt.Println("yehoo", reflect.TypeOf(nd))
@@ -1028,7 +1027,7 @@ func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Ob
 		left.Type(), op, right.Type())
 }
 
-func (i *Interpreter) evalMembershipExpression(owner object.Object, property ast.Expression) object.Object {
+func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, property ast.Expression) object.Object {
 	// switch on the object after cast
 
 	owner, _ = object.Cast(owner)
@@ -1075,6 +1074,14 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, property ast
 				return newError("method doesn't exist on the struct %v", ownerProperty.Function)
 			}
 
+			// responsible to detect if the current accessed method is private or not
+			// so private methods are only allowed within the struct scope methods
+			if strings.HasPrefix(ownerProperty.Function.Value, "_") {
+				if obj.GetToken().Text != lexer.TokenSelf {
+					return newError("%s is a private method, u can't use outside of the struct", ownerProperty.Function.Value)
+				}
+			}
+
 			// methodItem is object.ItemObject wrapping the *object.Function
 			castFn, _ := object.Cast(methodItem)
 			fn := castFn.(*object.Function)
@@ -1099,6 +1106,15 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, property ast
 			if !ok {
 				return newError("identifier doesn't exist on the struct %v", ownerProperty)
 			}
+
+			// responsible to detect if the current accessed method is private or not
+			// so private methods are only allowed within the struct scope methods
+			if strings.HasPrefix(ownerProperty.Value, "_") {
+				if obj.GetToken().Text != lexer.TokenSelf {
+					return newError("%s is a private field, u can't use outside of the struct", ownerProperty.Value)
+				}
+			}
+
 			// no need for casting
 			return identifier
 
@@ -1108,19 +1124,19 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, property ast
 			// example of this: self.person.greet()
 			// self.person is going to become the immediate property
 			// and the property is greet() method
-			immediateProperty := i.evalMembershipExpression(owner, ownerProperty.Object)
+			immediateProperty := i.evalMembershipExpression(owner, obj, ownerProperty.Object)
 			if isError(immediateProperty) {
 				return immediateProperty
 			}
 
 			// Then continue with the nested property
-			return i.evalMembershipExpression(immediateProperty, ownerProperty.Property)
+			return i.evalMembershipExpression(immediateProperty, ownerProperty, ownerProperty.Property)
 
 		case *ast.IndexExpression:
 
 			// handle array/map access on struct fields
 			// get the field that contains the array/map
-			fieldObj := i.evalMembershipExpression(owner, ownerProperty.Left)
+			fieldObj := i.evalMembershipExpression(owner, obj, ownerProperty.Left)
 			if isError(fieldObj) {
 				return fieldObj
 			}
