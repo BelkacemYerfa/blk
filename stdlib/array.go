@@ -8,6 +8,7 @@ import (
 var arrayModule = object.Module{
 	"equals": &object.BuiltinFn{Fn: equals},
 	"index":  &object.BuiltinFn{Fn: index},
+	"append": &object.BuiltinFn{Fn: APPEND},
 }
 
 func equals(args ...object.Object) object.Object {
@@ -97,4 +98,39 @@ func index(args ...object.Object) object.Object {
 	return &object.Integer{
 		Value: -1,
 	}
+}
+
+func APPEND(args ...object.Object) object.Object {
+	if len(args) != 2 {
+		return newError("wrong number of arguments. got=%d, want=2",
+			len(args))
+	}
+
+	mapper, isMutable := object.Cast(args[0])
+
+	if !isMutable {
+		return newError("can't mutate %v, probably defined as a const", args[0].Inspect())
+	}
+
+	newValue, _ := object.Cast(args[1])
+
+	actualArray := &object.Array{}
+	switch hashMap := mapper.(type) {
+	case *object.Array:
+		// do something
+		actualArray = hashMap
+	default:
+		return newError("first args needs to be an array")
+	}
+
+	if len(actualArray.Elements) > 0 {
+		elem := actualArray.Elements[0]
+		if elem.Type() != newValue.Type() {
+			return newError("can't append the current value, cause it doesn't match the type of the current elements which is of type %s", elem.Type())
+		}
+	}
+
+	actualArray.Elements = append(actualArray.Elements, newValue)
+
+	return actualArray
 }

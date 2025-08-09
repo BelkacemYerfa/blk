@@ -235,28 +235,25 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			return val
 		}
 
-		switch v := val.(type) {
+		castedVal, _ := object.Cast(val)
+
+		switch castedVal.(type) {
 		// this is in case for the val is another var declaration
 		// this ensures to make a copy of the value and not the
-		case object.ItemObject:
-			valueClone := object.DeepCopy(v.Object)
-			newVal := object.ItemObject{
-				Object: valueClone,
+		case *object.Array, *object.Map:
+			if nd.Token.Text == "const" {
+				return newError("array/hashmaps aren't allowed to be an const, consts are only: ints, floats, strings, booleans")
 			}
-			if nd.Token.Text == "let" {
-				newVal.IsMutable = true
-			}
-			i.env.Define(nd.Name.Value, newVal)
-		default:
-			// define it in the scope
-			newVal := object.ItemObject{
-				Object: v,
-			}
-			if nd.Token.Text == "let" {
-				newVal.IsMutable = true
-			}
-			i.env.Define(nd.Name.Value, newVal)
 		}
+
+		// define it in the scope
+		newVal := object.ItemObject{
+			Object: castedVal,
+		}
+		if nd.Token.Text == "let" {
+			newVal.IsMutable = true
+		}
+		i.env.Define(nd.Name.Value, newVal)
 
 	case *ast.Identifier:
 		return i.evalIdentifier(nd)
@@ -366,9 +363,8 @@ func (i *Interpreter) evalProgram(stmts []ast.Statement) object.Object {
 func nativeBooleanObject(val bool) *object.Boolean {
 	if val {
 		return TRUE
-	} else {
-		return FALSE
 	}
+	return FALSE
 }
 
 func (i *Interpreter) evalExpressions(exps []ast.Expression, ableToCast bool) []object.Object {
@@ -474,8 +470,8 @@ func (i *Interpreter) evalIndexExpression(lf, index object.Object) object.Object
 		if index.Type() != object.INTEGER_OBJ {
 			return newError("index side needs to be an integer, got %v", index.Type())
 		}
-
 		return i.evalArrayIndexExpression(lf, index)
+
 	case *object.Map:
 		return i.evalMapIndexExpression(lf, index)
 
@@ -589,6 +585,7 @@ func extendFunctionEnv(
 			})
 		}
 	}
+
 	return env
 }
 
@@ -612,7 +609,7 @@ func (i *Interpreter) evalBlockStatement(block *ast.BlockStatement) object.Objec
 			}
 		}
 	}
-	// restore the env
+
 	return result
 }
 
@@ -706,6 +703,8 @@ func (i *Interpreter) evalWhileStatement(nd *ast.WhileStatement) object.Object {
 		return condition
 	}
 
+	condition, _ = object.Cast(condition)
+
 	switch cdn := condition.(type) {
 	case *object.Boolean:
 		// continue until the condition is broken
@@ -730,6 +729,8 @@ func (i *Interpreter) evalIfExpression(nd *ast.IfExpression) object.Object {
 		return condition
 	}
 
+	condition, _ = object.Cast(condition)
+
 	switch cdn := condition.(type) {
 	case *object.Boolean:
 		// continue
@@ -742,7 +743,8 @@ func (i *Interpreter) evalIfExpression(nd *ast.IfExpression) object.Object {
 		}
 	default:
 		// error out
-		return newError("ERROR: evaluation of the condition needs to return a boolean not %s", cdn)
+
+		return newError("evaluation of the condition needs to return a boolean not %s", cdn)
 	}
 }
 
@@ -751,7 +753,7 @@ func (i *Interpreter) evalUnaryExpression(op string, right object.Object) object
 	case lexer.TokenExclamation:
 		// check the right side
 		if right.Type() == object.BOOLEAN_OBJ {
-			return i.evalBangOperatorExpression(right.(*object.Boolean))
+			return i.evalBangOperatorExpression(right)
 		}
 		// throw an error
 		return newError("! operator can only be applied on boolean values")
@@ -764,16 +766,21 @@ func (i *Interpreter) evalUnaryExpression(op string, right object.Object) object
 	return newError("unknown operator: %s%s", op, right.Type())
 }
 
-func (i *Interpreter) evalBangOperatorExpression(right *object.Boolean) *object.Boolean {
-	if right.Value {
+func (i *Interpreter) evalBangOperatorExpression(right object.Object) *object.Boolean {
+	rt, _ := object.Cast(right)
+	r := rt.(*object.Boolean)
+
+	if r.Value {
 		return FALSE
-	} else {
-		return TRUE
 	}
+
+	return TRUE
 }
 
 func (i *Interpreter) evalMinusPrefixOperatorExpression(right object.Object) object.Object {
-	switch right := right.(type) {
+	rt, _ := object.Cast(right)
+
+	switch right := rt.(type) {
 	case *object.Integer:
 		value := right.Value
 		return &object.Integer{
@@ -1108,6 +1115,26 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, property ast
 
 			// Then continue with the nested property
 			return i.evalMembershipExpression(immediateProperty, ownerProperty.Property)
+
+		case *ast.IndexExpression:
+
+			// handle array/map access on struct fields
+			// get the field that contains the array/map
+			fieldObj := i.evalMembershipExpression(owner, ownerProperty.Left)
+			if isError(fieldObj) {
+				return fieldObj
+			}
+
+			// cast to get the actual object (unwrap ItemObject if needed)
+			actualField, _ := object.Cast(fieldObj)
+
+			// evaluate the index
+			index := i.Eval(ownerProperty.Index)
+			if isError(index) {
+				return index
+			}
+
+			return i.evalIndexExpression(actualField, index)
 
 		default:
 			fmt.Println(ownerProperty)

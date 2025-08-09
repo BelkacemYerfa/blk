@@ -207,9 +207,18 @@ type Struct struct {
 }
 
 func (b *Struct) Type() ObjectType { return STRUCT_OBJ }
-
-// TODO: update this method later
-func (b *Struct) Inspect() string { return "am struct" }
+func (b *Struct) Inspect() string {
+	var out bytes.Buffer
+	out.WriteString("struct {")
+	for name, field := range b.Fields {
+		out.WriteString(name + " := " + field.Inspect())
+	}
+	for name, function := range b.Methods {
+		out.WriteString(name + " : " + function.Inspect())
+	}
+	out.WriteString("}")
+	return out.String()
+}
 
 func Cast(obj Object) (Object, bool) {
 	switch obj := obj.(type) {
@@ -218,7 +227,7 @@ func Cast(obj Object) (Object, bool) {
 	case *ItemObject:
 		return obj.Object, obj.IsMutable
 	default:
-		return obj, false
+		return obj, true
 	}
 }
 

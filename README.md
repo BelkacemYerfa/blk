@@ -50,7 +50,7 @@ fn main() {
 - **All variables** declared with `:=`
 - **Top-level constants** via `::`
 - **Structs with inline methods**
-- **Enums and tagged unions**
+- **Enums**
 - **Pattern matching** via `match` expression
 - **Expression-based blocks and control flow**
 - **Unified literals**: maps and structs share `{}` syntax
