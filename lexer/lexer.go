@@ -137,14 +137,21 @@ func (l *Lexer) NextToken() Token {
 		}
 	case TokenMinus:
 		l.readChar()
-		equalsChar := string(l.Content[l.Cur])
-		if equalsChar == TokenAssign {
+		nextChar := string(l.Content[l.Cur])
+		switch nextChar {
+		case "=":
 			l.readChar()
 			token.LiteralToken = LiteralToken{
 				Kind: TokenAssignMinus,
 				Text: "-=",
 			}
-		} else {
+		case "+":
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenAssignMinusOne,
+				Text: "--",
+			}
+		default:
 			token.LiteralToken = LiteralToken{
 				Kind: TokenMinus,
 				Text: "-",
@@ -152,14 +159,21 @@ func (l *Lexer) NextToken() Token {
 		}
 	case TokenPlus:
 		l.readChar()
-		equalsChar := string(l.Content[l.Cur])
-		if equalsChar == TokenAssign {
+		nextChar := string(l.Content[l.Cur])
+		switch nextChar {
+		case "=":
 			l.readChar()
 			token.LiteralToken = LiteralToken{
 				Kind: TokenAssignPlus,
 				Text: "+=",
 			}
-		} else {
+		case "+":
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenAssignPlusOne,
+				Text: "++",
+			}
+		default:
 			token.LiteralToken = LiteralToken{
 				Kind: TokenPlus,
 				Text: "+",

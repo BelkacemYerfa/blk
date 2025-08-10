@@ -272,6 +272,17 @@ func (fs *ForStatement) String() string {
 	return out.String()
 }
 
+type SkipStatement struct {
+	Token lexer.Token
+}
+
+func (fs *SkipStatement) statementNode()        {}
+func (fs *SkipStatement) TokenLiteral() string  { return fs.Token.Text }
+func (nt *SkipStatement) GetToken() lexer.Token { return nt.Token }
+func (fs *SkipStatement) String() string {
+	return fs.TokenLiteral()
+}
+
 type FunctionExpression struct {
 	Token lexer.Token
 	Self  *Identifier // this indicates the self key

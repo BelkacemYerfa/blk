@@ -44,8 +44,10 @@ var precedences = map[lexer.TokenKind]int{
 	lexer.TokenGreaterOrEqual: LESSGREATER,
 	lexer.TokenPlus:           SUM,
 	lexer.TokenAssignPlus:     SUM,
+	lexer.TokenAssignPlusOne:  SUM,
 	lexer.TokenMinus:          SUM,
 	lexer.TokenAssignMinus:    SUM,
+	lexer.TokenAssignMinusOne: SUM,
 	lexer.TokenSlash:          PRODUCT,
 	lexer.TokenAssignSlash:    PRODUCT,
 	lexer.TokenMultiply:       PRODUCT,
@@ -127,6 +129,8 @@ func NewParser(tokens []lexer.Token, filepath string) *Parser {
 	p.registerInfix(lexer.TokenAssignSlash, p.parseAssignOperatorExpression)
 	p.registerInfix(lexer.TokenAssignOr, p.parseAssignOperatorExpression)
 	p.registerInfix(lexer.TokenAssignAnd, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignPlusOne, p.parseDoubleOperatorExpression)
+	p.registerInfix(lexer.TokenAssignMinusOne, p.parseDoubleOperatorExpression)
 
 	return &p
 }
@@ -319,6 +323,8 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		return p.parseWhileStatement()
 	case lexer.TokenFor:
 		return p.parseForStatement()
+	case lexer.TokenSkip:
+		return p.parseSkipStatement()
 	case lexer.TokenIdentifier:
 		firstLookKind := p.lookToken(1).Kind
 		// check after it if there is a colon and a {
@@ -609,6 +615,13 @@ func (p *Parser) parseForStatement() (*ast.ForStatement, error) {
 	}
 
 	stmt.Body = p.parseBlockStatement().(*ast.BlockStatement)
+	return stmt, nil
+}
+
+func (p *Parser) parseSkipStatement() (*ast.SkipStatement, error) {
+	stmt := &ast.SkipStatement{Token: p.currentToken()}
+	// consume the skip token
+	p.nextToken()
 	return stmt, nil
 }
 
@@ -1193,7 +1206,33 @@ func (p *Parser) parseAssignOperatorExpression(left ast.Expression) ast.Expressi
 		Right:    p.parseExpression(LOWEST),
 	}
 
-	fmt.Println(expr)
+	return expr
+}
+
+// this function is responsible of parsing the double operator assign
+// an example of this : index++, index-- <=> index = index + 1
+// only support for (+,-) operators
+func (p *Parser) parseDoubleOperatorExpression(left ast.Expression) ast.Expression {
+	expr := &ast.BinaryExpression{Token: left.GetToken(), Left: left}
+	expr.Operator = "="
+
+	// get the operator, from the current op which can be something (+=,%=,..etc)
+	operator := string(p.currentToken().Text[0])
+
+	// parse the operator
+	expr.Right = &ast.BinaryExpression{
+		Token:    p.currentToken(),
+		Operator: operator,
+		Left:     left,
+		// default of it this
+		Right: &ast.IntegerLiteral{
+			Value: 1,
+		},
+	}
+
+	// consume the operator token (++, --)
+	p.nextToken()
+
 	return expr
 }
 

@@ -70,54 +70,12 @@ func EQUALS(args ...object.Object) object.Object {
 			len(args))
 	}
 
-	// both args need to be a hashMap
-	map1, map2 := object.Map{}, object.Map{}
-
-	mapper1, _ := object.Cast(args[0])
-
-	switch hashMap := mapper1.(type) {
-	case *object.Map:
-		// do something
-		map1 = *hashMap
-	default:
-		return newError("first arg needs to be a map in equals function")
-	}
-
-	mapper2, _ := object.Cast(args[1])
-
-	switch hashMap := mapper2.(type) {
-	case *object.Map:
-		// do something
-		map2 = *hashMap
-	default:
-		return newError("second arg needs to be a map in equals function")
-	}
-
-	if len(map1.Pairs) != len(map2.Pairs) {
-		return &object.Boolean{
-			Value: false,
-		}
-	}
-
-	for key, value := range map1.Pairs {
-		elem, ok := map2.Pairs[key]
-
-		if !ok {
-			return &object.Boolean{
-				Value: false,
-			}
-		}
-
-		// no need to compare the keys, accessing a value already means the keys are equals
-		if !object.ObjectEquals(elem.Value, value.Value) {
-			return &object.Boolean{
-				Value: false,
-			}
-		}
+	if args[0].Type() != object.MAP_OBJ && args[1].Type() != object.MAP_OBJ {
+		return newError("both args need to be a map in equals function")
 	}
 
 	return &object.Boolean{
-		Value: true,
+		Value: object.ObjectEquals(args[0], args[1]),
 	}
 }
 

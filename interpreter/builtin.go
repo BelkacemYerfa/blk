@@ -3,6 +3,7 @@ package interpreter
 import (
 	"blk/object"
 	"fmt"
+	"strings"
 )
 
 // this offers built in function so u don't need module imports to use them
@@ -32,19 +33,13 @@ func LEN(args ...object.Object) object.Object {
 
 // this is a print function for test only
 func PRINT(args ...object.Object) object.Object {
-	results := []object.Object{}
+	results := []string{}
 	for _, arg := range args {
 		arg, _ = object.Cast(arg)
-		results = append(results, arg)
-		fmt.Print(arg.Inspect())
-		if len(args) > 1 {
-			fmt.Print(" ")
-		}
+		results = append(results, arg.Inspect())
 	}
-	fmt.Println()
-	return &object.Array{
-		Elements: results,
-	}
+	fmt.Println(strings.Join(results, " "))
+	return nil
 }
 
 var builtInConstants = map[string]*object.BuiltinConst{}

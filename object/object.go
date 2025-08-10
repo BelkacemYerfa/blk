@@ -20,6 +20,7 @@ const (
 	IMPORT_OBJ       = "IMPORT"
 	ARRAY_OBJ        = "ARRAY"
 	MAP_OBJ          = "MAP"
+	SKIP_OBJ         = "SKIP"
 	STRUCT_OBJ       = "STRUCT"
 	BUILTIN_MODULE   = "BUILTIN_MODULE"
 	BUILTIN_OBJ      = "BUILTIN"
@@ -199,6 +200,11 @@ func (b *BuiltInModule) Type() ObjectType { return BUILTIN_MODULE }
 // TODO: update this method later
 func (b *BuiltInModule) Inspect() string { return b.Name }
 
+type Skip struct{}
+
+func (b *Skip) Type() ObjectType { return SKIP_OBJ }
+func (b *Skip) Inspect() string  { return "skip" }
+
 type Struct struct {
 	// Fields are both variable decl
 	Fields map[string]Object
@@ -232,6 +238,8 @@ func Cast(obj Object) (Object, bool) {
 }
 
 func ObjectEquals(a, b Object) bool {
+	a, _ = Cast(a)
+	b, _ = Cast(b)
 	switch aVal := a.(type) {
 	case *Integer:
 		bVal, ok := b.(*Integer)
@@ -250,6 +258,9 @@ func ObjectEquals(a, b Object) bool {
 		if !ok {
 			return false
 		}
+		if len(bVal.Elements) != len(aVal.Elements) {
+			return false
+		}
 		for idx, elem := range bVal.Elements {
 			value := aVal.Elements[idx]
 			if !ObjectEquals(elem, value) {
@@ -260,6 +271,9 @@ func ObjectEquals(a, b Object) bool {
 	case *Map:
 		bVal, ok := b.(*Map)
 		if !ok {
+			return false
+		}
+		if len(bVal.Pairs) != len(aVal.Pairs) {
 			return false
 		}
 		for key, elem := range bVal.Pairs {
@@ -294,8 +308,8 @@ func DeepCopy(obj Object) Object {
 		return &Float{Value: val.Value}
 	case *Array:
 		elements := make([]Object, 0, len(val.Elements))
-		for i, elem := range val.Elements {
-			elements[i] = DeepCopy(elem)
+		for _, elem := range val.Elements {
+			elements = append(elements, DeepCopy(elem))
 		}
 		return &Array{Elements: elements}
 	case *Map:
