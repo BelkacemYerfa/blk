@@ -46,6 +46,11 @@ const (
 	TokenLess           TokenKind = "<"
 	TokenGreaterOrEqual TokenKind = ">="
 	TokenLessOrEqual    TokenKind = "<="
+	TokenAssignMinus    TokenKind = "-="
+	TokenAssignPlus     TokenKind = "+="
+	TokenAssignMultiply TokenKind = "*="
+	TokenAssignSlash    TokenKind = "/="
+	TokenAssignModule   TokenKind = "%="
 
 	// Bind Operators
 	TokenAssign TokenKind = "="

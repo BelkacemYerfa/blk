@@ -137,33 +137,78 @@ func (l *Lexer) NextToken() Token {
 		}
 	case TokenMinus:
 		l.readChar()
-		token.LiteralToken = LiteralToken{
-			Kind: TokenMinus,
-			Text: "-",
+		equalsChar := string(l.Content[l.Cur])
+		if equalsChar == TokenAssign {
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenAssignMinus,
+				Text: "-=",
+			}
+		} else {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenMinus,
+				Text: "-",
+			}
 		}
 	case TokenPlus:
 		l.readChar()
-		token.LiteralToken = LiteralToken{
-			Kind: TokenPlus,
-			Text: "+",
+		equalsChar := string(l.Content[l.Cur])
+		if equalsChar == TokenAssign {
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenAssignPlus,
+				Text: "+=",
+			}
+		} else {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenPlus,
+				Text: "+",
+			}
 		}
 	case TokenMultiply:
 		l.readChar()
-		token.LiteralToken = LiteralToken{
-			Kind: TokenMultiply,
-			Text: "*",
+		equalsChar := string(l.Content[l.Cur])
+		if equalsChar == TokenAssign {
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenAssignMultiply,
+				Text: "*=",
+			}
+		} else {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenMultiply,
+				Text: "*",
+			}
 		}
 	case TokenModule:
 		l.readChar()
-		token.LiteralToken = LiteralToken{
-			Kind: TokenModule,
-			Text: "%",
+		equalsChar := string(l.Content[l.Cur])
+		if equalsChar == TokenAssign {
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenAssignModule,
+				Text: "%=",
+			}
+		} else {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenModule,
+				Text: "%",
+			}
 		}
 	case TokenSlash:
 		l.readChar()
-		token.LiteralToken = LiteralToken{
-			Kind: TokenSlash,
-			Text: "/",
+		equalsChar := string(l.Content[l.Cur])
+		if equalsChar == TokenAssign {
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenAssignSlash,
+				Text: "/=",
+			}
+		} else {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenSlash,
+				Text: "/",
+			}
 		}
 	case TokenExclamation:
 		l.readChar()

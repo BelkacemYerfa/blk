@@ -167,7 +167,7 @@ type Error struct {
 }
 
 func (e *Error) Type() ObjectType { return ERROR_OBJ }
-func (e *Error) Inspect() string  { return "ERROR: " + e.Message }
+func (e *Error) Inspect() string  { return e.Message }
 
 type BuiltinFunction func(args ...Object) Object
 
@@ -245,7 +245,37 @@ func ObjectEquals(a, b Object) bool {
 	case *Float:
 		bVal, ok := b.(*Float)
 		return ok && aVal.Value == bVal.Value
-	// TODO: needs to be extended for recursive compare later
+	case *Array:
+		bVal, ok := b.(*Array)
+		if !ok {
+			return false
+		}
+		for idx, elem := range bVal.Elements {
+			value := aVal.Elements[idx]
+			if !ObjectEquals(elem, value) {
+				return false
+			}
+		}
+		return true
+	case *Map:
+		bVal, ok := b.(*Map)
+		if !ok {
+			return false
+		}
+		for key, elem := range bVal.Pairs {
+			value, ok := aVal.Pairs[key]
+			if !ok {
+				return false
+			}
+			if !ObjectEquals(elem.Key, value.Key) {
+				return false
+			}
+			if !ObjectEquals(elem.Value, value.Value) {
+				return false
+			}
+		}
+		return true
+	// struct maybe something here
 	default:
 		// fallback: not equal
 		return false

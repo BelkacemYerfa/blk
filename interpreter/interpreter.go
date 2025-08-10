@@ -37,8 +37,22 @@ func (i *Interpreter) exitScope() {
 	i.env = i.env.GetOuterScope()
 }
 
-func newError(format string, a ...interface{}) *object.Error {
-	return &object.Error{Message: fmt.Sprintf(format, a...)}
+type LEVEL = int
+
+const (
+	WARNING LEVEL = iota
+	ERROR
+)
+
+func newError(level LEVEL, format string, a ...interface{}) *object.Error {
+	prefix := "ERROR"
+
+	if level == WARNING {
+		prefix = "WARNING"
+	}
+
+	msg := fmt.Sprintf(`%s: %s`, prefix, format)
+	return &object.Error{Message: fmt.Sprintf(msg, a...)}
 }
 
 func isError(obj object.Object) bool {
@@ -56,7 +70,7 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 	case *ast.ImportStatement:
 		module, ok := stdlib.BuiltinModules[nd.ModuleName.Value]
 		if !ok {
-			return newError("Module Not found %s", nd.ModuleName)
+			return newError(ERROR, "Module Not found %s", nd.ModuleName)
 		}
 		attrs := make(map[string]object.Object, len(module))
 
@@ -73,13 +87,17 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			}
 		}
 
-		i.env.Define(nd.ModuleName.Value, object.ItemObject{
+		_, firstDeclaration := i.env.Define(nd.ModuleName.Value, object.ItemObject{
 			Object: &object.BuiltInModule{
 				Name:  nd.ModuleName.Value,
 				Attrs: attrs,
 			},
 			IsBuiltIn: true,
 		})
+
+		if firstDeclaration {
+			return newError(WARNING, "found module name %s, is used as a declaration, consider renaming it in the declaration to something else", nd.ModuleName)
+		}
 
 	case *ast.StructExpression:
 		methods := make(map[string]object.Object, 0)
@@ -149,19 +167,19 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		for _, field := range nd.Body {
 			_, ok := structDef.Methods[field.Key.Value]
 			if ok {
-				return newError("methods of a struct can't be mutated")
+				return newError(ERROR, "methods of a struct can't be mutated")
 			}
 
 			fieldDef, ok := structDef.Fields[field.Key.Value]
 			if !ok {
-				return newError("%s field doesn't exist on the struct definition, consider declaring it", field.Key.Value)
+				return newError(ERROR, "%s field doesn't exist on the struct definition, consider declaring it", field.Key.Value)
 			}
 
 			fieldValue := i.Eval(field.Value)
 
 			if fieldDef.Type() != fieldValue.Type() {
 				// type error
-				return newError("type mismatch on %s, definition type %s, got %s", field.Key.Value, fieldDef.Type(), fieldValue.Type())
+				return newError(ERROR, "type mismatch on %s, definition type %s, got %s", field.Key.Value, fieldDef.Type(), fieldValue.Type())
 			}
 
 			varDecl := object.ItemObject{
@@ -241,7 +259,7 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		// this ensures to make a copy of the value and not the
 		case *object.Array, *object.Map:
 			if nd.Token.Text == "const" {
-				return newError("array/hashmaps aren't allowed to be an const, consts are only: ints, floats, strings, booleans")
+				return newError(ERROR, "array/hashmaps aren't allowed to be an const, consts are only: ints, floats, strings, booleans")
 			}
 		}
 
@@ -252,7 +270,11 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		if nd.Token.Text == "let" {
 			newVal.IsMutable = true
 		}
-		i.env.Define(nd.Name.Value, newVal)
+		_, firstDeclaration := i.env.Define(nd.Name.Value, newVal)
+
+		if firstDeclaration {
+			return newError(WARNING, "name %s is already in use", nd.Name.Value)
+		}
 
 	case *ast.Identifier:
 		return i.evalIdentifier(nd)
@@ -410,7 +432,7 @@ func (i *Interpreter) evalArrayExpression(exps []ast.Expression) []object.Object
 		if firstElem.Type() != elemEval.Type() {
 			// throw an error here
 			return []object.Object{
-				newError("multitude of types, (%v,%v), array elements should be of one type", firstElem.Type(), elemEval.Type()),
+				newError(ERROR, "multitude of types, (%v,%v), array elements should be of one type", firstElem.Type(), elemEval.Type()),
 			}
 		}
 		// else push the element
@@ -432,13 +454,13 @@ func (i *Interpreter) evalMapExpression(prs map[ast.Expression]ast.Expression) o
 		key, _ = object.Cast(key)
 		hashKey, ok := key.(object.Hashable)
 		if !ok {
-			return newError("unusable as hash key: %s", key.Type())
+			return newError(ERROR, "unusable as hash key: %s", key.Type())
 		}
 		if idx == 0 {
 			keyEl = key
 		}
 		if keyEl.Type() != key.Type() {
-			return newError("multitude of types, (%v,%v), key elements of a map should be of one type", keyEl.Type(), key.Type())
+			return newError(ERROR, "multitude of types, (%v,%v), key elements of a map should be of one type", keyEl.Type(), key.Type())
 		}
 
 		value := i.Eval(valueNode)
@@ -451,7 +473,7 @@ func (i *Interpreter) evalMapExpression(prs map[ast.Expression]ast.Expression) o
 			valEl = value
 		}
 		if valEl.Type() != value.Type() {
-			return newError("multitude of types, (%v,%v), value elements of a map should be of one type", valEl.Type(), value.Type())
+			return newError(ERROR, "multitude of types, (%v,%v), value elements of a map should be of one type", valEl.Type(), value.Type())
 		}
 		pairs[hashed] = object.HashPair{Key: key, Value: value}
 		idx++
@@ -467,7 +489,7 @@ func (i *Interpreter) evalIndexExpression(lf, index object.Object) object.Object
 	switch lf := lf.(type) {
 	case *object.Array:
 		if index.Type() != object.INTEGER_OBJ {
-			return newError("index side needs to be an integer, got %v", index.Type())
+			return newError(ERROR, "index side needs to be an integer, got %v", index.Type())
 		}
 		return i.evalArrayIndexExpression(lf, index)
 
@@ -475,7 +497,7 @@ func (i *Interpreter) evalIndexExpression(lf, index object.Object) object.Object
 		return i.evalMapIndexExpression(lf, index)
 
 	default:
-		return newError("left side needs to be either an array or map, got %v", lf.Type())
+		return newError(ERROR, "left side needs to be either an array or map, got %v", lf.Type())
 	}
 }
 
@@ -485,7 +507,7 @@ func (i *Interpreter) evalArrayIndexExpression(array, index object.Object) objec
 	max := int64(len(arrayObject.Elements) - 1)
 
 	if idx < 0 || idx > max {
-		return newError("index out of bound, %d", idx)
+		return newError(ERROR, "index out of bound, %d", idx)
 	}
 
 	return arrayObject.Elements[idx]
@@ -496,12 +518,12 @@ func (i *Interpreter) evalMapIndexExpression(hashMap, index object.Object) objec
 
 	key, ok := index.(object.Hashable)
 	if !ok {
-		return newError("unusable as hash key: %s", index.Type())
+		return newError(ERROR, "unusable as hash key: %s", index.Type())
 	}
 
 	pair, ok := mapObject.Pairs[key.HashKey()]
 	if !ok {
-		return newError("index (%v) is not associated with any value", index.Inspect())
+		return newError(ERROR, "index (%v) is not associated with any value", index.Inspect())
 	}
 
 	return pair.Value
@@ -528,7 +550,7 @@ func (i *Interpreter) evalIdentifier(identifier *ast.Identifier) object.Object {
 		}
 	}
 
-	return newError("identifier not found: %s", identifier.Value)
+	return newError(ERROR, "identifier not found: %s", identifier.Value)
 }
 
 func (i *Interpreter) applyFunction(fn object.Object, args []object.Object) object.Object {
@@ -542,7 +564,7 @@ func (i *Interpreter) applyFunction(fn object.Object, args []object.Object) obje
 
 		// check that the number of params is the same
 		if argSize != fnParamSize {
-			return newError("wrong number of arguments. got=%d, want=%d",
+			return newError(ERROR, "wrong number of arguments. got=%d, want=%d",
 				argSize, fnParamSize)
 		}
 
@@ -559,7 +581,7 @@ func (i *Interpreter) applyFunction(fn object.Object, args []object.Object) obje
 		return fn.Fn(args...)
 
 	default:
-		return newError("not a function: %s", fn.Type())
+		return newError(ERROR, "not a function: %s", fn.Type())
 	}
 
 }
@@ -689,7 +711,7 @@ func (i *Interpreter) evalForStatement(nd *ast.ForStatement) object.Object {
 		i.exitScope()
 
 	default:
-		return newError("target needs to be either an array or a map, got %v", tg.Type())
+		return newError(ERROR, "target needs to be either an array or a map, got %v", tg.Type())
 	}
 
 	return nil
@@ -714,7 +736,7 @@ func (i *Interpreter) evalWhileStatement(nd *ast.WhileStatement) object.Object {
 		}
 	default:
 		// error out
-		return newError("evaluation of the condition in a while loop needs to return a boolean not %s", cdn)
+		return newError(ERROR, "evaluation of the condition in a while loop needs to return a boolean not %s", cdn)
 	}
 
 	// maybe
@@ -743,7 +765,7 @@ func (i *Interpreter) evalIfExpression(nd *ast.IfExpression) object.Object {
 	default:
 		// error out
 
-		return newError("evaluation of the condition needs to return a boolean not %s", cdn)
+		return newError(ERROR, "evaluation of the condition needs to return a boolean not %s", cdn)
 	}
 }
 
@@ -755,14 +777,14 @@ func (i *Interpreter) evalUnaryExpression(op string, right object.Object) object
 			return i.evalBangOperatorExpression(right)
 		}
 		// throw an error
-		return newError("! operator can only be applied on boolean values")
+		return newError(ERROR, "! operator can only be applied on boolean values")
 	case lexer.TokenMinus:
 		// support for both ints and floats
 		return i.evalMinusPrefixOperatorExpression(right)
 	default:
 	}
 
-	return newError("unknown operator: %s%s", op, right.Type())
+	return newError(ERROR, "unknown operator: %s%s", op, right.Type())
 }
 
 func (i *Interpreter) evalBangOperatorExpression(right object.Object) *object.Boolean {
@@ -792,7 +814,7 @@ func (i *Interpreter) evalMinusPrefixOperatorExpression(right object.Object) obj
 		}
 	default:
 		// throw an error
-		return newError("unknown operator: -%s", right.Type())
+		return newError(ERROR, "unknown operator: -%s", right.Type())
 	}
 }
 
@@ -814,11 +836,11 @@ func (i *Interpreter) evalBinaryExpression(op string, left, right object.Object)
 		return i.evalStringInfixExpression(op, left, right)
 
 	case left.Type() != right.Type():
-		return newError("type mismatch: %s %s %s",
+		return newError(ERROR, "type mismatch: %s %s %s",
 			left.Type(), op, right.Type())
 
 	default:
-		return newError("unknown operator: %s %s %s",
+		return newError(ERROR, "unknown operator: %s %s %s",
 			left.Type(), op, right.Type())
 	}
 
@@ -873,11 +895,11 @@ func (i *Interpreter) evalIntegerInfixExpression(op string, lt, rt object.Object
 			return left
 		} else {
 			// error saying this can't be mutable
-			return newError("%v can't be mutate, since it was defined as const", left)
+			return newError(ERROR, "%v can't be mutate, since it was defined as const", left)
 		}
 
 	default:
-		return newError("unknown operator: %s %s %s",
+		return newError(ERROR, "unknown operator: %s %s %s",
 			left.Type(), op, right.Type())
 
 	}
@@ -929,11 +951,11 @@ func (i *Interpreter) evalFloatInfixExpression(op string, lt, rt object.Object) 
 			return left
 		} else {
 			// error saying this can't be mutable
-			return newError("%v can't be mutate, since it was defined as const", left)
+			return newError(ERROR, "%v can't be mutate, since it was defined as const", left)
 		}
 
 	default:
-		return newError("unknown operator: %s %s %s",
+		return newError(ERROR, "unknown operator: %s %s %s",
 			left.Type(), op, right.Type())
 	}
 
@@ -964,12 +986,12 @@ func (i *Interpreter) evalBooleanInfixExpression(op string, lt, rt object.Object
 			return left
 		} else {
 			// error saying this can't be mutable
-			return newError("%v can't be mutate, since it was defined as const", left)
+			return newError(ERROR, "%v can't be mutate, since it was defined as const", left)
 		}
 
 	default:
 		// error
-		return newError("Unsupported operator: %s %s %s",
+		return newError(ERROR, "Unsupported operator: %s %s %s",
 			left.Type(), op, right.Type())
 	}
 }
@@ -1000,7 +1022,7 @@ func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Ob
 		l, leftMutable := object.Cast(left)
 
 		if !leftMutable {
-			return newError("%v can't be mutate, since it was defined as const", left)
+			return newError(ERROR, "%v can't be mutate, since it was defined as const", left)
 		}
 
 		r, _ := object.Cast(right)
@@ -1013,17 +1035,17 @@ func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Ob
 				return left
 			}
 
-			return newError("Can't assign a value of different type %s, %s",
+			return newError(ERROR, "Can't assign a value of different type %s, %s",
 				left.Type(), right.Type())
 
 		default:
 			// this checks for other values check when the get a string as right side
-			return newError("Can't assign a value of different type %s, %s",
+			return newError(ERROR, "Can't assign a value of different type %s, %s",
 				left.Type(), right.Type())
 		}
 	}
 
-	return newError("Unsupported operator: %s %s %s",
+	return newError(ERROR, "Unsupported operator: %s %s %s",
 		left.Type(), op, right.Type())
 }
 
@@ -1040,7 +1062,7 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 			// search for the corresponding property call and invoke
 			function, ok := owner.Attrs[ownerProperty.Function.Value]
 			if !ok {
-				return newError("function doesn't exist on the module %s", owner.Name)
+				return newError(ERROR, "function doesn't exist on the module %s", owner.Name)
 			}
 			// invokes the call expression
 			ableToCast := function.(object.ItemObject).IsBuiltIn
@@ -1055,13 +1077,13 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 			// a given constant in a module
 			identifier, ok := owner.Attrs[ownerProperty.Value]
 			if !ok {
-				return newError("identifier doesn't exist on the module %s", ownerProperty.Value)
+				return newError(ERROR, "identifier doesn't exist on the module %s", ownerProperty.Value)
 			}
 			// no need for casting
 			return identifier
 
 		default:
-			return newError("property needs to be of type call expression or identifier, for now")
+			return newError(ERROR, "property needs to be of type call expression or identifier, for now")
 		}
 
 	// ? More testing needed
@@ -1071,14 +1093,14 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 			// search for the corresponding property call and invoke
 			methodItem, ok := owner.Methods[ownerProperty.Function.Value]
 			if !ok {
-				return newError("method doesn't exist on the struct %v", ownerProperty.Function)
+				return newError(ERROR, "method doesn't exist on the struct %v", ownerProperty.Function)
 			}
 
 			// responsible to detect if the current accessed method is private or not
 			// so private methods are only allowed within the struct scope methods
 			if strings.HasPrefix(ownerProperty.Function.Value, "_") {
 				if obj.GetToken().Text != lexer.TokenSelf {
-					return newError("%s is a private method, u can't use outside of the struct", ownerProperty.Function.Value)
+					return newError(ERROR, "%s is a private method, u can't use outside of the struct", ownerProperty.Function.Value)
 				}
 			}
 
@@ -1104,14 +1126,14 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 			// a given constant in a module
 			identifier, ok := owner.Fields[ownerProperty.Value]
 			if !ok {
-				return newError("identifier doesn't exist on the struct %v", ownerProperty)
+				return newError(ERROR, "identifier doesn't exist on the struct %v", ownerProperty)
 			}
 
 			// responsible to detect if the current accessed method is private or not
 			// so private methods are only allowed within the struct scope methods
 			if strings.HasPrefix(ownerProperty.Value, "_") {
 				if obj.GetToken().Text != lexer.TokenSelf {
-					return newError("%s is a private field, u can't use outside of the struct", ownerProperty.Value)
+					return newError(ERROR, "%s is a private field, u can't use outside of the struct", ownerProperty.Value)
 				}
 			}
 
@@ -1154,10 +1176,10 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 
 		default:
 			fmt.Println(ownerProperty)
-			return newError("struct only support call expression, or identifier access, what u're doing isn't allowed")
+			return newError(ERROR, "struct only support call expression, or identifier access, what u're doing isn't allowed")
 		}
 
 	default:
-		return newError("Unsupported evaluation on this type: %s", owner.Type())
+		return newError(ERROR, "Unsupported evaluation on this type: %s", owner.Type())
 	}
 }

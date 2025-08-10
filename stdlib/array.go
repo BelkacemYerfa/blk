@@ -27,7 +27,7 @@ func equals(args ...object.Object) object.Object {
 		// do something
 		arr1 = *array
 	default:
-		return newError("first arg needs to be a map in equals function")
+		return newError("first arg needs to be an array in equals function")
 	}
 
 	mapper2, _ := object.Cast(args[1])
@@ -37,7 +37,7 @@ func equals(args ...object.Object) object.Object {
 		// do something
 		arr2 = *array
 	default:
-		return newError("second arg needs to be a map in equals function")
+		return newError("second arg needs to be an array in equals function")
 	}
 
 	if len(arr1.Elements) != len(arr2.Elements) {
@@ -82,7 +82,7 @@ func index(args ...object.Object) object.Object {
 		// do something
 		actualArray = array
 	default:
-		return newError("second arg needs to be a map in equals function")
+		return newError("second arg needs to be an array in equals function")
 	}
 
 	targetValue, _ := object.Cast(args[1])

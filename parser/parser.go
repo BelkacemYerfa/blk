@@ -24,7 +24,7 @@ const (
 	PREFIX      // -X or !X
 	CALL        // myFunction(X)
 	INDEX       // arr[i]
-	STRUCT      // myStruct { }
+	STRUCT      // Vec2{}.distance()
 )
 
 var precedences = map[lexer.TokenKind]int{
@@ -41,10 +41,15 @@ var precedences = map[lexer.TokenKind]int{
 	lexer.TokenGreater:        LESSGREATER,
 	lexer.TokenGreaterOrEqual: LESSGREATER,
 	lexer.TokenPlus:           SUM,
+	lexer.TokenAssignPlus:     SUM,
 	lexer.TokenMinus:          SUM,
+	lexer.TokenAssignMinus:    SUM,
 	lexer.TokenSlash:          PRODUCT,
+	lexer.TokenAssignSlash:    PRODUCT,
 	lexer.TokenMultiply:       PRODUCT,
+	lexer.TokenAssignMultiply: PRODUCT,
 	lexer.TokenModule:         PRODUCT,
+	lexer.TokenAssignModule:   PRODUCT,
 	lexer.TokenBraceOpen:      CALL,
 	lexer.TokenBracketOpen:    INDEX,
 	lexer.TokenDot:            STRUCT,
@@ -113,6 +118,11 @@ func NewParser(tokens []lexer.Token, filepath string) *Parser {
 	p.registerInfix(lexer.TokenBracketOpen, p.parseIndexExpression)
 	p.registerInfix(lexer.TokenCurlyBraceOpen, p.parseCurlyBraceOpen)
 	p.registerInfix(lexer.TokenDot, p.parseMemberShipAccess)
+	p.registerInfix(lexer.TokenAssignMinus, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignPlus, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignModule, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignMultiply, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignSlash, p.parseAssignOperatorExpression)
 
 	return &p
 }
@@ -1158,6 +1168,28 @@ func (p *Parser) parseMemberShipAccess(left ast.Expression) ast.Expression {
 	// ? if these results in more bugs consider changing it to a binary expression where the operator is a .
 	// then in the evaluation layer we see what operator is it, and then do something
 
+	return expr
+}
+
+// this function is responsible to parsing the assign operator syntax
+// an example of this: index += 1 <=> index = index + 1
+func (p *Parser) parseAssignOperatorExpression(left ast.Expression) ast.Expression {
+	expr := &ast.BinaryExpression{Token: left.GetToken(), Left: left}
+	expr.Operator = "="
+
+	// get the operator, from the current op which can be something (+=,%=,..etc)
+	operator := strings.Split(p.currentToken().Text, "=")[0]
+	// consume the operator token
+	p.nextToken()
+	// parse the operator
+	expr.Right = &ast.BinaryExpression{
+		Token:    p.currentToken(),
+		Operator: operator,
+		Left:     left,
+		Right:    p.parseExpression(LOWEST),
+	}
+
+	fmt.Println(expr)
 	return expr
 }
 

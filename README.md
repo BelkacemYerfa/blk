@@ -74,8 +74,8 @@ greet :: fn(name) {
 
 ```blk
 Vec2 :: struct {
-    x,
-    y,
+    x := 0.0,
+    y := 0.0,
     len: fn() {
         sqrt(x * x + y * y)
     }
@@ -163,7 +163,7 @@ import "math"
 import "utils"
 ```
 
-No aliasing needed — always access via `utils::fn`.
+No aliasing needed — always access via `utils.fn`.
 
 ---
 
@@ -180,8 +180,8 @@ names := ["foo", "bar"]
 
 ```blk
 config := {
-    host: "localhost",
-    port: 8080
+    "host": "localhost",
+    "port": "8080"
 }
 ```
 

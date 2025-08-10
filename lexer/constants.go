@@ -36,6 +36,11 @@ var (
 		TokenPlus:           "+",
 		TokenMinus:          "-",
 		TokenAssign:         "=",
+		TokenAssignMinus:    "-=",
+		TokenAssignPlus:     "+=",
+		TokenAssignModule:   "%=",
+		TokenAssignMultiply: "*=",
+		TokenAssignSlash:    "/=",
 		TokenAnd:            "&&",
 		TokenOr:             "||",
 	}

@@ -27,13 +27,14 @@ func (e *Environment) Resolve(name string) (ItemObject, bool) {
 	return obj, ok
 }
 
-func (e *Environment) Define(name string, val ItemObject) Object {
+func (e *Environment) Define(name string, val ItemObject) (Object, bool) {
 	if _, ok := e.store[name]; ok {
-		return val
+		return val, true
 	}
 	// define if there no value already bound to it
 	e.store[name] = val
-	return val
+	// second return types is to indicate if the value is already there or first declare
+	return val, false
 }
 
 func (e *Environment) OverrideDefine(name string, val ItemObject) Object {
