@@ -33,7 +33,9 @@ var precedences = map[lexer.TokenKind]int{
 	lexer.TokenBind:           ASSIGN,
 	lexer.TokenWalrus:         ASSIGN,
 	lexer.TokenOr:             OR,
+	lexer.TokenAssignOr:       OR,
 	lexer.TokenAnd:            AND,
+	lexer.TokenAssignAnd:      AND,
 	lexer.TokenEquals:         EQUALS,
 	lexer.TokenNotEquals:      EQUALS,
 	lexer.TokenLess:           LESSGREATER,
@@ -123,6 +125,8 @@ func NewParser(tokens []lexer.Token, filepath string) *Parser {
 	p.registerInfix(lexer.TokenAssignModule, p.parseAssignOperatorExpression)
 	p.registerInfix(lexer.TokenAssignMultiply, p.parseAssignOperatorExpression)
 	p.registerInfix(lexer.TokenAssignSlash, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignOr, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignAnd, p.parseAssignOperatorExpression)
 
 	return &p
 }

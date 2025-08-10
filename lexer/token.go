@@ -60,6 +60,8 @@ const (
 	// Logical Operators
 	TokenAnd         TokenKind = "&&"
 	TokenOr          TokenKind = "||"
+	TokenAssignAnd   TokenKind = "&&="
+	TokenAssignOr    TokenKind = "||="
 	TokenExclamation TokenKind = "!"
 
 	// Comment

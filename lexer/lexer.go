@@ -290,9 +290,18 @@ func (l *Lexer) NextToken() Token {
 		nextChar := string(l.Content[l.Cur])
 		if nextChar == "&" {
 			l.readChar()
-			token.LiteralToken = LiteralToken{
-				Kind: TokenAnd,
-				Text: "&&",
+			nextChar := string(l.Content[l.Cur])
+			if nextChar == "=" {
+				l.readChar()
+				token.LiteralToken = LiteralToken{
+					Kind: TokenAssignAnd,
+					Text: "&&=",
+				}
+			} else {
+				token.LiteralToken = LiteralToken{
+					Kind: TokenAnd,
+					Text: "&&",
+				}
 			}
 		} else {
 			token.LiteralToken = LiteralToken{
@@ -305,9 +314,18 @@ func (l *Lexer) NextToken() Token {
 		nextChar := string(l.Content[l.Cur])
 		if nextChar == "|" {
 			l.readChar()
-			token.LiteralToken = LiteralToken{
-				Kind: TokenOr,
-				Text: "||",
+			nextChar := string(l.Content[l.Cur])
+			if nextChar == "=" {
+				l.readChar()
+				token.LiteralToken = LiteralToken{
+					Kind: TokenAssignOr,
+					Text: "||=",
+				}
+			} else {
+				token.LiteralToken = LiteralToken{
+					Kind: TokenOr,
+					Text: "||",
+				}
 			}
 		} else {
 			token.LiteralToken = LiteralToken{

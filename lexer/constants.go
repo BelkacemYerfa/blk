@@ -43,6 +43,8 @@ var (
 		TokenAssignSlash:    "/=",
 		TokenAnd:            "&&",
 		TokenOr:             "||",
+		TokenAssignAnd:      "&&=",
+		TokenAssignOr:       "||=",
 	}
 
 	UnaryOperators = map[TokenKind]Operator{
