@@ -279,9 +279,7 @@ type SkipStatement struct {
 func (fs *SkipStatement) statementNode()        {}
 func (fs *SkipStatement) TokenLiteral() string  { return fs.Token.Text }
 func (nt *SkipStatement) GetToken() lexer.Token { return nt.Token }
-func (fs *SkipStatement) String() string {
-	return fs.TokenLiteral()
-}
+func (fs *SkipStatement) String() string        { return fs.TokenLiteral() }
 
 type FunctionExpression struct {
 	Token lexer.Token
@@ -386,6 +384,7 @@ func (bl *BooleanLiteral) String() string        { return bl.Token.Text }
 
 type ArrayLiteral struct {
 	Token    lexer.Token
+	Size     Expression // indicates the size of the array if it a fixed size array
 	Elements []Expression
 }
 
@@ -395,6 +394,10 @@ func (nt *ArrayLiteral) GetToken() lexer.Token { return nt.Token }
 func (al *ArrayLiteral) String() string {
 	var out bytes.Buffer
 	out.WriteString("[")
+	if al.Size != nil {
+		out.WriteString(al.Size.String())
+		out.WriteString("; ")
+	}
 	for idx, elem := range al.Elements {
 		out.WriteString(elem.String())
 		if idx+1 <= len(al.Elements)-1 {

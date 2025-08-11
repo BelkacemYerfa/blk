@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -195,91 +194,8 @@ func (p *Parser) error(tok lexer.Token, msg string) error {
 		}
 	}
 
-	errMsg := fmt.Sprintf("\033[1;90m%s:%d:%d:\033[0m\n\n", p.FilePath, tok.Row, tok.Col)
+	errMsg := fmt.Sprintf("\033[1;90m%s:%d:%d:\033[0m %s", p.FilePath, tok.Row, tok.Col, msg)
 
-	// Build row set map
-	rowSet := make(map[int][]lexer.Token)
-	for _, t := range p.Tokens {
-		rowSet[t.Row] = append(rowSet[t.Row], t)
-	}
-
-	// Collect sorted rows
-	rows := []int{}
-	for row := range rowSet {
-		rows = append(rows, row)
-	}
-	sort.Ints(rows)
-
-	// Find closest previous and next row
-	var prevRow, nextRow int
-	prevRow, nextRow = -1, -1
-	for _, row := range rows {
-		if row < tok.Row {
-			prevRow = row
-		} else if row > tok.Row && nextRow == -1 {
-			nextRow = row
-		}
-	}
-
-	// Build rowMap with only prevRow, tok.Row, nextRow
-	rowMap := make(map[int][]lexer.Token)
-	if prevRow != -1 {
-		rowMap[prevRow] = rowSet[prevRow]
-	}
-	rowMap[tok.Row] = rowSet[tok.Row]
-	if nextRow != -1 {
-		rowMap[nextRow] = rowSet[nextRow]
-	}
-
-	// Format rows
-	formattedRows := []int{}
-	for row := range rowMap {
-		formattedRows = append(formattedRows, row)
-	}
-	sort.Ints(formattedRows)
-
-	for _, row := range formattedRows {
-		currentLine := rowMap[row]
-		lineContent := ""
-		lastCol := 0
-
-		for _, t := range currentLine {
-			if t.Col > lastCol {
-				lineContent += strings.Repeat(" ", t.Col-lastCol)
-			}
-			if t.Kind == lexer.TokenString {
-				t.Text = fmt.Sprintf(`"%s"`, t.Text)
-			}
-			lineContent += t.Text
-			lastCol = t.Col + len(t.Text)
-		}
-
-		lineNumStr := fmt.Sprintf("%d", row)
-		errMsg += fmt.Sprintf("%s    %s\n", lineNumStr, lineContent)
-
-		if row == tok.Row {
-			spacesBeforeLineNum := len(lineNumStr)
-			spacesAfterLineNum := 4
-			spacesBeforeToken := tok.Col
-
-			totalSpaces := spacesBeforeLineNum + spacesAfterLineNum + spacesBeforeToken
-
-			errorIndicator := strings.Repeat(" ", totalSpaces)
-			errMsg += errorIndicator + "\033[1;31m"
-			repeat := len(tok.Text)
-			if repeat == 0 {
-				repeat = 1
-			}
-			errMsg += strings.Repeat("^", repeat)
-			errMsg += "\033[0m\n"
-		}
-	}
-
-	errMsg += msg
-	// skip until the next useful line
-	for p.currentToken().Row <= tok.Row {
-		p.nextToken()
-	}
 	return errors.New(errMsg)
 }
 
@@ -682,21 +598,29 @@ func (p *Parser) parseBooleanLiteral() ast.Expression {
 }
 
 func (p *Parser) parseArrayLiteral() ast.Expression {
-	prev := p.currentToken()
+	expr := &ast.ArrayLiteral{Token: p.currentToken()}
 
 	if !p.expect([]lexer.TokenKind{lexer.TokenBracketOpen}) {
-		p.Errors = append(p.Errors, p.error(prev, "ERROR: expected open bracket [, got shit"))
+		p.Errors = append(p.Errors, p.error(expr.Token, "ERROR: expected open bracket [, got shit"))
 		return nil
 	}
 
 	elements := make([]ast.Expression, 0)
+
+	// check for size of the array
+	if p.lookToken(1).Text == ";" {
+		// means the first part is the size
+		expr.Size = p.parseExpression(LOWEST)
+		// consume the ; token
+		p.nextToken()
+	}
 
 	tok := p.currentToken()
 
 	if tok.Kind == lexer.TokenBracketClose {
 		p.nextToken()
 		return &ast.ArrayLiteral{
-			Token:    prev,
+			Token:    expr.Token,
 			Elements: elements,
 		}
 	}
@@ -708,15 +632,14 @@ func (p *Parser) parseArrayLiteral() ast.Expression {
 		elements = append(elements, p.parseExpression(LOWEST))
 	}
 
+	expr.Elements = elements
+
 	if !p.expect([]lexer.TokenKind{lexer.TokenBracketClose}) {
-		p.Errors = append(p.Errors, p.error(prev, "ERROR: expected close bracket ( ] ), got shit"))
+		p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: expected close bracket ( ] ), got shit"))
 		return nil
 	}
-
-	return &ast.ArrayLiteral{
-		Token:    prev,
-		Elements: elements,
-	}
+	fmt.Println(expr)
+	return expr
 }
 
 func (p *Parser) parseScope() (*ast.ScopeStatement, error) {

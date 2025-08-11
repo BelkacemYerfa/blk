@@ -74,6 +74,12 @@ func APPEND(args ...object.Object) object.Object {
 	case *object.Array:
 		// cast value
 		newValue, _ := object.Cast(args[1])
+
+		// means that the array reached it limits
+		if actualArray.Size == len(actualArray.Elements) {
+			return newError("can't append more value to this array, since it reached the max len allowed for it, initialization %d, current %d", actualArray.Size, len(actualArray.Elements))
+		}
+
 		// type checks if the new value to insert has corresponding type to the current ones on the array
 		if len(actualArray.Elements) > 0 {
 			elem := actualArray.Elements[0]

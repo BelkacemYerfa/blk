@@ -223,7 +223,29 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		if len(elements) == 1 && isError(elements[0]) {
 			return elements[0]
 		}
-		return &object.Array{Elements: elements}
+
+		size := -1
+		if nd.Size != nil {
+			evaluatedSize := i.Eval(nd.Size)
+
+			if isError(evaluatedSize) {
+				return evaluatedSize
+			}
+
+			evaluatedSize, _ = object.Cast(evaluatedSize)
+			if evaluatedSize.Type() != object.INTEGER_OBJ {
+				return newError(ERROR, "size of an array needs to of type INTEGER, got %s", evaluatedSize.Type())
+			}
+
+			size = int(object.DeepCopy(evaluatedSize).(*object.Integer).Value)
+
+			// verify if the current size matches the amount of element inside of array if it is initialized
+			if size < len(elements) {
+				return newError(ERROR, "number of elements in the initialization exceeds the initial size, consider changing the size or adjusting the amount of elements")
+			}
+		}
+
+		return &object.Array{Size: size, Elements: elements}
 
 	case *ast.MapLiteral:
 		return i.evalMapExpression(nd.Pairs)

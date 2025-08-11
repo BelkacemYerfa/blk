@@ -117,6 +117,7 @@ func (f *Function) Inspect() string {
 }
 
 type Array struct {
+	Size     int // if size == -1 means that the array is dynamic
 	Elements []Object
 }
 
