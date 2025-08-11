@@ -1155,7 +1155,7 @@ func (i *Interpreter) areMapsCompatible(left, right *object.Map) bool {
 
 // this function is responsible for handling assign op for both struct, hashmaps, structs
 // Note: the assignment does a shallow copy, so modifying the value here will modify will affect the right struct instance
-// ? for deep copy, consider making a copy value for that
+// for deep copy, there is copy function in the builtin module of stdlib that allows u todo that
 func (i *Interpreter) evalAssignmentExpression(op string, leftNode ast.Expression, left, right object.Object) object.Object {
 	if op != lexer.TokenAssign {
 		return newError(ERROR, "operation with %s operator isn't allowed on type %s", op, left.Type())
