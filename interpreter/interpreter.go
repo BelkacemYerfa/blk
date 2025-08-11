@@ -6,7 +6,6 @@ import (
 	"blk/object"
 	"blk/stdlib"
 	"fmt"
-	"reflect"
 	"strings"
 )
 
@@ -257,20 +256,30 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 
 		castedVal, _ := object.Cast(val)
 
-		switch castedVal.(type) {
 		// this tells the interpreter that those type of values aren't allowed to be const
-		case *object.Array, *object.Map:
-			if nd.Token.Text == "const" {
-				return newError(ERROR, "%v isn't allowed to be an const, consts are only: ints, floats, strings, booleans", castedVal.Type())
-			}
+		if (castedVal.Type() == object.ARRAY_OBJ || castedVal.Type() == object.MAP_OBJ) && nd.Token.Text == "const" {
+			return newError(ERROR, "%v isn't allowed to be an const, consts are only: ints, floats, strings, booleans", castedVal.Type())
 		}
-		// define it in the scope
+
 		newVal := object.ItemObject{
 			Object: castedVal,
 		}
+
 		if nd.Token.Text == "let" {
 			newVal.IsMutable = true
 		}
+
+		switch v := castedVal.(type) {
+		// means that this types are give u a deep copy of their value
+		case *object.Float, *object.Integer, *object.String, *object.Boolean:
+			newVal.Object = object.DeepCopy(v)
+
+		// means that this types are being shallow copied
+		case *object.Array, *object.Map, *object.Struct:
+			newVal.Object = v
+		}
+
+		// define it in the scope
 		_, firstDeclaration := i.env.Define(nd.Name.Value, newVal)
 
 		if firstDeclaration {
@@ -310,10 +319,10 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		return &object.ReturnValue{Value: val}
 
 	case *ast.ScopeStatement:
-		i.enterScope()
 		var evaluation object.Object
-		// scope makes it easier to understand
+		i.enterScope()
 		{
+			// scope makes it easier to understand
 			evaluation = i.evalBlockStatement(nd.Body)
 		}
 		i.exitScope()
@@ -360,9 +369,7 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		}
 
 		return i.evalMembershipExpression(obj, nd.Object, nd.Property)
-
 	default:
-		fmt.Println("yehoo", reflect.TypeOf(nd))
 	}
 	return nil
 }
@@ -402,7 +409,7 @@ func (i *Interpreter) evalExpressions(exps []ast.Expression, ableToCast bool) []
 		case object.ItemObject:
 			// leave it as it is cause it is in the proper shape
 			argEval = object.ItemObject{
-				Object: object.DeepCopy(ev.Object),
+				Object: ev.Object,
 				// means any param that gets passed to the func is mutable
 				// predefined values that u pass are not affected by this
 				IsMutable: true,
@@ -630,13 +637,10 @@ func (i *Interpreter) evalBlockStatement(block *ast.BlockStatement) object.Objec
 
 	for _, statement := range block.Body {
 		result = i.Eval(statement)
-		res, _ := object.Cast(result)
-		if res != nil {
-			switch res.Type() {
-			case object.ERROR_OBJ:
-				return res
-			case object.RETURN_VALUE_OBJ:
-				return res.(*object.ReturnValue).Value
+		if result != nil {
+			rt := result.Type()
+			if rt == object.RETURN_VALUE_OBJ || rt == object.ERROR_OBJ {
+				return result
 			}
 		}
 	}
@@ -663,25 +667,23 @@ func (i *Interpreter) evalForStatement(nd *ast.ForStatement) object.Object {
 			// init the index with value 0
 			// init the value with first elem value
 			for idx, elem := range tg.Elements {
-				for ix, ident := range nd.Identifiers {
-					if ix == 0 {
-						i.env.OverrideDefine(ident.Value, object.ItemObject{
-							Object: &object.Integer{
-								Value: int64(idx),
-							},
-						})
-					}
-
-					if ix == 1 {
-						// get the a copy of the current element value
-						newVal := object.DeepCopy(elem)
-						i.env.OverrideDefine(ident.Value, object.ItemObject{
-							Object: newVal,
-						})
-					}
+				// first identifier (index) - always present
+				if len(nd.Identifiers) >= 1 && nd.Identifiers[0].Value != "_" {
+					i.env.OverrideDefine(nd.Identifiers[0].Value, object.ItemObject{
+						Object: &object.Integer{Value: int64(idx)},
+					})
 				}
+
+				// second identifier (value) - optional
+				if len(nd.Identifiers) >= 2 {
+					newVal := object.DeepCopy(elem)
+					i.env.OverrideDefine(nd.Identifiers[1].Value, object.ItemObject{
+						Object: newVal,
+					})
+				}
+
 				// evaluate the body
-				res := i.Eval(nd.Body)
+				res := i.evalBlockStatement(nd.Body)
 				if res != nil {
 					switch res.Type() {
 					case object.RETURN_VALUE_OBJ:
@@ -690,6 +692,8 @@ func (i *Interpreter) evalForStatement(nd *ast.ForStatement) object.Object {
 					case object.SKIP_OBJ:
 						// skip to the next iteration
 						continue
+					case object.ERROR_OBJ:
+						return res
 					}
 				}
 			}
@@ -709,23 +713,24 @@ func (i *Interpreter) evalForStatement(nd *ast.ForStatement) object.Object {
 		i.enterScope()
 		{
 			for _, elem := range tg.Pairs {
-				for ix, ident := range nd.Identifiers {
-					if ix == 0 {
-						newVal := object.DeepCopy(elem.Key)
-						i.env.OverrideDefine(ident.Value, object.ItemObject{
-							Object: newVal,
-						})
-					}
-
-					if ix == 1 {
-						newVal := object.DeepCopy(elem.Value)
-						i.env.OverrideDefine(ident.Value, object.ItemObject{
-							Object: newVal,
-						})
-					}
+				// first identifier (key) - always present
+				if len(nd.Identifiers) >= 1 && nd.Identifiers[0].Value != "_" {
+					newVal := object.DeepCopy(elem.Key)
+					i.env.OverrideDefine(nd.Identifiers[0].Value, object.ItemObject{
+						Object: newVal,
+					})
 				}
+
+				// second identifier (value) - optional
+				if len(nd.Identifiers) >= 2 {
+					newVal := object.DeepCopy(elem.Value)
+					i.env.OverrideDefine(nd.Identifiers[1].Value, object.ItemObject{
+						Object: newVal,
+					})
+				}
+
 				// evaluate the body
-				res := i.Eval(nd.Body)
+				res := i.evalBlockStatement(nd.Body)
 				if res != nil {
 					switch res.Type() {
 					case object.RETURN_VALUE_OBJ:
@@ -734,6 +739,8 @@ func (i *Interpreter) evalForStatement(nd *ast.ForStatement) object.Object {
 					case object.SKIP_OBJ:
 						// skip to the next iteration
 						continue
+					case object.ERROR_OBJ:
+						return res
 					}
 				}
 			}
@@ -770,6 +777,8 @@ func (i *Interpreter) evalWhileStatement(nd *ast.WhileStatement) object.Object {
 				case object.SKIP_OBJ:
 					// skip to the next iteration
 					continue
+				case object.ERROR_OBJ:
+					return res
 				}
 			}
 			cdn = i.Eval(nd.Condition).(*object.Boolean)

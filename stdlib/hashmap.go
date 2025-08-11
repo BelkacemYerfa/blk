@@ -95,61 +95,59 @@ func INSERT(args ...object.Object) object.Object {
 		return newError("can't mutate %v, probably defined as a const", args[0].Inspect())
 	}
 
-	// cast the args
-	newKey, _ := object.Cast(args[1])
-	newValue, _ := object.Cast(args[2])
-
-	actualMap := &object.Map{}
-	switch hashMap := mapper.(type) {
+	switch actualMap := mapper.(type) {
 	case *object.Map:
-		// do something
-		actualMap = hashMap
+
+		// cast the args
+		newKey, _ := object.Cast(args[1])
+		newValue, _ := object.Cast(args[2])
+
+		// key needs to implement Hashable interface
+		hashKey, ok := newKey.(object.Hashable)
+		if !ok {
+			return newError("unusable as hash key: %s, consider one of those types (boolean, integer, float, string)", newKey.Type())
+		}
+
+		// if map is empty push whatever there is as key-value
+		if len(actualMap.Pairs) == 0 {
+			actualMap.Pairs[hashKey.HashKey()] = object.HashPair{
+				Key:   newKey,
+				Value: newValue,
+			}
+
+			return actualMap
+		}
+
+		// if the map has at least one element
+
+		// ? maybe it can be changed to get a random value from the hashMap without care to much about, didn't found a good way
+		// check if the type of the value and the key are compatible with the ones in the hash map
+		// need to do this only once
+		for _, val := range actualMap.Pairs {
+			key := val.Key
+			value := val.Value
+
+			if key.Type() != newKey.Type() {
+				return newError("unusable as hash key: %s, doesn't match the current key(s) type(s): %s", newKey.Type(), key.Type())
+			}
+
+			if value.Type() != newValue.Type() {
+				return newError("unusable as value key: %s, consider one of those types (boolean, integer, float, string)", newKey.Type())
+			}
+
+			actualMap.Pairs[hashKey.HashKey()] = object.HashPair{
+				Key:   newKey,
+				Value: newValue,
+			}
+			// break directly because it only needed once todo the check
+			break
+		}
+
+		return mapper
+
 	default:
 		return newError("second arg needs to be a map in equals function")
 	}
-
-	// key needs to implement Hashable interface
-	hashKey, ok := newKey.(object.Hashable)
-	if !ok {
-		return newError("unusable as hash key: %s, consider one of those types (boolean, integer, float, string)", newKey.Type())
-	}
-
-	// if map is empty push whatever there is as key-value
-	if len(actualMap.Pairs) == 0 {
-		actualMap.Pairs[hashKey.HashKey()] = object.HashPair{
-			Key:   newKey,
-			Value: newValue,
-		}
-
-		return actualMap
-	}
-
-	// if the map has at least one element
-
-	// ? maybe it can be changed to get a random value from the hashMap without care to much about, didn't found a good way
-	// check if the type of the value and the key are compatible with the ones in the hash map
-	// need to do this only once
-	for _, val := range actualMap.Pairs {
-		key := val.Key
-		value := val.Value
-
-		if key.Type() != newKey.Type() {
-			return newError("unusable as hash key: %s, doesn't match the current key(s) type(s): %s", newKey.Type(), key.Type())
-		}
-
-		if value.Type() != newValue.Type() {
-			return newError("unusable as value key: %s, consider one of those types (boolean, integer, float, string)", newKey.Type())
-		}
-
-		actualMap.Pairs[hashKey.HashKey()] = object.HashPair{
-			Key:   newKey,
-			Value: newValue,
-		}
-		// break directly because it only needed once todo the check
-		break
-	}
-
-	return actualMap
 }
 
 func GET_VALUE(args ...object.Object) object.Object {

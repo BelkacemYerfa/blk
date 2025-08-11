@@ -64,31 +64,29 @@ func APPEND(args ...object.Object) object.Object {
 			len(args))
 	}
 
-	mapper, isMutable := object.Cast(args[0])
+	array, isMutable := object.Cast(args[0])
 
 	if !isMutable {
 		return newError("can't mutate %v, probably defined as a const", args[0].Inspect())
 	}
 
-	newValue, _ := object.Cast(args[1])
-
-	actualArray := &object.Array{}
-	switch hashMap := mapper.(type) {
+	switch actualArray := array.(type) {
 	case *object.Array:
-		// do something
-		actualArray = hashMap
+		// cast value
+		newValue, _ := object.Cast(args[1])
+		// type checks if the new value to insert has corresponding type to the current ones on the array
+		if len(actualArray.Elements) > 0 {
+			elem := actualArray.Elements[0]
+			if elem.Type() != newValue.Type() {
+				return newError("can't append the current value, cause it doesn't match the type of the current elements which is of type %s", elem.Type())
+			}
+		}
+
+		actualArray.Elements = append(actualArray.Elements, newValue)
+		return actualArray
+
 	default:
 		return newError("first args needs to be an array")
 	}
 
-	if len(actualArray.Elements) > 0 {
-		elem := actualArray.Elements[0]
-		if elem.Type() != newValue.Type() {
-			return newError("can't append the current value, cause it doesn't match the type of the current elements which is of type %s", elem.Type())
-		}
-	}
-
-	actualArray.Elements = append(actualArray.Elements, newValue)
-
-	return actualArray
 }
