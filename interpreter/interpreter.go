@@ -406,9 +406,9 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			if castedVal.Type() == object.RETURN_VALUE_OBJ {
 				returnValues := castedVal.(*object.ReturnValue).Values
 				rightResults = append(rightResults, returnValues...)
+			} else {
+				rightResults = append(rightResults, evaluated)
 			}
-
-			rightResults = append(rightResults, evaluated)
 		}
 
 		// this means there are more declaration than the assignments
