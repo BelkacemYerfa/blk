@@ -43,6 +43,11 @@ const (
 	ERROR
 )
 
+type LeftRes struct {
+	Object object.Object
+	node   ast.Expression
+}
+
 func newError(level LEVEL, format string, a ...interface{}) *object.Error {
 	prefix := "ERROR"
 
@@ -108,29 +113,14 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			if isError(val) {
 				return val
 			}
-			varDecl := object.ItemObject{}
-			switch v := val.(type) {
-			// this is in case for the val is another var declaration
-			// this ensures to make a copy of the value and not the
-			case object.ItemObject:
-				valueClone := object.DeepCopy(v.Object)
-				varDecl = object.ItemObject{
-					Object: valueClone,
-				}
-				if decl.Token.Text == "let" {
-					varDecl.IsMutable = true
-				}
-			default:
-				// define it in the scope
-				varDecl = object.ItemObject{
-					Object: v,
-				}
-				if decl.Token.Text == "let" {
-					varDecl.IsMutable = true
-				}
+
+			varDecl := object.ItemObject{
+				// this works as the way done when declaring stuff, where
+				Object:    object.UseCopyValueOrRef(val),
+				IsMutable: decl.Token.Kind == lexer.TokenLet,
 			}
 
-			fields[decl.Name.Value] = varDecl
+			fields[decl.Name[0].Value] = varDecl
 		}
 
 		// methods built in into the struct
@@ -182,20 +172,12 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			}
 
 			varDecl := object.ItemObject{
+				// this works as the way done when declaring stuff, where
+				Object:    object.UseCopyValueOrRef(fieldValue),
 				IsMutable: true,
-			}
-			switch v := fieldValue.(type) {
-			// this is in case for the val is another var declaration
-			// this ensures to make a copy of the value and not use a reference to the value
-			case object.ItemObject:
-				varDecl.Object = object.DeepCopy(v.Object)
-			default:
-				// define it in the scope
-				varDecl.Object = v
 			}
 
 			copyOfStructDef.Fields[field.Key.Value] = varDecl
-
 		}
 
 		return copyOfStructDef
@@ -276,36 +258,51 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			return val
 		}
 
-		castedVal, _ := object.Cast(val)
-
 		// this tells the interpreter that those type of values aren't allowed to be const
-		if (castedVal.Type() == object.ARRAY_OBJ || castedVal.Type() == object.MAP_OBJ) && nd.Token.Text == "const" {
-			return newError(ERROR, "%v isn't allowed to be an const, consts are only: ints, floats, strings, booleans", castedVal.Type())
+		if (val.Type() == object.ARRAY_OBJ || val.Type() == object.MAP_OBJ) && nd.Token.Kind == lexer.TokenConst {
+			return newError(ERROR, "%v isn't allowed to be an const, consts are only: ints, floats, strings, booleans", val.Type())
 		}
 
+		// functions need to be declared as consts
+		if (val.Type() == object.FUNCTION_OBJ) && nd.Token.Kind != lexer.TokenConst {
+			return newError(ERROR, "functions are required to be declared as consts")
+		}
+
+		castedVal, _ := object.Cast(val)
 		newVal := object.ItemObject{
-			Object: castedVal,
+			Object:    object.UseCopyValueOrRef(val),
+			IsMutable: nd.Token.Text == lexer.TokenLet,
 		}
 
-		if nd.Token.Text == "let" {
-			newVal.IsMutable = true
-		}
+		// for multi value assignment from functions
+		if castedVal.Type() == object.RETURN_VALUE_OBJ {
+			returnValues := castedVal.(*object.ReturnValue).Values
+			// the rule here is that var declaration need to be <= len(returnValue) elements
+			if len(nd.Name) > len(returnValues) {
+				return newError(ERROR, "numbers of declaration need to be less or equals to the number of return values")
+			}
 
-		switch v := castedVal.(type) {
-		// means that this types are give u a deep copy of their value
-		case *object.Float, *object.Integer, *object.String, *object.Boolean:
-			newVal.Object = object.DeepCopy(v)
+			// this handles the declaration of multi values
+			for idx, ident := range nd.Name {
+				currentVarAssigned := object.ItemObject{
+					Object:    object.DeepCopy(returnValues[idx]),
+					IsMutable: newVal.IsMutable,
+				}
+				// define it in the scope
+				_, firstDeclaration := i.env.Define(ident.Value, currentVarAssigned)
 
-		// means that this types are being shallow copied
-		case *object.Array, *object.Map, *object.Struct:
-			newVal.Object = v
-		}
+				if firstDeclaration {
+					return newError(WARNING, "name %s is already in use", ident.Value)
+				}
+			}
+		} else {
+			singleVar := nd.Name[0]
+			// define it in the scope
+			_, firstDeclaration := i.env.Define(singleVar.Value, newVal)
 
-		// define it in the scope
-		_, firstDeclaration := i.env.Define(nd.Name.Value, newVal)
-
-		if firstDeclaration {
-			return newError(WARNING, "name %s is already in use", nd.Name.Value)
+			if firstDeclaration {
+				return newError(WARNING, "name %s is already in use", singleVar.Value)
+			}
 		}
 
 	case *ast.Identifier:
@@ -334,11 +331,11 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		return i.applyFunction(function, args)
 
 	case *ast.ReturnStatement:
-		val := i.Eval(nd.ReturnValue)
-		if isError(val) {
-			return val
+		returnValues := i.evalReturnValues(nd.ReturnValues)
+		if len(returnValues) == 1 && isError(returnValues[0]) {
+			return returnValues[0]
 		}
-		return &object.ReturnValue{Value: val}
+		return &object.ReturnValue{Values: returnValues}
 
 	case *ast.ScopeStatement:
 		var evaluation object.Object
@@ -382,6 +379,46 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 
 		return i.evalBinaryExpression(nd.Operator, nd.Left, left, right)
 
+	case *ast.AssignStatement:
+		leftResults := make([]LeftRes, 0)
+
+		for _, left := range nd.Left {
+			evaluated := i.Eval(left)
+			if isError(evaluated) {
+				return evaluated
+			}
+			leftResults = append(leftResults, LeftRes{
+				Object: evaluated,
+				node:   left,
+			})
+		}
+
+		rightResults := make([]object.Object, 0)
+
+		for _, right := range nd.Right {
+			evaluated := i.Eval(right)
+			if isError(evaluated) {
+				return evaluated
+			}
+
+			castedVal, _ := object.Cast(evaluated)
+
+			if castedVal.Type() == object.RETURN_VALUE_OBJ {
+				returnValues := castedVal.(*object.ReturnValue).Values
+				rightResults = append(rightResults, returnValues...)
+			}
+
+			rightResults = append(rightResults, evaluated)
+		}
+
+		// this means there are more declaration than the assignments
+		if len(leftResults) > len(rightResults) {
+			return newError(ERROR, "found more identifiers than result values, consider adjusting either identifiers, or result values")
+		}
+
+		// otherwise we're cool, but still need to check the assignments
+		return i.evalAssignment(leftResults, rightResults)
+
 	case *ast.MemberShipExpression:
 		// evaluate the owner
 		obj := i.Eval(nd.Object)
@@ -403,7 +440,7 @@ func (i *Interpreter) evalProgram(stmts []ast.Statement) object.Object {
 		res, _ := object.Cast(result)
 		switch res := res.(type) {
 		case *object.ReturnValue:
-			return res.Value
+			return res
 		case *object.Error:
 			return result
 		}
@@ -430,12 +467,8 @@ func (i *Interpreter) evalExpressions(exps []ast.Expression, ableToCast bool) []
 		switch ev := evaluated.(type) {
 		case object.ItemObject:
 			// leave it as it is cause it is in the proper shape
-			argEval = object.ItemObject{
-				Object: ev.Object,
-				// means any param that gets passed to the func is mutable
-				// predefined values that u pass are not affected by this
-				IsMutable: true,
-			}
+			// this is being used from the internal stdlib functions in this lang
+			// by passing a reference so the var will get updated
 		default:
 			// wrap it inside of ItemObject struct
 			argEval = object.ItemObject{
@@ -471,6 +504,20 @@ func (i *Interpreter) evalArrayExpression(exps []ast.Expression) []object.Object
 			return []object.Object{
 				newError(ERROR, "multitude of types, (%v,%v), array elements should be of one type", firstElem.Type(), elemEval.Type()),
 			}
+		}
+		// else push the element
+		result = append(result, evaluated)
+	}
+	return result
+}
+
+// this is used for evaluating array elements
+func (i *Interpreter) evalReturnValues(exps []ast.Expression) []object.Object {
+	result := make([]object.Object, 0, len(exps))
+	for _, e := range exps {
+		evaluated := i.Eval(e)
+		if isError(evaluated) {
+			return []object.Object{evaluated}
 		}
 		// else push the element
 		result = append(result, evaluated)
@@ -649,7 +696,10 @@ func extendFunctionEnv(
 
 func unwrapReturnValue(obj object.Object) object.Object {
 	if returnValue, ok := obj.(*object.ReturnValue); ok {
-		return returnValue.Value
+		if len(returnValue.Values) <= 1 {
+			return returnValue.Values[0]
+		}
+		return returnValue
 	}
 	return obj
 }
@@ -890,6 +940,66 @@ func (i *Interpreter) evalMinusPrefixOperatorExpression(right object.Object) obj
 	}
 }
 
+func (i *Interpreter) evalAssignment(left []LeftRes, right []object.Object) object.Object {
+	var result object.Object // Track the last assignment result
+
+	for idx, leftRes := range left {
+		if idx >= len(right) {
+			return newError(ERROR, "not enough values to assign")
+		}
+
+		rightVal := right[idx]
+		node := leftRes.node
+		leftObj, leftMutable := object.Cast(leftRes.Object)
+		rightObj, _ := object.Cast(rightVal)
+
+		// Check mutability first
+		if !leftMutable {
+			return newError(ERROR, "%v can't be mutated, since it was defined as const", leftObj)
+		}
+
+		// Type compatibility check
+		if leftObj.Type() != rightObj.Type() {
+			return newError(ERROR, "type mismatch: can't assign %s to %s",
+				rightObj.Type(), leftObj.Type())
+		}
+
+		// Perform the assignment based on type
+		switch leftTyped := leftObj.(type) {
+		case *object.Integer:
+			if rightTyped, ok := rightObj.(*object.Integer); ok {
+				leftTyped.Value = rightTyped.Value
+				result = leftTyped
+			}
+		case *object.Float:
+			if rightTyped, ok := rightObj.(*object.Float); ok {
+				leftTyped.Value = rightTyped.Value
+				result = leftTyped
+			}
+		case *object.Boolean:
+			if rightTyped, ok := rightObj.(*object.Boolean); ok {
+				leftTyped.Value = rightTyped.Value
+				result = leftTyped
+			}
+		case *object.String:
+			if rightTyped, ok := rightObj.(*object.String); ok {
+				leftTyped.Value = rightTyped.Value
+				result = leftTyped
+			}
+		case *object.Array, *object.Map, *object.Struct:
+			// For complex types, delegate to existing method
+			result = i.evalAssignmentExpression(node, leftObj, rightObj)
+			if isError(result) {
+				return result
+			}
+		default:
+			return newError(ERROR, "unsupported assignment for type %s", leftObj.Type())
+		}
+	}
+
+	return result // Return the result of the last assignment
+}
+
 func (i *Interpreter) evalBinaryExpression(op string, leftNode ast.Expression, left, right object.Object) object.Object {
 
 	switch {
@@ -907,18 +1017,6 @@ func (i *Interpreter) evalBinaryExpression(op string, leftNode ast.Expression, l
 	case left.Type() == object.STRING_OBJ || right.Type() == object.STRING_OBJ:
 		// allow addition with anything
 		return i.evalStringInfixExpression(op, left, right)
-
-	case left.Type() == object.STRUCT_OBJ && right.Type() == object.STRUCT_OBJ:
-		// only allowed operation is assign (=) by making the left have a copy of the value of the right side
-		return i.evalAssignmentExpression(op, leftNode, left, right)
-
-	case left.Type() == object.ARRAY_OBJ && right.Type() == object.ARRAY_OBJ:
-		// only allowed for assign operator
-		return i.evalAssignmentExpression(op, leftNode, left, right)
-
-	case left.Type() == object.MAP_OBJ && right.Type() == object.MAP_OBJ:
-		// only allowed for assign operator
-		return i.evalAssignmentExpression(op, leftNode, left, right)
 
 	case left.Type() != right.Type():
 		return newError(ERROR, "type mismatch: %s %s %s",
@@ -1048,7 +1146,7 @@ func (i *Interpreter) evalFloatInfixExpression(op string, lt, rt object.Object) 
 
 func (i *Interpreter) evalBooleanInfixExpression(op string, lt, rt object.Object) object.Object {
 
-	l, leftMutable := object.Cast(lt)
+	l, _ := object.Cast(lt)
 	r, _ := object.Cast(rt)
 
 	// cast them to booleans
@@ -1064,15 +1162,6 @@ func (i *Interpreter) evalBooleanInfixExpression(op string, lt, rt object.Object
 		return nativeBooleanObject(left.Value && right.Value)
 	case lexer.TokenOr:
 		return nativeBooleanObject(left.Value || right.Value)
-
-	case lexer.TokenAssign:
-		if leftMutable {
-			left.Value = right.Value
-			return left
-		} else {
-			// error saying this can't be mutable
-			return newError(ERROR, "%v can't be mutate, since it was defined as const", left)
-		}
 
 	default:
 		// error
@@ -1098,34 +1187,6 @@ func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Ob
 	case lexer.TokenNotEquals:
 		return &object.Boolean{
 			Value: left.Inspect() != right.Inspect(),
-		}
-
-	// value assign
-	case lexer.TokenAssign:
-		// cast of the left side
-		l, leftMutable := object.Cast(left)
-
-		if !leftMutable {
-			return newError(ERROR, "%v can't be mutate, since it was defined as const", left)
-		}
-
-		r, _ := object.Cast(right)
-
-		switch left := l.(type) {
-		case *object.String:
-			// associate the right if it gets evaluated to a string
-			if right, ok := r.(*object.String); ok {
-				left.Value = right.Value
-				return left
-			}
-
-			return newError(ERROR, "Can't assign a value of different type %s, %s",
-				left.Type(), right.Type())
-
-		default:
-			// this checks for other values check when the get a string as right side
-			return newError(ERROR, "Can't assign a value of different type %s, %s",
-				left.Type(), right.Type())
 		}
 	}
 
@@ -1187,49 +1248,47 @@ func (i *Interpreter) areMapsCompatible(left, right *object.Map) bool {
 // this function is responsible for handling assign op for both struct, hashmaps, structs
 // Note: the assignment does a shallow copy, so modifying the value here will modify will affect the right struct instance
 // for deep copy, there is copy function in the builtin module of stdlib that allows u todo that
-func (i *Interpreter) evalAssignmentExpression(op string, leftNode ast.Expression, left, right object.Object) object.Object {
-	if op != lexer.TokenAssign {
-		return newError(ERROR, "operation with %s operator isn't allowed on type %s", op, left.Type())
-	}
+func (i *Interpreter) evalAssignmentExpression(leftNode ast.Expression, left, right object.Object) object.Object {
 
-	if identifier, ok := leftNode.(*ast.Identifier); !ok {
+	identifier, ok := leftNode.(*ast.Identifier)
+	if !ok {
 		return newError(ERROR, "left side of assignment operation needs to be an identifier ")
-	} else {
-		// no need to check for mutability since array/hashmaps aren't allowed to be constants
-		lft, leftMutable := object.Cast(left)
-		lrt, _ := object.Cast(right)
-
-		typeCheck := false
-		errMsg := ""
-		switch lft := lft.(type) {
-		case *object.Struct:
-			rt := lrt.(*object.Struct)
-			typeCheck = i.areStructsCompatible(lft, rt)
-			errMsg = "type mismatch on struct elements"
-
-		case *object.Array:
-			rt := lrt.(*object.Array)
-			typeCheck = i.areArraysCompatible(lft, rt)
-			errMsg = "type mismatch on array elements"
-
-		case *object.Map:
-			rt := lrt.(*object.Map)
-			typeCheck = i.areMapsCompatible(lft, rt)
-			errMsg = "type mismatch on map elements"
-		}
-
-		if !typeCheck {
-			return newError(ERROR, errMsg)
-		}
-
-		// build a method into the env, and update it to left side
-		i.env.OverrideDefine(identifier.Value, object.ItemObject{
-			Object:    lrt,
-			IsMutable: leftMutable,
-		})
-		return lrt
 	}
+	// no need to check for mutability since array/hashmaps aren't allowed to be constants
+	lft, leftMutable := object.Cast(left)
+	lrt, _ := object.Cast(right)
+
+	typeCheck := false
+	errMsg := ""
+	switch lft := lft.(type) {
+	case *object.Struct:
+		rt := lrt.(*object.Struct)
+		typeCheck = i.areStructsCompatible(lft, rt)
+		errMsg = "type mismatch on struct elements"
+
+	case *object.Array:
+		rt := lrt.(*object.Array)
+		typeCheck = i.areArraysCompatible(lft, rt)
+		errMsg = "type mismatch on array elements"
+
+	case *object.Map:
+		rt := lrt.(*object.Map)
+		typeCheck = i.areMapsCompatible(lft, rt)
+		errMsg = "type mismatch on map elements"
+	}
+
+	if !typeCheck {
+		return newError(ERROR, errMsg)
+	}
+
+	// build a method into the env, and update it to left side
+	i.env.OverrideDefine(identifier.Value, object.ItemObject{
+		Object:    lrt,
+		IsMutable: leftMutable,
+	})
+	return lrt
 }
+
 func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, property ast.Expression) object.Object {
 	// switch on the object after cast
 

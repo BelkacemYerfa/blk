@@ -56,7 +56,7 @@ func (p *Program) String() string {
 
 type VarDeclaration struct {
 	Token lexer.Token // the token.LET token
-	Name  *Identifier
+	Name  []*Identifier
 	Value Expression
 }
 
@@ -66,7 +66,12 @@ func (nt *VarDeclaration) GetToken() lexer.Token { return nt.Token }
 func (ls *VarDeclaration) String() string {
 	var out bytes.Buffer
 	out.WriteString(ls.TokenLiteral() + " ")
-	out.WriteString(ls.Name.String())
+	for idx, name := range ls.Name {
+		out.WriteString(name.String())
+		if idx+1 <= len(ls.Name)-1 {
+			out.WriteString(", ")
+		}
+	}
 	out.WriteString(" = ")
 	if ls.Value != nil {
 		out.WriteString(ls.Value.String())
@@ -195,8 +200,8 @@ func (rs *MatchExpression) String() string {
 }
 
 type ReturnStatement struct {
-	Token       lexer.Token // the 'return' token
-	ReturnValue Expression
+	Token        lexer.Token // the 'return' token
+	ReturnValues []Expression
 }
 
 func (rs *ReturnStatement) statementNode()        {}
@@ -205,8 +210,11 @@ func (nt *ReturnStatement) GetToken() lexer.Token { return nt.Token }
 func (rs *ReturnStatement) String() string {
 	var out bytes.Buffer
 	out.WriteString(rs.TokenLiteral() + " ")
-	if rs.ReturnValue != nil {
-		out.WriteString(rs.ReturnValue.String())
+	for idx, retV := range rs.ReturnValues {
+		out.WriteString(retV.String())
+		if idx+1 <= len(rs.ReturnValues)-1 {
+			out.WriteString(", ")
+		}
 	}
 	return out.String()
 }
@@ -463,6 +471,27 @@ func (b *BinaryExpression) String() string {
 	out.WriteString("" + b.Operator + "")
 	out.WriteString(b.Right.String())
 	out.WriteString("")
+	return out.String()
+}
+
+type AssignStatement struct {
+	Token lexer.Token // the token.IDENT token
+	Left  []Expression
+	Right []Expression
+}
+
+func (b *AssignStatement) statementNode()         {}
+func (b *AssignStatement) TokenLiteral() string   { return b.Token.Text }
+func (nt *AssignStatement) GetToken() lexer.Token { return nt.Token }
+func (b *AssignStatement) String() string {
+	var out bytes.Buffer
+	for _, elem := range b.Left {
+		out.WriteString(elem.String())
+	}
+	out.WriteString("=")
+	for _, elem := range b.Right {
+		out.WriteString(elem.String())
+	}
 	return out.String()
 }
 

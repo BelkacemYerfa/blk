@@ -88,11 +88,22 @@ func (s *String) HashKey() HashKey {
 }
 
 type ReturnValue struct {
-	Value Object
+	Values []Object
 }
 
 func (rv *ReturnValue) Type() ObjectType { return RETURN_VALUE_OBJ }
-func (rv *ReturnValue) Inspect() string  { return rv.Value.Inspect() }
+func (rv *ReturnValue) Inspect() string {
+	var out bytes.Buffer
+	out.WriteString("[")
+	for idx, elem := range rv.Values {
+		out.WriteString(elem.Inspect())
+		if idx+1 <= len(rv.Values)-1 {
+			out.WriteString(", ")
+		}
+	}
+	out.WriteString("]")
+	return out.String()
+}
 
 type Function struct {
 	Parameters []*ast.Identifier
@@ -342,5 +353,21 @@ func DeepCopy(obj Object) Object {
 
 	default:
 		return val // For immutable or not-clonable types (like Error, etc.)
+	}
+}
+
+func UseCopyValueOrRef(obj Object) Object {
+	obj, _ = Cast(obj)
+	switch v := obj.(type) {
+	// means that this types are give u a deep copy of their value
+	case *Float, *Integer, *String, *Boolean:
+		return DeepCopy(v)
+
+	// means that this types are being shallow copied
+	case *Array, *Map, *Struct:
+		return v
+
+	default:
+		return v
 	}
 }

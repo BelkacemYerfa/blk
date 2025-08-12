@@ -28,7 +28,6 @@ const (
 
 var precedences = map[lexer.TokenKind]int{
 	lexer.TokenCurlyBraceOpen: ASSIGN,
-	lexer.TokenAssign:         ASSIGN,
 	lexer.TokenBind:           ASSIGN,
 	lexer.TokenWalrus:         ASSIGN,
 	lexer.TokenOr:             OR,
@@ -108,7 +107,6 @@ func NewParser(tokens []lexer.Token, filepath string) *Parser {
 	p.registerInfix(lexer.TokenSlash, p.parseInfixExpression)
 	p.registerInfix(lexer.TokenMultiply, p.parseInfixExpression)
 	p.registerInfix(lexer.TokenModule, p.parseInfixExpression)
-	p.registerInfix(lexer.TokenAssign, p.parseInfixExpression)
 	p.registerInfix(lexer.TokenAnd, p.parseInfixExpression)
 	p.registerInfix(lexer.TokenOr, p.parseInfixExpression)
 	p.registerInfix(lexer.TokenEquals, p.parseInfixExpression)
@@ -241,17 +239,32 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		return p.parseForStatement()
 	case lexer.TokenSkip:
 		return p.parseSkipStatement()
-	case lexer.TokenIdentifier:
-		firstLookKind := p.lookToken(1).Kind
+	case lexer.TokenIdentifier, lexer.TokenSelf:
+		firstLook := p.lookToken(1)
 		// check after it if there is a colon and a {
-		if firstLookKind == lexer.TokenColon && p.lookToken(2).Kind == lexer.TokenCurlyBraceOpen {
+		if firstLook.Kind == lexer.TokenColon && p.lookToken(2).Kind == lexer.TokenCurlyBraceOpen {
 			return p.parseScope()
 		}
 
-		// for the bind operations, either :: or := or :
-		if firstLookKind == lexer.TokenBind || firstLookKind == lexer.TokenWalrus || firstLookKind == lexer.TokenColon {
+		// for the bind operations, either :: or := or : (: is for struct )
+		if firstLook.Kind == lexer.TokenBind || firstLook.Kind == lexer.TokenWalrus || firstLook.Kind == lexer.TokenColon {
 			return p.parseBindExpression()
 		}
+
+		// go through the current tokens in the same line until u find :: or :=, if found go to parseBindExpression, otherwise parseExpression statement
+		idx := 1
+		for (p.lookToken(idx).Kind != lexer.TokenBind && p.lookToken(idx).Kind != lexer.TokenWalrus && p.lookToken(idx).Kind != lexer.TokenAssign) && p.lookToken(idx).Row == firstLook.Row {
+			idx++
+		}
+
+		if p.lookToken(idx).Kind == lexer.TokenBind || p.lookToken(idx).Kind == lexer.TokenWalrus {
+			return p.parseBindExpression()
+		}
+
+		if p.lookToken(idx).Kind == lexer.TokenAssign {
+			return p.parseAssignStatement()
+		}
+
 		return p.parseExpressionStatement()
 	default:
 		return p.parseExpressionStatement()
@@ -261,12 +274,8 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 func (p *Parser) parseVarDeclaration() (*ast.VarDeclaration, error) {
 	stmt := &ast.VarDeclaration{Token: p.currentToken()}
 	p.nextToken()
-	identifier := p.parseIdentifier()
-	if identifier == nil {
-		return nil, p.Errors[len(p.Errors)-1]
-	}
 
-	stmt.Name = identifier.(*ast.Identifier)
+	stmt.Name = p.parseIdentifiers()
 
 	tok := p.nextToken()
 
@@ -282,7 +291,18 @@ func (p *Parser) parseVarDeclaration() (*ast.VarDeclaration, error) {
 func (p *Parser) parseReturnStatement() (*ast.ReturnStatement, error) {
 	stmt := &ast.ReturnStatement{Token: p.currentToken()}
 	p.nextToken()
-	stmt.ReturnValue = p.parseExpression(LOWEST)
+
+	returnValues := make([]ast.Expression, 0)
+
+	returnValues = append(returnValues, p.parseExpression(LOWEST))
+
+	for p.currentToken().Kind == lexer.TokenComma {
+		// consume the , token
+		p.nextToken()
+		returnValues = append(returnValues, p.parseExpression(LOWEST))
+	}
+
+	stmt.ReturnValues = returnValues
 	return stmt, nil
 }
 
@@ -541,6 +561,37 @@ func (p *Parser) parseSkipStatement() (*ast.SkipStatement, error) {
 	return stmt, nil
 }
 
+func (p *Parser) parseAssignStatement() (*ast.AssignStatement, error) {
+	stmt := &ast.AssignStatement{Token: p.currentToken()}
+
+	stmt.Left = p.parsePrefixExpressionWrapper()
+
+	// check for the token assign
+	tok := p.nextToken()
+
+	if tok.Kind != lexer.TokenAssign {
+		return nil, p.error(tok, "ERROR: expected assign token (=), got shit")
+	}
+
+	stmt.Right = p.parsePrefixExpressionWrapper()
+
+	return stmt, nil
+}
+
+func (p *Parser) parsePrefixExpressionWrapper() []ast.Expression {
+	exps := make([]ast.Expression, 0)
+
+	exps = append(exps, p.parseExpression(LOWEST))
+
+	for p.currentToken().Kind == lexer.TokenComma {
+		// consume the , token
+		p.nextToken()
+		exps = append(exps, p.parseExpression(LOWEST))
+	}
+
+	return exps
+}
+
 func (p *Parser) parseIdentifier() ast.Expression {
 	tok := p.nextToken()
 
@@ -553,6 +604,32 @@ func (p *Parser) parseIdentifier() ast.Expression {
 		Token: tok,
 		Value: tok.Text,
 	}
+}
+
+// this function parses multi identifiers
+// attempt to gradually shift into supporting multi values
+func (p *Parser) parseIdentifiers() []*ast.Identifier {
+	identifiers := make([]*ast.Identifier, 0)
+
+	ident := p.parseIdentifier()
+	if ident == nil {
+		return identifiers
+	}
+
+	identifiers = append(identifiers, ident.(*ast.Identifier))
+
+	for p.currentToken().Kind == lexer.TokenComma {
+		p.nextToken()
+
+		ident := p.parseIdentifier()
+		if ident == nil {
+			return identifiers
+		}
+
+		identifiers = append(identifiers, ident.(*ast.Identifier))
+	}
+
+	return identifiers
 }
 
 func (p *Parser) parseIntLiteral() ast.Expression {
@@ -638,7 +715,7 @@ func (p *Parser) parseArrayLiteral() ast.Expression {
 		p.Errors = append(p.Errors, p.error(p.currentToken(), "ERROR: expected close bracket ( ] ), got shit"))
 		return nil
 	}
-	fmt.Println(expr)
+
 	return expr
 }
 
@@ -1169,13 +1246,7 @@ func (p *Parser) parseBindExpression() (ast.Statement, error) {
 		Row: p.currentToken().Row,
 	}}
 
-	identifier, ok := p.parseIdentifier().(*ast.Identifier)
-
-	if !ok {
-		return nil, p.error(identifier.GetToken(), "ERROR: expected an identifier, got shit")
-	}
-
-	stmt.Name = identifier
+	stmt.Name = p.parseIdentifiers()
 
 	tok := p.nextToken()
 

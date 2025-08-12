@@ -35,7 +35,6 @@ var (
 		TokenModule:         "%",
 		TokenPlus:           "+",
 		TokenMinus:          "-",
-		TokenAssign:         "=",
 		TokenAssignMinus:    "-=",
 		TokenAssignMinusOne: "--",
 		TokenAssignPlus:     "+=",
