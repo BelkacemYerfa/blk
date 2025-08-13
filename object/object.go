@@ -308,6 +308,84 @@ func ObjectEquals(a, b Object) bool {
 	}
 }
 
+// build an equals method to all of the object type representation
+func ObjectTypesCheck(a, b Object) bool {
+	a, _ = Cast(a)
+	b, _ = Cast(b)
+	switch aVal := a.(type) {
+	case *Integer:
+		_, ok := b.(*Integer)
+		return ok
+	case *Boolean:
+		_, ok := b.(*Boolean)
+		return ok
+	case *String:
+		_, ok := b.(*String)
+		return ok
+	case *Float:
+		_, ok := b.(*Float)
+		return ok
+	case *Array:
+		bVal, ok := b.(*Array)
+		if !ok {
+			return false
+		}
+		if len(bVal.Elements) != len(aVal.Elements) {
+			return false
+		}
+		for idx, elem := range bVal.Elements {
+			value := aVal.Elements[idx]
+			if !ObjectTypesCheck(elem, value) {
+				return false
+			}
+		}
+		return true
+	case *Map:
+		bVal, ok := b.(*Map)
+		if !ok {
+			return false
+		}
+		if len(bVal.Pairs) != len(aVal.Pairs) {
+			return false
+		}
+		for key, elem := range bVal.Pairs {
+			value, ok := aVal.Pairs[key]
+			if !ok {
+				return false
+			}
+			if !ObjectTypesCheck(elem.Key, value.Key) {
+				return false
+			}
+			if !ObjectTypesCheck(elem.Value, value.Value) {
+				return false
+			}
+		}
+		return true
+	case *Struct:
+		bVal, ok := b.(*Struct)
+		if !ok {
+			return false
+		}
+		if len(bVal.Fields) != len(aVal.Fields) {
+			return false
+		}
+		for k, v := range bVal.Fields {
+			val, ok := aVal.Fields[k]
+			if !ok {
+				return false
+			}
+			if !ObjectTypesCheck(v, val) {
+				return false
+			}
+		}
+
+		return true
+	default:
+		// fallback: not equal
+		return false
+	}
+}
+
 func DeepCopy(obj Object) Object {
 	switch val := obj.(type) {
 	case *Integer:
@@ -321,15 +399,18 @@ func DeepCopy(obj Object) Object {
 	case *Array:
 		elements := make([]Object, 0, len(val.Elements))
 		for _, elem := range val.Elements {
-			elements = append(elements, DeepCopy(elem))
+			cast, _ := Cast(elem)
+			elements = append(elements, cast)
 		}
 		return &Array{Elements: elements}
 	case *Map:
 		pairs := make(PairsType, len(val.Pairs))
 		for i, elem := range val.Pairs {
+			key, _ := Cast(elem.Key)
+			value, _ := Cast(elem.Value)
 			pairs[i] = HashPair{
-				Key:   DeepCopy(elem.Key),
-				Value: DeepCopy(elem.Value),
+				Key:   key,
+				Value: value,
 			}
 		}
 		return &Map{Pairs: pairs}
@@ -337,18 +418,14 @@ func DeepCopy(obj Object) Object {
 		// Deep copy fields
 		fields := make(map[string]Object, len(val.Fields))
 		for k, v := range val.Fields {
-			fields[k] = DeepCopy(v)
+			cast, _ := Cast(v)
+			fields[k] = DeepCopy(cast)
 		}
 
-		// mostly methods are shared but we could use for closures and stuff
-		methods := make(map[string]Object, len(val.Methods))
-		for k, v := range val.Methods {
-			methods[k] = DeepCopy(v)
-		}
-
+		// no need for deep copy on methods
 		return &Struct{
 			Fields:  fields,
-			Methods: methods,
+			Methods: val.Methods,
 		}
 
 	default:

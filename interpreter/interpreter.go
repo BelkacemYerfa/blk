@@ -499,7 +499,7 @@ func (i *Interpreter) evalArrayExpression(exps []ast.Expression) []object.Object
 		if idx == 0 {
 			firstElem = elemEval
 		}
-		if firstElem.Type() != elemEval.Type() {
+		if !object.ObjectTypesCheck(firstElem, elemEval) {
 			// throw an error here
 			return []object.Object{
 				newError(ERROR, "multitude of types, (%v,%v), array elements should be of one type", firstElem.Type(), elemEval.Type()),
@@ -556,8 +556,8 @@ func (i *Interpreter) evalMapExpression(prs map[ast.Expression]ast.Expression) o
 		if idx == 0 {
 			valEl = value
 		}
-		if valEl.Type() != value.Type() {
-			return newError(ERROR, "multitude of types, (%v,%v), value elements of a map should be of one type", valEl.Type(), value.Type())
+		if !object.ObjectTypesCheck(valEl, value) {
+			return newError(ERROR, "multitude of types detected, value elements of a map should be of one type")
 		}
 		pairs[hashed] = object.HashPair{Key: key, Value: value}
 		idx++
@@ -1194,57 +1194,6 @@ func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Ob
 		left.Type(), op, right.Type())
 }
 
-func (i *Interpreter) areStructsCompatible(left, right *object.Struct) bool {
-	if len(left.Fields) != len(right.Fields) {
-		return false
-	}
-
-	for fieldName, leftField := range left.Fields {
-		rightField, exists := right.Fields[fieldName]
-		if !exists {
-			return false
-		}
-
-		if leftField.Type() != rightField.Type() {
-			return false
-		}
-	}
-
-	return true
-}
-
-func (i *Interpreter) areArraysCompatible(left, right *object.Array) bool {
-	if len(left.Elements) == 0 || len(right.Elements) == 0 {
-		return true
-	}
-
-	return left.Elements[0].Type() == right.Elements[0].Type()
-}
-
-func (i *Interpreter) areMapsCompatible(left, right *object.Map) bool {
-	if len(left.Pairs) == 0 || len(right.Pairs) == 0 {
-		return true
-	}
-
-	var leftKeyType, leftValueType, rightKeyType, rightValueType object.ObjectType
-
-	for _, leftPair := range left.Pairs {
-		leftKeyType = leftPair.Key.Type()
-		leftValueType = leftPair.Value.Type()
-		// one operation only needed
-		break
-	}
-
-	for _, rightPair := range right.Pairs {
-		rightKeyType = rightPair.Key.Type()
-		rightValueType = rightPair.Value.Type()
-		// one operation only needed
-		break
-	}
-
-	return leftKeyType == rightKeyType && leftValueType == rightValueType
-}
-
 // this function is responsible for handling assign op for both struct, hashmaps, structs
 // Note: the assignment does a shallow copy, so modifying the value here will modify will affect the right struct instance
 // for deep copy, there is copy function in the builtin module of stdlib that allows u todo that
@@ -1260,22 +1209,17 @@ func (i *Interpreter) evalAssignmentExpression(leftNode ast.Expression, left, ri
 
 	typeCheck := false
 	errMsg := ""
-	switch lft := lft.(type) {
+	switch lft.(type) {
 	case *object.Struct:
-		rt := lrt.(*object.Struct)
-		typeCheck = i.areStructsCompatible(lft, rt)
 		errMsg = "type mismatch on struct elements"
 
 	case *object.Array:
-		rt := lrt.(*object.Array)
-		typeCheck = i.areArraysCompatible(lft, rt)
 		errMsg = "type mismatch on array elements"
 
 	case *object.Map:
-		rt := lrt.(*object.Map)
-		typeCheck = i.areMapsCompatible(lft, rt)
 		errMsg = "type mismatch on map elements"
 	}
+	typeCheck = object.ObjectTypesCheck(lft, lrt)
 
 	if !typeCheck {
 		return newError(ERROR, errMsg)
