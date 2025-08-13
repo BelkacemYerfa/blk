@@ -432,7 +432,6 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		// evaluate the owner
 		obj := i.Eval(nd.Object)
 		if isError(obj) {
-			fmt.Println(obj)
 			return obj
 		}
 
@@ -1015,7 +1014,9 @@ func (i *Interpreter) evalBinaryExpression(op string, leftNode ast.Expression, l
 	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
 		return i.evalIntegerInfixExpression(op, left, right)
 
-	case left.Type() == object.FLOAT_OBJ && right.Type() == object.FLOAT_OBJ:
+	// this allows arithmetic operation / comparison on floats & integers
+	case (left.Type() == object.INTEGER_OBJ || left.Type() == object.FLOAT_OBJ) &&
+		(right.Type() == object.INTEGER_OBJ || right.Type() == object.FLOAT_OBJ):
 		return i.evalFloatInfixExpression(op, left, right)
 
 	case left.Type() == object.BOOLEAN_OBJ && right.Type() == object.BOOLEAN_OBJ:
@@ -1104,40 +1105,55 @@ func (i *Interpreter) evalFloatInfixExpression(op string, lt, rt object.Object) 
 	r, _ := object.Cast(rt)
 
 	// cast them to floats
-	left := l.(*object.Float)
-	right := r.(*object.Float)
+	lfValue := 0.0
+	switch left := l.(type) {
+	case *object.Float:
+		lfValue = left.Value
+	case *object.Integer:
+		lfValue = float64(left.Value)
+	}
+
+	rgValue := 0.0
+	switch right := r.(type) {
+	case *object.Float:
+		rgValue = right.Value
+	case *object.Integer:
+		rgValue = float64(right.Value)
+	}
 
 	switch op {
 	case lexer.TokenMultiply:
 		return &object.Float{
-			Value: left.Value * right.Value,
+			Value: lfValue * rgValue,
 		}
 	case lexer.TokenSlash:
 		return &object.Float{
-			Value: left.Value / right.Value,
+			Value: lfValue / rgValue,
 		}
 	case lexer.TokenPlus:
 		return &object.Float{
-			Value: left.Value + right.Value,
+			Value: lfValue + rgValue,
 		}
 	case lexer.TokenMinus:
 		return &object.Float{
-			Value: left.Value - right.Value,
+			Value: lfValue - rgValue,
 		}
 
 	case lexer.TokenGreater:
-		return nativeBooleanObject(left.Value > right.Value)
+		return nativeBooleanObject(lfValue > rgValue)
 	case lexer.TokenGreaterOrEqual:
-		return nativeBooleanObject(left.Value >= right.Value)
+		return nativeBooleanObject(lfValue >= rgValue)
 	case lexer.TokenLess:
-		return nativeBooleanObject(left.Value < right.Value)
+		return nativeBooleanObject(lfValue < rgValue)
 	case lexer.TokenLessOrEqual:
-		return nativeBooleanObject(left.Value <= right.Value)
+		return nativeBooleanObject(lfValue <= rgValue)
 	case lexer.TokenNotEquals:
-		return nativeBooleanObject(left.Value != right.Value)
+		return nativeBooleanObject(lfValue != rgValue)
 	case lexer.TokenEquals:
-		return nativeBooleanObject(left.Value == right.Value)
+		return nativeBooleanObject(lfValue == rgValue)
 	case lexer.TokenAssign:
+		left := l.(*object.Float)
+		right := r.(*object.Float)
 		if leftMutable {
 			left.Value = right.Value
 			return left
@@ -1148,7 +1164,7 @@ func (i *Interpreter) evalFloatInfixExpression(op string, lt, rt object.Object) 
 
 	default:
 		return newError(ERROR, "unknown operator: %s %s %s",
-			left.Type(), op, right.Type())
+			lt.Type(), op, rt.Type())
 	}
 
 }

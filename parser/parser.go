@@ -1248,7 +1248,7 @@ func (p *Parser) parseDoubleOperatorExpression(left ast.Expression) ast.Expressi
 
 	// consume the operator token (++, --)
 	p.nextToken()
-	fmt.Println(expr)
+
 	return expr
 }
 
