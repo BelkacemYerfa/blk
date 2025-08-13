@@ -145,7 +145,7 @@ func (l *Lexer) NextToken() Token {
 				Kind: TokenAssignMinus,
 				Text: "-=",
 			}
-		case "+":
+		case "-":
 			l.readChar()
 			token.LiteralToken = LiteralToken{
 				Kind: TokenAssignMinusOne,

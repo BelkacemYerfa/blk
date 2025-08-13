@@ -11,19 +11,20 @@ import (
 type ObjectType string
 
 const (
-	INTEGER_OBJ      = "INTEGER"
-	BOOLEAN_OBJ      = "BOOLEAN"
-	FLOAT_OBJ        = "FLOAT"
-	STRING_OBJ       = "STRING"
-	RETURN_VALUE_OBJ = "RETURN_VALUE"
-	FUNCTION_OBJ     = "FUNCTION"
-	IMPORT_OBJ       = "IMPORT"
-	ARRAY_OBJ        = "ARRAY"
-	MAP_OBJ          = "MAP"
-	SKIP_OBJ         = "SKIP"
-	STRUCT_OBJ       = "STRUCT"
-	BUILTIN_MODULE   = "BUILTIN_MODULE"
-	BUILTIN_OBJ      = "BUILTIN"
+	INTEGER_OBJ         = "INTEGER"
+	BOOLEAN_OBJ         = "BOOLEAN"
+	FLOAT_OBJ           = "FLOAT"
+	STRING_OBJ          = "STRING"
+	RETURN_VALUE_OBJ    = "RETURN_VALUE"
+	FUNCTION_OBJ        = "FUNCTION"
+	IMPORT_OBJ          = "IMPORT"
+	ARRAY_OBJ           = "ARRAY"
+	MAP_OBJ             = "MAP"
+	SKIP_OBJ            = "SKIP"
+	STRUCT_OBJ          = "STRUCT"
+	STRUCT_INSTANCE_OBJ = "STRUCT_INSTANCE"
+	BUILTIN_MODULE      = "BUILTIN_MODULE"
+	BUILTIN_OBJ         = "BUILTIN"
 
 	// errors
 	ERROR_OBJ = "ERROR"
@@ -238,6 +239,27 @@ func (b *Struct) Inspect() string {
 	return out.String()
 }
 
+type StructInstance struct {
+	// Fields are both variable decl
+	Fields map[string]Object
+	// Methods are the builtin function that u can use from the struct
+	Methods map[string]Object
+}
+
+func (b *StructInstance) Type() ObjectType { return STRUCT_INSTANCE_OBJ }
+func (b *StructInstance) Inspect() string {
+	var out bytes.Buffer
+	out.WriteString("struct {")
+	for name, field := range b.Fields {
+		out.WriteString(name + " := " + field.Inspect())
+	}
+	for name, function := range b.Methods {
+		out.WriteString(name + " : " + function.Inspect())
+	}
+	out.WriteString("}")
+	return out.String()
+}
+
 func Cast(obj Object) (Object, bool) {
 	switch obj := obj.(type) {
 	case ItemObject:
@@ -361,16 +383,35 @@ func ObjectTypesCheck(a, b Object) bool {
 			}
 		}
 		return true
-	case *Struct:
-		bVal, ok := b.(*Struct)
-		if !ok {
+	case *Struct, *StructInstance:
+		if a.Type() != b.Type() {
 			return false
 		}
-		if len(bVal.Fields) != len(aVal.Fields) {
+
+		var bFields map[string]Object
+
+		switch bTyped := b.(type) {
+		case *Struct:
+			bFields = bTyped.Fields
+		case *StructInstance:
+			bFields = bTyped.Fields
+		default:
 			return false
 		}
-		for k, v := range bVal.Fields {
-			val, ok := aVal.Fields[k]
+
+		var aFields map[string]Object
+		switch aTyped := aVal.(type) {
+		case *Struct:
+			aFields = aTyped.Fields
+		case *StructInstance:
+			aFields = aTyped.Fields
+		}
+
+		if len(bFields) != len(aFields) {
+			return false
+		}
+		for k, v := range bFields {
+			val, ok := aFields[k]
 			if !ok {
 				return false
 			}
@@ -414,20 +455,41 @@ func DeepCopy(obj Object) Object {
 			}
 		}
 		return &Map{Pairs: pairs}
-	case *Struct:
+	case *Struct, *StructInstance:
+		var fields map[string]Object
+		var methods map[string]Object
+
+		switch typed := val.(type) {
+		case *Struct:
+			fields = typed.Fields
+			methods = typed.Methods
+		case *StructInstance:
+			fields = typed.Fields
+			methods = typed.Methods
+		}
+
 		// Deep copy fields
-		fields := make(map[string]Object, len(val.Fields))
-		for k, v := range val.Fields {
+		copiedFields := make(map[string]Object, len(fields))
+		for k, v := range fields {
 			cast, _ := Cast(v)
-			fields[k] = DeepCopy(cast)
+			copiedFields[k] = DeepCopy(cast)
 		}
 
-		// no need for deep copy on methods
-		return &Struct{
-			Fields:  fields,
-			Methods: val.Methods,
+		// Return the same type as input
+		switch val.(type) {
+		case *Struct:
+			return &Struct{
+				Fields:  copiedFields,
+				Methods: methods,
+			}
+		case *StructInstance:
+			return &StructInstance{
+				Fields:  copiedFields,
+				Methods: methods,
+			}
 		}
 
+		return nil
 	default:
 		return val // For immutable or not-clonable types (like Error, etc.)
 	}
@@ -441,7 +503,7 @@ func UseCopyValueOrRef(obj Object) Object {
 		return DeepCopy(v)
 
 	// means that this types are being shallow copied
-	case *Array, *Map, *Struct:
+	case *Array, *Map, *Struct, *StructInstance:
 		return v
 
 	default:

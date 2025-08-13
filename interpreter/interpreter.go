@@ -148,8 +148,17 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		// checks the fields also compare
 		// for now the fields are mutable, no support for const :: in fields
 		castDef, _ := object.Cast(val)
-		structDef := castDef.(*object.Struct)
-		copyOfStructDef := object.DeepCopy(structDef).(*object.Struct)
+		structDef, ok := castDef.(*object.Struct)
+
+		if !ok {
+			return newError(ERROR, "to create a struct instance, u need to use a struct")
+		}
+
+		structDefCopy := object.DeepCopy(structDef).(*object.Struct)
+		copyOfStructDef := &object.StructInstance{
+			Fields:  structDefCopy.Fields,
+			Methods: structDef.Methods,
+		}
 
 		// only fields which are allowed to get mutated
 		// methods are not allowed
@@ -986,7 +995,7 @@ func (i *Interpreter) evalAssignment(left []LeftRes, right []object.Object) obje
 				leftTyped.Value = rightTyped.Value
 				result = leftTyped
 			}
-		case *object.Array, *object.Map, *object.Struct:
+		case *object.Array, *object.Map, *object.StructInstance:
 			// For complex types, delegate to existing method
 			result = i.evalAssignmentExpression(node, leftObj, rightObj)
 			if isError(result) {
@@ -1207,11 +1216,10 @@ func (i *Interpreter) evalAssignmentExpression(leftNode ast.Expression, left, ri
 	lft, leftMutable := object.Cast(left)
 	lrt, _ := object.Cast(right)
 
-	typeCheck := false
 	errMsg := ""
 	switch lft.(type) {
-	case *object.Struct:
-		errMsg = "type mismatch on struct elements"
+	case *object.StructInstance:
+		errMsg = "type mismatch on struct instance elements"
 
 	case *object.Array:
 		errMsg = "type mismatch on array elements"
@@ -1219,7 +1227,8 @@ func (i *Interpreter) evalAssignmentExpression(leftNode ast.Expression, left, ri
 	case *object.Map:
 		errMsg = "type mismatch on map elements"
 	}
-	typeCheck = object.ObjectTypesCheck(lft, lrt)
+
+	typeCheck := object.ObjectTypesCheck(lft, lrt)
 
 	if !typeCheck {
 		return newError(ERROR, errMsg)
@@ -1270,7 +1279,7 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 			return newError(ERROR, "property needs to be of type call expression or identifier, for now")
 		}
 
-	case *object.Struct:
+	case *object.StructInstance:
 		switch ownerProperty := property.(type) {
 		case *ast.CallExpression:
 			// search for the corresponding property call and invoke

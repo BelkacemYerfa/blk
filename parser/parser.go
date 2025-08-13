@@ -253,7 +253,21 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 
 		// go through the current tokens in the same line until u find :: or :=, if found go to parseBindExpression, otherwise parseExpression statement
 		idx := 1
-		for (p.lookToken(idx).Kind != lexer.TokenBind && p.lookToken(idx).Kind != lexer.TokenWalrus && p.lookToken(idx).Kind != lexer.TokenAssign) && p.lookToken(idx).Row == firstLook.Row {
+		for idx < len(p.Tokens) {
+			token := p.lookToken(idx)
+
+			// Break on assignment operators
+			if token.Kind == lexer.TokenBind ||
+				token.Kind == lexer.TokenWalrus ||
+				token.Kind == lexer.TokenAssign {
+				break
+			}
+
+			// Break on row change
+			if token.Row != firstLook.Row || token.Kind == lexer.TokenEOF {
+				break
+			}
+
 			idx++
 		}
 
@@ -327,9 +341,11 @@ func (p *Parser) parseExpressionStatement() (*ast.ExpressionStatement, error) {
 	stmt := &ast.ExpressionStatement{Token: p.currentToken()}
 
 	expr := p.parseExpression(LOWEST)
+
 	if expr == nil {
 		return nil, fmt.Errorf("ERROR: on the ast.Expression stmt")
 	}
+
 	stmt.Expression = expr
 
 	return stmt, nil
@@ -584,7 +600,7 @@ func (p *Parser) parsePrefixExpressionWrapper() []ast.Expression {
 	exps = append(exps, p.parseExpression(LOWEST))
 
 	for p.currentToken().Kind == lexer.TokenComma {
-		// consume the , token
+		// consume the comma (,) token
 		p.nextToken()
 		exps = append(exps, p.parseExpression(LOWEST))
 	}
@@ -1232,7 +1248,7 @@ func (p *Parser) parseDoubleOperatorExpression(left ast.Expression) ast.Expressi
 
 	// consume the operator token (++, --)
 	p.nextToken()
-
+	fmt.Println(expr)
 	return expr
 }
 
@@ -1324,8 +1340,7 @@ func (p *Parser) parseExpression(precedence int) ast.Expression {
 	leftExp := prefix()
 
 	cur := p.currentToken()
-
-	for p.currentToken().Row <= cur.Row && precedence < p.peekPrecedence() {
+	for p.currentToken().Row <= cur.Row && p.currentToken().Kind != lexer.TokenEOF && precedence < p.peekPrecedence() && p.lookToken(-1).Row == cur.Row {
 		infix := p.infixParseFns[p.currentToken().Kind]
 		if infix == nil {
 			return leftExp
