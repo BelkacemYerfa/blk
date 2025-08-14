@@ -221,6 +221,7 @@ func (b *BuiltInModule) Type() ObjectType { return BUILTIN_MODULE }
 func (b *BuiltInModule) Inspect() string { return b.Name }
 
 // user module, another file
+// TODO: structure to use for user modules
 type UserModule struct {
 	Name  string
 	Attrs map[string]Object
@@ -228,7 +229,6 @@ type UserModule struct {
 
 func (b *UserModule) Type() ObjectType { return USER_MODULE }
 
-// TODO: update this method later
 func (b *UserModule) Inspect() string { return b.Name }
 
 type Skip struct{}

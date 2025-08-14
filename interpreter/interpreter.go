@@ -391,12 +391,18 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		if isError(left) {
 			return left
 		}
+
+		// For && and || operators, don't evaluate right side yet - let evalBinaryExpression handle it
+		if nd.Operator == lexer.TokenAnd || nd.Operator == lexer.TokenOr {
+			return i.evalBinaryExpression(nd.Operator, nd.Left, nd.Right, left, nil)
+		}
+
 		right := i.Eval(nd.Right)
 		if isError(right) {
 			return right
 		}
 
-		return i.evalBinaryExpression(nd.Operator, nd.Left, left, right)
+		return i.evalBinaryExpression(nd.Operator, nd.Left, nd.Right, left, right)
 
 	case *ast.AssignStatement:
 		leftResults := make([]LeftRes, 0)
@@ -852,11 +858,11 @@ func (i *Interpreter) evalWhileStatement(nd *ast.WhileStatement) object.Object {
 		return condition
 	}
 
-	condition, _ = object.Cast(condition)
-
 	if condition.Type() != object.BOOLEAN_OBJ && condition.Type() != object.NUL_OBJ {
 		return newError(ERROR, "evaluation of the condition in a while loop needs to return a boolean not %s", condition)
 	}
+
+	condition, _ = object.Cast(condition)
 
 	for isTruthy(condition) {
 		res := i.Eval(nd.Body)
@@ -1079,7 +1085,22 @@ func (i *Interpreter) evalAssignment(left []LeftRes, right []object.Object) obje
 	return result // Return the result of the last assignment
 }
 
-func (i *Interpreter) evalBinaryExpression(op string, leftNode ast.Expression, left, right object.Object) object.Object {
+func (i *Interpreter) evalBinaryExpression(op string, leftNode, rightNode ast.Expression, left, right object.Object) object.Object {
+
+	switch op {
+	case lexer.TokenAnd:
+		if !isTruthy(left) {
+			return FALSE // short-circuit
+		}
+		r := i.Eval(rightNode) // Only evaluate right side if left is truthy
+		return nativeBooleanObject(isTruthy(r))
+	case lexer.TokenOr:
+		if isTruthy(left) {
+			return TRUE // short-circuit
+		}
+		r := i.Eval(rightNode) // Only evaluate right side if left is falsy
+		return nativeBooleanObject(isTruthy(r))
+	}
 
 	switch {
 	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
@@ -1271,10 +1292,6 @@ func (i *Interpreter) evalBooleanInfixExpression(op string, lt, rt object.Object
 		return nativeBooleanObject(left.Value == right.Value)
 	case lexer.TokenNotEquals:
 		return nativeBooleanObject(left.Value != right.Value)
-	case lexer.TokenAnd:
-		return nativeBooleanObject(left.Value && right.Value)
-	case lexer.TokenOr:
-		return nativeBooleanObject(left.Value || right.Value)
 
 	default:
 		// error
