@@ -1,0 +1,107 @@
+# Binary Tree Implementation
+TreeNode :: struct {
+    value := 0,
+    left := nul,
+    right := nul,
+
+    insert: fn(self, val) {
+        if val < self.value {
+            if self.left == nul {
+                self.left = TreeNode{ value: val }
+            } else {
+                self.left.insert(val)
+            }
+        } else {
+            if self.right == nul {
+                self.right = TreeNode{ value: val }
+            } else {
+                self.right.insert(val)
+            }
+        }
+    },
+
+    search: fn(self, val) {
+        if self.value == val {
+            return true
+        }
+
+        if val < self.value && self.left != nul {
+            return self.left.search(val)
+        } else if val > self.value && self.right != nul {
+            return self.right.search(val)
+        }
+
+        return false
+    },
+
+    inOrderTraversal: fn(self) {
+        if self.left != nul {
+            self.left.inOrderTraversal()
+        }
+        print("Node value: ", self.value)
+        if self.right != nul {
+            self.right.inOrderTraversal()
+        }
+    },
+
+    preOrderTraversal: fn(self) {
+        print("Node value: ", self.value)
+        if self.left != nul {
+            self.left.preOrderTraversal()
+        }
+        if self.right != nul {
+            self.right.preOrderTraversal()
+        }
+    },
+
+    postOrderTraversal: fn(self) {
+        if self.left != nul {
+            self.left.postOrderTraversal()
+        }
+        if self.right != nul {
+            self.right.postOrderTraversal()
+        }
+        print("Node value: ", self.value)
+    },
+
+    findMin: fn(self) {
+        if self.left == nul {
+            return self.value
+        }
+        return self.left.findMin()
+    },
+
+    findMax: fn(self) {
+        if self.right == nul {
+            return self.value
+        }
+        return self.right.findMax()
+    }
+}
+
+# Binary Tree usage example
+tree := TreeNode{ value: 50 }
+
+# Insert values
+tree.insert(30)
+tree.insert(70)
+tree.insert(20)
+tree.insert(40)
+tree.insert(60)
+tree.insert(80)
+
+
+print("In-order traversal:")
+tree.inOrderTraversal()
+
+print("Pre-order traversal:")
+tree.preOrderTraversal()
+
+print("Post-order traversal:")
+tree.postOrderTraversal()
+
+print("Searching for 40: ", tree.search(40))
+print("Searching for 100: ", tree.search(100))
+
+print("Minimum value: ", tree.findMin())
+print("Maximum value: ", tree.findMax())

@@ -1,0 +1,50 @@
+# linked list implementation
+LinkedList :: struct {
+    value := 0,
+    next := nul,
+
+    insert: fn(self, val) {
+        if self.next == nul {
+            self.next = LinkedList{ value: val }
+        } else {
+            self.next.insert(val)
+        }
+    },
+
+    search: fn(self, val) {
+        if self.value == val {
+            return true
+        }
+
+        if self.next != nul {
+            return self.next.search(val)
+        }
+
+        return false
+    },
+
+    traverse: fn(self) {
+      print("Node: ", self.value)
+      if self.next != nul {
+        self.next.traverse()
+      }
+    }
+}
+
+# Binary Tree usage example
+linkedList := LinkedList{ value: 50 }
+
+# Insert values
+linkedList.insert(30)
+linkedList.insert(70)
+linkedList.insert(20)
+linkedList.insert(40)
+linkedList.insert(60)
+linkedList.insert(80)
+
+
+print("Traverse:")
+linkedList.traverse()
+
+print("Searching for 40: ", linkedList.search(40))
+print("Searching for 100: ", linkedList.search(100))
