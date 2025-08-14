@@ -16,7 +16,8 @@ var (
 )
 
 type Interpreter struct {
-	env *object.Environment
+	env           *object.Environment
+	cachedModules map[string]object.Object
 }
 
 func NewInterpreter(env *object.Environment) *Interpreter {
@@ -24,7 +25,8 @@ func NewInterpreter(env *object.Environment) *Interpreter {
 		env = object.NewEnvironment(nil)
 	}
 	return &Interpreter{
-		env: env,
+		env:           env,
+		cachedModules: make(map[string]object.Object),
 	}
 }
 
@@ -73,6 +75,11 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		return i.evalProgram(nd.Statements)
 
 	case *ast.ImportStatement:
+		if module, ok := i.cachedModules[nd.ModuleName.Value]; ok {
+			return module
+		}
+
+		// means that the module is builtin into the std
 		module, ok := stdlib.BuiltinModules[nd.ModuleName.Value]
 		if !ok {
 			return newError(ERROR, "Module Not found %s", nd.ModuleName)
@@ -92,17 +99,15 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			}
 		}
 
-		_, firstDeclaration := i.env.Define(nd.ModuleName.Value, object.ItemObject{
+		newModule := object.ItemObject{
 			Object: &object.BuiltInModule{
 				Name:  nd.ModuleName.Value,
 				Attrs: attrs,
 			},
 			IsBuiltIn: true,
-		})
-
-		if firstDeclaration {
-			return newError(WARNING, "found module name %s, is used as a declaration, consider renaming it in the declaration to something else", nd.ModuleName)
 		}
+
+		i.env.Define(nd.ModuleName.Value, newModule)
 
 	case *ast.StructExpression:
 		methods := make(map[string]object.Object, 0)

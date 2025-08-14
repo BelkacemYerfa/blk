@@ -25,6 +25,7 @@ const (
 	STRUCT_OBJ          = "STRUCT"
 	STRUCT_INSTANCE_OBJ = "STRUCT_INSTANCE"
 	BUILTIN_MODULE      = "BUILTIN_MODULE"
+	USER_MODULE         = "USER_MODULE"
 	BUILTIN_OBJ         = "BUILTIN"
 
 	// errors
@@ -218,6 +219,17 @@ func (b *BuiltInModule) Type() ObjectType { return BUILTIN_MODULE }
 
 // TODO: update this method later
 func (b *BuiltInModule) Inspect() string { return b.Name }
+
+// user module, another file
+type UserModule struct {
+	Name  string
+	Attrs map[string]Object
+}
+
+func (b *UserModule) Type() ObjectType { return USER_MODULE }
+
+// TODO: update this method later
+func (b *UserModule) Inspect() string { return b.Name }
 
 type Skip struct{}
 
