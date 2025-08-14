@@ -271,8 +271,10 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		}
 
 		// this tells the interpreter that those type of values aren't allowed to be const
-		if (val.Type() == object.ARRAY_OBJ || val.Type() == object.MAP_OBJ) && nd.Token.Kind == lexer.TokenConst {
-			return newError(ERROR, "%v isn't allowed to be an const, consts are only: ints, floats, strings, booleans", val.Type())
+		if val.Type() == object.ARRAY_OBJ || val.Type() == object.MAP_OBJ || val.Type() == object.NUL_OBJ {
+			if nd.Token.Kind == lexer.TokenConst {
+				return newError(ERROR, "%v isn't allowed to be an const, consts are only: ints, floats, strings, booleans", val.Type())
+			}
 		}
 
 		// functions need to be declared as consts
