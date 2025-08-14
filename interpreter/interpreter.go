@@ -176,7 +176,7 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 
 			fieldValue := i.Eval(field.Value)
 
-			if fieldDef.Type() != fieldValue.Type() {
+			if fieldDef.Type() != fieldValue.Type() && fieldDef.Type() != object.NUL_OBJ {
 				// type error
 				return newError(ERROR, "type mismatch on %s, definition type %s, got %s", field.Key.Value, fieldDef.Type(), fieldValue.Type())
 			}
@@ -767,7 +767,7 @@ func (i *Interpreter) evalForStatement(nd *ast.ForStatement) object.Object {
 				}
 
 				// evaluate the body
-				res := i.evalBlockStatement(nd.Body)
+				res := i.Eval(nd.Body)
 				if res != nil {
 					switch res.Type() {
 					case object.RETURN_VALUE_OBJ:
@@ -1007,7 +1007,6 @@ func (i *Interpreter) evalAssignment(left []LeftRes, right []object.Object) obje
 				})
 
 			case *ast.MemberShipExpression:
-				// TODO: assignment values to the property of the object
 				evalObj := i.Eval(node.Object)
 				if isError(evalObj) {
 					return evalObj
@@ -1040,7 +1039,26 @@ func (i *Interpreter) evalAssignment(left []LeftRes, right []object.Object) obje
 				leftTyped.Value = rightTyped.Value
 				result = leftTyped
 			}
-		case *object.Array, *object.Map, *object.StructInstance:
+		case *object.StructInstance:
+			switch node := node.(type) {
+			case *ast.Identifier:
+				result = i.evalAssignmentExpression(node, leftObj, rightObj)
+				if isError(result) {
+					return result
+				}
+
+			case *ast.MemberShipExpression:
+				evalObj := i.Eval(node.Object)
+				if isError(evalObj) {
+					return evalObj
+				}
+
+				return i.evalRecursiveAssignment(evalObj, rightObj, node.Object, node.Property)
+
+			default:
+				return newError(ERROR, "left side of assignment operation needs to be an identifier ")
+			}
+		case *object.Array, *object.Map:
 			// For complex types, delegate to existing method
 			result = i.evalAssignmentExpression(node, leftObj, rightObj)
 			if isError(result) {
@@ -1125,6 +1143,10 @@ func (i *Interpreter) evalIntegerInfixExpression(op string, lt, rt object.Object
 	case lexer.TokenMinus:
 		return &object.Integer{
 			Value: left.Value - right.Value,
+		}
+	case lexer.TokenModule:
+		return &object.Integer{
+			Value: left.Value % right.Value,
 		}
 
 		// comparison operators
@@ -1355,11 +1377,24 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 			return newError(ERROR, "property needs to be of type call expression or identifier, for now")
 		}
 
-	case *object.StructInstance:
+	case *object.StructInstance, *object.Struct:
+
+		var fields map[string]object.Object
+		var methods map[string]object.Object
+
+		switch owner := owner.(type) {
+		case *object.Struct:
+			fields = owner.Fields
+			methods = owner.Methods
+		case *object.StructInstance:
+			fields = owner.Fields
+			methods = owner.Methods
+		}
+
 		switch ownerProperty := property.(type) {
 		case *ast.CallExpression:
 			// search for the corresponding property call and invoke
-			methodItem, ok := owner.Methods[ownerProperty.Function.Value]
+			methodItem, ok := methods[ownerProperty.Function.Value]
 			if !ok {
 				return newError(ERROR, "method doesn't exist on the struct %v", ownerProperty.Function)
 			}
@@ -1392,7 +1427,7 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 
 		case *ast.Identifier:
 			// a given constant in a module
-			identifier, ok := owner.Fields[ownerProperty.Value]
+			identifier, ok := fields[ownerProperty.Value]
 			if !ok {
 				return newError(ERROR, "identifier doesn't exist on the struct %v", obj)
 			}
@@ -1456,19 +1491,27 @@ func (i *Interpreter) evalRecursiveAssignment(ownerObj, rightObj object.Object, 
 	switch property := property.(type) {
 	case *ast.Identifier:
 		// Simple property access: obj.prop
-		if ownerObj.Type() != object.STRUCT_INSTANCE_OBJ {
+		if ownerObj.Type() != object.STRUCT_INSTANCE_OBJ && ownerObj.Type() != object.STRUCT_OBJ {
 			return newError(ERROR, "Unsupported evaluation on this type: %s", ownerObj.Type())
 		}
 
-		castedOwner, _ := object.Cast(ownerObj)
-		owner := castedOwner.(*object.StructInstance)
+		var fields map[string]object.Object
 
-		identifier, ok := owner.Fields[property.Value]
+		castedOwner, _ := object.Cast(ownerObj)
+
+		switch owner := castedOwner.(type) {
+		case *object.Struct:
+			fields = owner.Fields
+		case *object.StructInstance:
+			fields = owner.Fields
+		}
+
+		identifier, ok := fields[property.Value]
 		if !ok {
 			return newError(ERROR, "identifier doesn't exist on the struct %v", obj)
 		}
 		_, mutable := object.Cast(identifier)
-		owner.Fields[property.Value] = object.ItemObject{
+		fields[property.Value] = object.ItemObject{
 			Object:    rightObj,
 			IsMutable: mutable,
 		}
