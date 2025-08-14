@@ -196,6 +196,16 @@ person := Person{
 
 ---
 
+## Nul values
+
+this is a special value representing the absence of a value, similar to `null/nil` in other languages. It can be used in any context where a value is expected.
+
+idea of name `nul` suggested by [@unmarine](https://github.com/unmarine)
+
+```blk
+x := nul # Represents a null value
+```
+
 ## 🧠 Expression-Based Semantics
 
 Every code block is an expression. The last expression is the return value of the block — no `return` keyword required.

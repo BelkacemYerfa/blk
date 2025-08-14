@@ -21,6 +21,9 @@ const (
 	TokenReturn TokenKind = "return"
 	TokenImport TokenKind = "import"
 
+	// nul values
+	TokenNul TokenKind = "nul"
+
 	// Units
 	TokenCurlyBraceOpen  TokenKind = "{"
 	TokenCurlyBraceClose TokenKind = "}"

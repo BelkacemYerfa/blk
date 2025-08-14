@@ -380,6 +380,19 @@ func (sl *StringLiteral) String() string {
 	return out.String()
 }
 
+type NulLiteral struct {
+	Token lexer.Token
+}
+
+func (sl *NulLiteral) expressionNode()       {}
+func (sl *NulLiteral) TokenLiteral() string  { return sl.Token.Text }
+func (nt *NulLiteral) GetToken() lexer.Token { return nt.Token }
+func (sl *NulLiteral) String() string {
+	var out bytes.Buffer
+	out.WriteString("nul")
+	return out.String()
+}
+
 type BooleanLiteral struct {
 	Token lexer.Token
 	Value bool

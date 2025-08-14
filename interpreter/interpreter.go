@@ -10,6 +10,7 @@ import (
 )
 
 var (
+	NUL   = &object.Nul{}
 	TRUE  = &object.Boolean{Value: true}
 	FALSE = &object.Boolean{Value: false}
 )
@@ -208,6 +209,8 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		}
 	case *ast.BooleanLiteral:
 		return nativeBooleanObject(nd.Value)
+	case *ast.NulLiteral:
+		return &object.Nul{}
 
 	case *ast.ArrayLiteral:
 		elements := i.evalArrayExpression(nd.Elements)
@@ -688,7 +691,8 @@ func extendFunctionEnv(
 		if param.Value == lexer.TokenSelf {
 			// 0 is the first context of the current struct
 			env.Define(param.Value, object.ItemObject{
-				Object: args[0],
+				Object:    args[0],
+				IsMutable: true,
 			})
 		} else {
 			env.Define(param.Value, object.ItemObject{
@@ -843,34 +847,44 @@ func (i *Interpreter) evalWhileStatement(nd *ast.WhileStatement) object.Object {
 
 	condition, _ = object.Cast(condition)
 
-	switch cdn := condition.(type) {
-	case *object.Boolean:
-		// continue until the condition is broken
-		for cdn.Value {
-			// evaluate the body
-			res := i.Eval(nd.Body)
-			if res != nil {
-				switch res.Type() {
-				case object.RETURN_VALUE_OBJ:
-					// early return
-					return res
-				case object.SKIP_OBJ:
-					// skip to the next iteration
-					continue
-				case object.ERROR_OBJ:
-					return res
-				}
-			}
-			cdn = i.Eval(nd.Condition).(*object.Boolean)
+	if condition.Type() != object.BOOLEAN_OBJ && condition.Type() != object.NUL_OBJ {
+		return newError(ERROR, "evaluation of the condition in a while loop needs to return a boolean not %s", condition)
+	}
 
+	for isTruthy(condition) {
+		res := i.Eval(nd.Body)
+		if res != nil {
+			switch res.Type() {
+			case object.RETURN_VALUE_OBJ:
+				return res
+			case object.SKIP_OBJ:
+				continue
+			case object.ERROR_OBJ:
+				return res
+			}
 		}
-	default:
-		// error out
-		return newError(ERROR, "evaluation of the condition in a while loop needs to return a boolean not %s", cdn)
+
+		condition = i.Eval(nd.Condition)
+		if isError(condition) {
+			return condition
+		}
 	}
 
 	// maybe
 	return nil
+}
+
+func isTruthy(obj object.Object) bool {
+	switch obj {
+	case NUL:
+		return false
+	case TRUE:
+		return true
+	case FALSE:
+		return false
+	default:
+		return true
+	}
 }
 
 func (i *Interpreter) evalIfExpression(nd *ast.IfExpression) object.Object {
@@ -888,10 +902,12 @@ func (i *Interpreter) evalIfExpression(nd *ast.IfExpression) object.Object {
 		if cdn.Value {
 			// eval the consequence
 			return i.Eval(nd.Consequence)
-		} else {
-			// eval the alternative
-			return i.Eval(nd.Alternative)
 		}
+		// eval the alternative
+		return i.Eval(nd.Alternative)
+	case *object.Nul:
+		// check of nul
+		return i.Eval(nd.Alternative)
 	default:
 		// error out
 
@@ -903,7 +919,8 @@ func (i *Interpreter) evalUnaryExpression(op string, right object.Object) object
 	switch op {
 	case lexer.TokenExclamation:
 		// check the right side
-		if right.Type() == object.BOOLEAN_OBJ {
+		// nul operator introduces a falsy mechanism to add
+		if right.Type() == object.BOOLEAN_OBJ || right.Type() == object.NUL_OBJ {
 			return i.evalBangOperatorExpression(right)
 		}
 		// throw an error
@@ -919,13 +936,19 @@ func (i *Interpreter) evalUnaryExpression(op string, right object.Object) object
 
 func (i *Interpreter) evalBangOperatorExpression(right object.Object) *object.Boolean {
 	rt, _ := object.Cast(right)
-	r := rt.(*object.Boolean)
 
-	if r.Value {
-		return FALSE
+	switch rt := rt.(type) {
+	case *object.Nul:
+		return TRUE
+	case *object.Boolean:
+		if rt.Value {
+			return FALSE
+		}
+
+		return TRUE
 	}
 
-	return TRUE
+	return nil
 }
 
 func (i *Interpreter) evalMinusPrefixOperatorExpression(right object.Object) object.Object {
@@ -967,13 +990,36 @@ func (i *Interpreter) evalAssignment(left []LeftRes, right []object.Object) obje
 		}
 
 		// Type compatibility check
-		if leftObj.Type() != rightObj.Type() {
+		// for nul value, u can assign it with what u want, then u need to respect the type rule that you're going to have
+		if leftObj.Type() != rightObj.Type() && leftObj.Type() != object.NUL_OBJ {
 			return newError(ERROR, "type mismatch: can't assign %s to %s",
 				rightObj.Type(), leftObj.Type())
 		}
 
 		// Perform the assignment based on type
 		switch leftTyped := leftObj.(type) {
+		case *object.Nul:
+			switch node := node.(type) {
+			case *ast.Identifier:
+				i.env.OverrideDefine(node.Value, object.ItemObject{
+					Object:    object.UseCopyValueOrRef(rightObj),
+					IsMutable: leftMutable,
+				})
+
+			case *ast.MemberShipExpression:
+				// TODO: assignment values to the property of the object
+				evalObj := i.Eval(node.Object)
+				if isError(evalObj) {
+					return evalObj
+				}
+
+				return i.evalRecursiveAssignment(evalObj, rightObj, node.Object, node.Property)
+
+			default:
+				return newError(ERROR, "left side of assignment operation needs to be an identifier ")
+			}
+
+			return rightObj
 		case *object.Integer:
 			if rightTyped, ok := rightObj.(*object.Integer); ok {
 				leftTyped.Value = rightTyped.Value
@@ -1027,6 +1073,19 @@ func (i *Interpreter) evalBinaryExpression(op string, leftNode ast.Expression, l
 	case left.Type() == object.STRING_OBJ || right.Type() == object.STRING_OBJ:
 		// allow addition with anything
 		return i.evalStringInfixExpression(op, left, right)
+
+	case left.Type() == object.NUL_OBJ || right.Type() == object.NUL_OBJ:
+		switch op {
+		case lexer.TokenEquals:
+			return nativeBooleanObject(left == right)
+		case lexer.TokenNotEquals:
+			return nativeBooleanObject(left != right)
+
+		default:
+			// error
+			return newError(ERROR, "Unsupported operator: %s %s %s",
+				left.Type(), op, right.Type())
+		}
 
 	case left.Type() != right.Type():
 		return newError(ERROR, "type mismatch: %s %s %s",
@@ -1225,6 +1284,7 @@ func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Ob
 func (i *Interpreter) evalAssignmentExpression(leftNode ast.Expression, left, right object.Object) object.Object {
 
 	identifier, ok := leftNode.(*ast.Identifier)
+
 	if !ok {
 		return newError(ERROR, "left side of assignment operation needs to be an identifier ")
 	}
@@ -1325,7 +1385,7 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 
 			// PREPEND the instance as the first argument (self)
 			// Note: owner is already an object.Object (the struct instance)
-			args = append([]object.Object{object.DeepCopy(owner)}, args...)
+			args = append([]object.Object{(owner)}, args...)
 
 			// Now invoke the function using the normal applyFunction path.
 			return i.applyFunction(fn, args)
@@ -1388,5 +1448,110 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 
 	default:
 		return newError(ERROR, "Unsupported evaluation on this type: %s", owner.Type())
+	}
+}
+
+func (i *Interpreter) evalRecursiveAssignment(ownerObj, rightObj object.Object, obj, property ast.Expression) object.Object {
+
+	switch property := property.(type) {
+	case *ast.Identifier:
+		// Simple property access: obj.prop
+		if ownerObj.Type() != object.STRUCT_INSTANCE_OBJ {
+			return newError(ERROR, "Unsupported evaluation on this type: %s", ownerObj.Type())
+		}
+
+		castedOwner, _ := object.Cast(ownerObj)
+		owner := castedOwner.(*object.StructInstance)
+
+		identifier, ok := owner.Fields[property.Value]
+		if !ok {
+			return newError(ERROR, "identifier doesn't exist on the struct %v", obj)
+		}
+		_, mutable := object.Cast(identifier)
+		owner.Fields[property.Value] = object.ItemObject{
+			Object:    rightObj,
+			IsMutable: mutable,
+		}
+		return rightObj
+
+	case *ast.IndexExpression:
+		// handle array/map access on struct fields
+		// get the field that contains the array/map
+		fieldObj := i.evalMembershipExpression(ownerObj, obj, property.Left)
+		if isError(fieldObj) {
+			return fieldObj
+		}
+
+		// cast to get the actual object (unwrap ItemObject if needed)
+		actualField, _ := object.Cast(fieldObj)
+
+		// evaluate the index
+		index := i.Eval(property.Index)
+		if isError(index) {
+			return index
+		}
+
+		index, _ = object.Cast(index)
+		switch lf := actualField.(type) {
+		case *object.Array:
+			if index.Type() != object.INTEGER_OBJ {
+				return newError(ERROR, "index side needs to be an integer, got %v", index.Type())
+			}
+
+			idx := index.(*object.Integer).Value
+			max := int64(len(lf.Elements) - 1)
+
+			if idx < 0 || idx > max {
+				return newError(ERROR, "index out of bound, %d", idx)
+			}
+
+			lf.Elements[idx] = object.ItemObject{
+				Object:    rightObj,
+				IsMutable: true, // or get mutability from existing element
+			}
+
+			return rightObj
+
+		case *object.Map:
+
+			key, ok := index.(object.Hashable)
+			if !ok {
+				return newError(ERROR, "unusable as hash key: %s", index.Type())
+			}
+
+			pair, ok := lf.Pairs[key.HashKey()]
+
+			if !ok {
+				return newError(ERROR, "index (%v) is not associated with any value", index.Inspect())
+			}
+
+			lf.Pairs[key.HashKey()] = object.HashPair{
+				Key:   pair.Key,
+				Value: rightObj,
+			}
+
+			return rightObj
+
+		default:
+			return newError(ERROR, "left side needs to be either an array or map, got %v", lf.Type())
+		}
+
+	case *ast.MemberShipExpression:
+		// Nested property: obj.prop1.prop2 or obj.prop1[0]
+
+		// First get the intermediate object
+		intermediateObj := i.evalMembershipExpression(ownerObj, obj, property.Object)
+		if isError(intermediateObj) {
+			return intermediateObj
+		}
+
+		// Cast to get the actual object if it's wrapped in ItemObject
+		castedIntermediate, _ := object.Cast(intermediateObj)
+
+		// Recursively assign to the intermediate object
+		return i.evalRecursiveAssignment(castedIntermediate, rightObj, property.Object, property.Property)
+
+	default:
+		return newError(ERROR, "Unsupported property type in assignment: %T", property)
 	}
 }

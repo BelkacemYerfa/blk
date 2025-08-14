@@ -89,6 +89,7 @@ func NewParser(tokens []lexer.Token, filepath string) *Parser {
 	p.registerPrefix(lexer.TokenInt, p.parseIntLiteral)
 	p.registerPrefix(lexer.TokenFloat, p.parseFloatLiteral)
 	p.registerPrefix(lexer.TokenString, p.parseStringLiteral)
+	p.registerPrefix(lexer.TokenNul, p.parseNulLiteral)
 	p.registerPrefix(lexer.TokenBracketOpen, p.parseArrayLiteral)
 	p.registerPrefix(lexer.TokenCurlyBraceOpen, p.parseMapLiteral)
 	p.registerPrefix(lexer.TokenExclamation, p.parsePrefixExpression)
@@ -305,8 +306,12 @@ func (p *Parser) parseVarDeclaration() (*ast.VarDeclaration, error) {
 func (p *Parser) parseReturnStatement() (*ast.ReturnStatement, error) {
 	stmt := &ast.ReturnStatement{Token: p.currentToken()}
 	p.nextToken()
-
 	returnValues := make([]ast.Expression, 0)
+
+	if p.currentToken().Kind == lexer.TokenCurlyBraceClose {
+		stmt.ReturnValues = returnValues
+		return stmt, nil
+	}
 
 	returnValues = append(returnValues, p.parseExpression(LOWEST))
 
@@ -678,6 +683,13 @@ func (p *Parser) parseStringLiteral() ast.Expression {
 	return &ast.StringLiteral{
 		Token: tok,
 		Value: tok.Text,
+	}
+}
+
+func (p *Parser) parseNulLiteral() ast.Expression {
+	tok := p.nextToken()
+	return &ast.NulLiteral{
+		Token: tok,
 	}
 }
 

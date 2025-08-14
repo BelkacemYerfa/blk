@@ -15,6 +15,7 @@ const (
 	BOOLEAN_OBJ         = "BOOLEAN"
 	FLOAT_OBJ           = "FLOAT"
 	STRING_OBJ          = "STRING"
+	NUL_OBJ             = "NUL"
 	RETURN_VALUE_OBJ    = "RETURN_VALUE"
 	FUNCTION_OBJ        = "FUNCTION"
 	IMPORT_OBJ          = "IMPORT"
@@ -87,6 +88,11 @@ func (s *String) HashKey() HashKey {
 	h.Write([]byte(s.Value))
 	return HashKey{Type: s.Type(), Value: float64(h.Sum64())}
 }
+
+type Nul struct{}
+
+func (b *Nul) Type() ObjectType { return NUL_OBJ }
+func (b *Nul) Inspect() string  { return "nul" }
 
 type ReturnValue struct {
 	Values []Object
@@ -347,6 +353,8 @@ func ObjectTypesCheck(a, b Object) bool {
 	case *Float:
 		_, ok := b.(*Float)
 		return ok
+	case *Nul:
+		return true
 	case *Array:
 		bVal, ok := b.(*Array)
 		if !ok {

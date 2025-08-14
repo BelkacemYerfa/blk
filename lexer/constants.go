@@ -21,6 +21,7 @@ var (
 		"skip":   TokenSkip,
 		"true":   TokenBool,
 		"false":  TokenBool,
+		"nul":    TokenNul,
 	}
 
 	BinOperators = map[TokenKind]Operator{

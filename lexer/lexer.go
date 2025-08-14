@@ -417,11 +417,6 @@ func (l *Lexer) readIdentifier() Token {
 		}, Row: row, Col: col}
 	}
 
-	// check for boolean time token
-	if text == "true" || text == "false" {
-		return Token{LiteralToken: LiteralToken{Kind: TokenBool, Text: text}, Row: row, Col: col}
-	}
-
 	return Token{
 		LiteralToken: LiteralToken{
 			Kind: TokenIdentifier,
