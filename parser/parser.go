@@ -176,23 +176,6 @@ func (p *Parser) expect(kinds []lexer.TokenKind) bool {
 }
 
 func (p *Parser) error(tok lexer.Token, msg string) error {
-	switch tok.Kind {
-	case lexer.TokenCurlyBraceOpen, lexer.TokenCurlyBraceClose, lexer.TokenColon:
-		tok = p.Tokens[p.Pos-2]
-		tok.Col = tok.Col + len(tok.Text)
-	case lexer.TokenEOF:
-		tok = p.Tokens[p.Pos-2]
-		tok.Col = tok.Col + len(tok.Text) + 1
-	default:
-		if key, isMatching := lexer.Keywords[tok.Text]; isMatching && key != lexer.TokenBool {
-			prev := p.Tokens[p.Pos-2]
-			if tok.Row >= prev.Row {
-				tok = prev
-				tok.Col = tok.Col + len(tok.Text) + 1
-			}
-		}
-	}
-
 	errMsg := fmt.Sprintf("\033[1;90m%s:%d:%d:\033[0m %s", p.FilePath, tok.Row, tok.Col, msg)
 
 	return errors.New(errMsg)
@@ -901,7 +884,7 @@ func (p *Parser) parseMatchExpression() ast.Expression {
 	tok = p.nextToken()
 
 	if tok.Kind != lexer.TokenMatch {
-		p.Errors = append(p.Errors, p.error(tok, "ERROR: expected colon ( : ), got shit"))
+		p.Errors = append(p.Errors, p.error(tok, "ERROR: expected colon (match), got shit"))
 		return nil
 	}
 
@@ -1350,8 +1333,18 @@ func (p *Parser) parseExpression(precedence int) ast.Expression {
 	}
 
 	leftExp := prefix()
-
 	cur := p.currentToken()
+
+	if cur.Kind == lexer.TokenBraceOpen {
+		// make sure that the token before is an identifier
+		lookBeforeKind := p.lookToken(-1).Kind
+		_, ok := lexer.BinOperators[lookBeforeKind]
+		if lookBeforeKind != lexer.TokenIdentifier && !ok && cur.Col > 1 {
+			p.Errors = append(p.Errors, p.error(p.currentToken(), "brace token expects to be an identifier before it, or a binary operator"))
+			return nil
+		}
+	}
+
 	for p.currentToken().Row <= cur.Row && p.currentToken().Kind != lexer.TokenEOF && precedence < p.peekPrecedence() && p.lookToken(-1).Row == cur.Row {
 		infix := p.infixParseFns[p.currentToken().Kind]
 		if infix == nil {

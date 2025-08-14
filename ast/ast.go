@@ -110,7 +110,7 @@ func (ss *StructExpression) TokenLiteral() string  { return ss.Token.Text }
 func (nt *StructExpression) GetToken() lexer.Token { return nt.Token }
 func (ss *StructExpression) String() string {
 	var out bytes.Buffer
-	out.WriteString(ss.TokenLiteral() + " ")
+	out.WriteString(ss.TokenLiteral())
 	out.WriteString(" { ")
 	if ss.Fields != nil {
 		for idx, field := range ss.Fields {
@@ -145,11 +145,11 @@ func (ss *EnumExpression) TokenLiteral() string  { return ss.Token.Text }
 func (nt *EnumExpression) GetToken() lexer.Token { return nt.Token }
 func (ss *EnumExpression) String() string {
 	var out bytes.Buffer
-	out.WriteString(ss.TokenLiteral() + " ")
+	out.WriteString(ss.TokenLiteral())
 	out.WriteString(" { ")
 	if ss.Body != nil {
 		for idx, field := range ss.Body {
-			out.WriteString(field.Value)
+			out.WriteString(field.String())
 			if idx+1 <= len(ss.Body)-1 {
 				out.WriteString(", ")
 			}
@@ -179,13 +179,16 @@ func (rs *MatchExpression) String() string {
 	var out bytes.Buffer
 	out.WriteString(rs.TokenLiteral() + " ")
 	out.WriteString(rs.MatchKey.String())
-	out.WriteString("{ ")
+	out.WriteString(" { ")
 	if rs.Arms != nil {
-		for _, arm := range rs.Arms {
+		for idx, arm := range rs.Arms {
 			out.WriteString(arm.Pattern.String())
 			out.WriteString(" => {")
 			out.WriteString(arm.Body.String())
 			out.WriteString(" }")
+			if idx+1 <= len(rs.Arms)-1 {
+				out.WriteString(", ")
+			}
 		}
 	}
 	// default case (catch all)
@@ -195,7 +198,7 @@ func (rs *MatchExpression) String() string {
 		out.WriteString(rs.Default.Body.String())
 		out.WriteString(" }")
 	}
-	out.WriteString(" } ")
+	out.WriteString(" }")
 	return out.String()
 }
 
@@ -302,6 +305,9 @@ func (nt *FunctionExpression) GetToken() lexer.Token { return nt.Token }
 func (fn *FunctionExpression) String() string {
 	var out bytes.Buffer
 	params := []string{}
+	if fn.Self != nil {
+		params = append(params, fn.Self.String())
+	}
 	for _, p := range fn.Args {
 		params = append(params, p.String())
 	}
@@ -460,10 +466,10 @@ func (b *UnaryExpression) TokenLiteral() string   { return b.Token.Text }
 func (nt *UnaryExpression) GetToken() lexer.Token { return nt.Token }
 func (u *UnaryExpression) String() string {
 	var out bytes.Buffer
-	out.WriteString("")
+	out.WriteString("(")
 	out.WriteString(u.Operator)
 	out.WriteString(u.Right.String())
-	out.WriteString("")
+	out.WriteString(")")
 	return out.String()
 }
 
@@ -479,11 +485,11 @@ func (b *BinaryExpression) TokenLiteral() string   { return b.Token.Text }
 func (nt *BinaryExpression) GetToken() lexer.Token { return nt.Token }
 func (b *BinaryExpression) String() string {
 	var out bytes.Buffer
-	out.WriteString("")
+	out.WriteString("(")
 	out.WriteString(b.Left.String())
-	out.WriteString("" + b.Operator + "")
+	out.WriteString(" " + b.Operator + " ")
 	out.WriteString(b.Right.String())
-	out.WriteString("")
+	out.WriteString(")")
 	return out.String()
 }
 
@@ -501,7 +507,7 @@ func (b *AssignStatement) String() string {
 	for _, elem := range b.Left {
 		out.WriteString(elem.String())
 	}
-	out.WriteString("=")
+	out.WriteString(" = ")
 	for _, elem := range b.Right {
 		out.WriteString(elem.String())
 	}

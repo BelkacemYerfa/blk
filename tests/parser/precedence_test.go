@@ -1,6 +1,7 @@
-package tests
+package parser_tests
 
 import (
+	"blk/lexer"
 	"blk/parser"
 	"testing"
 )
@@ -100,7 +101,7 @@ func TestOperatorPrecedenceParsing(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		l := parser.NewLexer("", tt.input)
+		l := lexer.NewLexer("", tt.input)
 		p := parser.NewParser(l.Tokenize(), "")
 		program := p.Parse()
 		actual := program.String()
