@@ -1,7 +1,7 @@
 package internals
 
 import (
-	"blk/parser"
+	"blk/lexer"
 	"errors"
 	"fmt"
 	"slices"
@@ -12,11 +12,11 @@ import (
 // This file handles an error collector obj
 
 type ErrorCollector struct {
-	Tokens []parser.Token
+	Tokens []lexer.Token
 	Errors []error
 }
 
-func NewErrorCollector(tokens []parser.Token) *ErrorCollector {
+func NewErrorCollector(tokens []lexer.Token) *ErrorCollector {
 	return &ErrorCollector{
 		Tokens: tokens,
 		Errors: make([]error, 0),
@@ -32,11 +32,11 @@ func (ec *ErrorCollector) Add(errMsg error) {
 	}
 }
 
-func (ec *ErrorCollector) Error(tok parser.Token, msg string) error {
+func (ec *ErrorCollector) Error(tok lexer.Token, msg string) error {
 	errMsg := fmt.Sprintf("\033[1;90m%s:%d:%d:\033[0m\n\n", "main.blk", tok.Row, tok.Col)
 
 	// Build row set map
-	rowSet := make(map[int][]parser.Token)
+	rowSet := make(map[int][]lexer.Token)
 	for _, t := range ec.Tokens {
 		rowSet[t.Row] = append(rowSet[t.Row], t)
 	}
@@ -60,7 +60,7 @@ func (ec *ErrorCollector) Error(tok parser.Token, msg string) error {
 	}
 
 	// Build rowMap with only prevRow, tok.Row, nextRow
-	rowMap := make(map[int][]parser.Token)
+	rowMap := make(map[int][]lexer.Token)
 	if prevRow != -1 {
 		rowMap[prevRow] = rowSet[prevRow]
 	}
@@ -85,7 +85,7 @@ func (ec *ErrorCollector) Error(tok parser.Token, msg string) error {
 			if t.Col > lastCol {
 				lineContent += strings.Repeat(" ", t.Col-lastCol)
 			}
-			if t.Kind == parser.TokenString {
+			if t.Kind == lexer.TokenString {
 				t.Text = fmt.Sprintf(`"%s"`, t.Text)
 			}
 			lineContent += t.Text

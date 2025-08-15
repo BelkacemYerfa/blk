@@ -1,12 +1,12 @@
 import "math"
 import "utils"
 
-fn main(): int {
-    let value: int = utils::double(21)
+main :: fn() {
+    let value = double(21)
     print(value)
     return 0
 }
 
-fn _main():int {
+_main() :: fn() {
     return 0
 }

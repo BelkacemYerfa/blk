@@ -1,9 +1,10 @@
 package cmd
 
 import (
-	"blk/internals"
+	"blk/interpreter"
+	"blk/lexer"
 	"blk/parser"
-	"blk/semantics"
+	"blk/repl"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -44,7 +45,17 @@ func init() {
 			Function:    Help,
 			Flags:       []FlagInfo{},
 		},
+		"repl": {
+			Description: "Opens the blk lang REPL",
+			Function:    Repl,
+			Flags:       []FlagInfo{},
+		},
 	}
+}
+
+func Repl(args []string) {
+	fmt.Println("REPL of blk lang is ready.")
+	repl.Start(os.Stdin, os.Stdout)
 }
 
 func Help(args []string) {
@@ -133,8 +144,8 @@ func Run(args []string) {
 
 	content := string(byteContent)
 
-	lexer := parser.NewLexer(targetFile, content)
-	tokens := lexer.Tokenize()
+	l := lexer.NewLexer(targetFile, content)
+	tokens := l.Tokenize()
 
 	// fmt.Println(tokens)
 
@@ -159,15 +170,16 @@ func Run(args []string) {
 		fmt.Printf("ERROR: failed to write AST to file: %v\n", err)
 		return
 	}
+	// fmt.Println(ast)
+	// errCollector := internals.NewErrorCollector(tokens)
 
-	errCollector := internals.NewErrorCollector(tokens)
+	i := interpreter.NewInterpreter(nil)
+	evaluated := i.Eval(ast)
 
-	typeChecker := semantics.NewTypeChecker(errCollector)
-	typeChecker.SymbolBuilder(ast)
-
-	for _, err := range errCollector.Errors {
-		fmt.Println(err)
+	if evaluated != nil {
+		fmt.Println(evaluated.Inspect())
 	}
+
 }
 
 func Execute() {

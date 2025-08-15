@@ -1,6 +1,8 @@
-package tests
+package parser_tests
 
 import (
+	"blk/ast"
+	"blk/lexer"
 	"blk/parser"
 	"testing"
 )
@@ -10,15 +12,16 @@ func TestFunctionParameterParsing(t *testing.T) {
 		input          string
 		expectedParams []string
 	}{
-		{input: "fn void():void {}", expectedParams: []string{}},
-		{input: "fn do_nothing(x:int):void {}", expectedParams: []string{"x"}},
-		{input: "fn A3d(x : int, y : int, z:int): int {}", expectedParams: []string{"x", "y", "z"}},
+		{input: "void :: fn () {}", expectedParams: []string{}},
+		{input: "do_nothing :: fn(x) {}", expectedParams: []string{"x"}},
+		{input: "A3d :: fn(x, y, z) {}", expectedParams: []string{"x", "y", "z"}},
 	}
 	for _, tt := range tests {
-		l := parser.NewLexer("", tt.input)
+		l := lexer.NewLexer("", tt.input)
 		p := parser.NewParser(l.Tokenize(), "")
 		program := p.Parse()
-		functionStmt := program.Statements[0].(*parser.FunctionStatement)
+		functionStmt := program.Statements[0].(*ast.VarDeclaration).Value.(*ast.FunctionExpression)
+
 		if len(functionStmt.Args) != len(tt.expectedParams) {
 			t.Errorf("length parameters wrong. want %d, got=%d\n",
 				len(tt.expectedParams), len(functionStmt.Args))

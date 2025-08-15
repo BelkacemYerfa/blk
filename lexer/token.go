@@ -1,4 +1,4 @@
-package parser
+package lexer
 
 type TokenKind = string
 
@@ -6,9 +6,10 @@ const (
 
 	// Keywords
 	TokenLet    TokenKind = "let"
-	TokenVar    TokenKind = "var"
-	TokenType   TokenKind = "type"
+	TokenConst  TokenKind = "const"
 	TokenStruct TokenKind = "struct"
+	TokenSelf   TokenKind = "self"
+	TokenEnum   TokenKind = "enum"
 	TokenFn     TokenKind = "fn"
 	TokenFor    TokenKind = "for"
 	TokenIn     TokenKind = "in"
@@ -16,8 +17,12 @@ const (
 	TokenSkip   TokenKind = "skip"
 	TokenIf     TokenKind = "if"
 	TokenElse   TokenKind = "else"
+	TokenMatch  TokenKind = "match"
 	TokenReturn TokenKind = "return"
 	TokenImport TokenKind = "import"
+
+	// nul values
+	TokenNul TokenKind = "nul"
 
 	// Units
 	TokenCurlyBraceOpen  TokenKind = "{"
@@ -31,6 +36,7 @@ const (
 	TokenColon           TokenKind = ":"
 	TokenComma           TokenKind = ","
 	TokenDot             TokenKind = "."
+	TokenRange           TokenKind = ".."
 
 	// Arithmetic Operators
 	TokenMinus          TokenKind = "-"
@@ -38,16 +44,30 @@ const (
 	TokenMultiply       TokenKind = "*"
 	TokenSlash          TokenKind = "/"
 	TokenModule         TokenKind = "%"
-	TokenAssign         TokenKind = "="
 	TokenEquals         TokenKind = "=="
 	TokenNotEquals      TokenKind = "!="
 	TokenGreater        TokenKind = ">"
 	TokenLess           TokenKind = "<"
 	TokenGreaterOrEqual TokenKind = ">="
 	TokenLessOrEqual    TokenKind = "<="
+	TokenAssignMinus    TokenKind = "-="
+	TokenAssignMinusOne TokenKind = "--"
+	TokenAssignPlus     TokenKind = "+="
+	TokenAssignPlusOne  TokenKind = "++"
+	TokenAssignMultiply TokenKind = "*="
+	TokenAssignSlash    TokenKind = "/="
+	TokenAssignModule   TokenKind = "%="
+
+	// Bind Operators
+	TokenAssign TokenKind = "="
+	TokenBind   TokenKind = "::"
+	TokenWalrus TokenKind = ":="
+
 	// Logical Operators
 	TokenAnd         TokenKind = "&&"
 	TokenOr          TokenKind = "||"
+	TokenAssignAnd   TokenKind = "&&="
+	TokenAssignOr    TokenKind = "||="
 	TokenExclamation TokenKind = "!"
 
 	// Comment
@@ -61,8 +81,6 @@ const (
 	TokenInt    TokenKind = "int"
 	TokenFloat  TokenKind = "float"
 	TokenBool   TokenKind = "bool"
-	TokenArray  TokenKind = "array"
-	TokenMap    TokenKind = "map"
 
 	// Error
 	TokenError TokenKind = "error"

@@ -1,6 +1,7 @@
-package tests
+package parser_tests
 
 import (
+	"blk/lexer"
 	"blk/parser"
 	"testing"
 )
@@ -15,7 +16,7 @@ func TestLoopsStatments(t *testing.T) {
 				sum = sum + i
 				i = i + 1
 			}`,
-			expected: "while (i <= n) { (sum = (sum + i))(i = (i + 1)) }",
+			expected: "while (i <= n) { sum = (sum + i)i = (i + 1) }",
 		},
 		{
 			input: `while i <= n {
@@ -24,13 +25,13 @@ func TestLoopsStatments(t *testing.T) {
 				}
 				i = i + 1
 			}`,
-			expected: "while (i <= n) { if (i > 10) { print(i) }(i = (i + 1)) }",
+			expected: "while (i <= n) { if (i > 10) { print(i) }i = (i + 1) }",
 		},
 		{
 			input: `for i, val in ["hi", "hello"] {
 				print(i)
 			}`,
-			expected: `for i, val in ["hi", "hello"] { print(i) }`,
+			expected: `for i, val in ["hi","hello"] { print(i) }`,
 		},
 		{
 			input: `for key, value in Users {
@@ -38,9 +39,21 @@ func TestLoopsStatments(t *testing.T) {
 			}`,
 			expected: `for key, value in Users { print(key, value) }`,
 		},
+		{
+			input: `for key, value in 0..=10 {
+				print(key, value)
+			}`,
+			expected: `for key, value in 0..=10 { print(key, value) }`,
+		},
+		{
+			input: `for key, value in 0..=len(input) {
+				print(key, value)
+			}`,
+			expected: `for key, value in 0..=len(input) { print(key, value) }`,
+		},
 	}
 	for _, tt := range tests {
-		l := parser.NewLexer("", tt.input)
+		l := lexer.NewLexer("", tt.input)
 		p := parser.NewParser(l.Tokenize(), "")
 		program := p.Parse()
 		actual := program.String()

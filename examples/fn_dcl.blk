@@ -1,7 +1,7 @@
-fn square(n: int): int {
+square :: fn(n) {
     return n * n
 }
 
-fn add(a: int, b: int): int {
+add :: fn(a, b) {
     return a + b
 }

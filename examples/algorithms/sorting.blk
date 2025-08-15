@@ -1,0 +1,68 @@
+import "array"
+
+
+bubbleSort :: fn() {
+  input := [5,6,1,3]
+
+  for idx, value in input {
+    j := 0
+    while j < len(input) - idx - 1 {
+      if input[j] > input[j+1] {
+          temp := input[j]
+          input[j] = input[j+1]
+          input[j+1] = temp
+      }
+      j++
+    }
+  } 
+
+  print(input)
+}
+
+bubbleSort()
+
+selectionSort :: fn() {
+  input := [5,6,1,3]
+
+  for idx, value in input {
+    j := idx + 1
+    minIdx := idx
+    while j < len(input) {
+      if input[j] < input[minIdx] {
+        minIdx = j
+      }
+      j++
+    }
+    temp := input[idx]
+    input[idx] = input[minIdx]
+    input[minIdx] = temp
+  }
+
+  print(input)
+}
+
+selectionSort()
+
+insertionSort :: fn() {
+  input := [5,6,1,3]
+
+  for i, value in input {
+    if i == 0 {
+      skip
+    }
+
+    key := input[i]
+    j := i - 1
+
+    while j >= 0 && input[j] > key {
+        input[j + 1] = input[j]
+        j -= 1
+    }
+
+    input[j + 1] = key
+  }
+
+  print(input)
+}
+
+insertionSort()

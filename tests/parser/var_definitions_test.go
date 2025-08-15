@@ -1,6 +1,7 @@
-package tests
+package parser_tests
 
 import (
+	"blk/lexer"
 	"blk/parser"
 	"testing"
 )
@@ -11,36 +12,71 @@ func TestAtomicLetStatementDCL(t *testing.T) {
 		expected string
 	}{
 		{
-			"let result : bool = true && false",
+			"let result = true && false",
 			"let result = (true && false)",
 		},
 		{
-			`let result: string = "Hello from " + "blk" `,
+			"let none_value = nul",
+			"let none_value = nul",
+		},
+		{
+			`let result = "Hello from " + "blk" `,
 			`let result = ("Hello from" + "blk")`,
 		},
 		{
-			"let result: float = 3.14 * 2.36 / 6.3",
+			"let result = 3.14 * 2.36 / 6.3",
 			"let result = ((3.14 * 2.36) / 6.3)",
 		},
 		{
-			"let result: int = 5 + 6 % 32",
+			"let result = 5 + 6 % 32",
 			"let result = (5 + (6 % 32))",
 		},
 		{
-			`var hash: map(string, array(int)) = {}`,
-			`var hash = {}`,
+			`let hash = {}`,
+			`let hash = {}`,
 		},
 		{
-			`var hash: map(string, array(int)) = {
+			`let hash = {
 				"hello" : [1 , 2],
 				"there" : [3 , 4]
 			}`,
-			`var hash = {"hello": [1, 2], "there": [3, 4]}`,
+			`let hash = {"hello": [1,2], "there": [3,4]}`,
+		},
+		{
+			"result := true && false",
+			"let result = (true && false)",
+		},
+		{
+			"none_value :: nul",
+			"const none_value = nul",
+		},
+		{
+			`result := "Hello from " + "blk" `,
+			`let result = ("Hello from" + "blk")`,
+		},
+		{
+			"result :: 3.14 * 2.36 / 6.3",
+			"const result = ((3.14 * 2.36) / 6.3)",
+		},
+		{
+			"result :: 5 + 6 % 32",
+			"const result = (5 + (6 % 32))",
+		},
+		{
+			`hash := {}`,
+			`let hash = {}`,
+		},
+		{
+			`hash := {
+				"hello" : [1 , 2],
+				"there" : [3 , 4]
+			}`,
+			`let hash = {"hello": [1,2], "there": [3,4]}`,
 		},
 	}
 
 	for _, tt := range tests {
-		l := parser.NewLexer("", tt.input)
+		l := lexer.NewLexer("", tt.input)
 		p := parser.NewParser(l.Tokenize(), "")
 		program := p.Parse()
 		actual := program.String()
@@ -56,24 +92,25 @@ func TestStructLetStatementDCL(t *testing.T) {
 		expected string
 	}{
 		{
-			`struct Person {
-				Name : string
-				Age : int
+			`Person :: struct {
+				Name := "belkacem",
+				Age := 22
 			}`,
-			"struct Person { Name:string, Age:int }",
+			`const Person = struct { let Name = "belkacem", let Age = 22,  }`,
 		},
 		{
-			`struct Person {
-				Name : string
-				Age : int
-				Child: Person
+			`User :: struct {
+				Name := "lofi",
+				getName : fn(self) {
+					return self.Name
+				}
 			}`,
-			"struct Person { Name:string, Age:int, Child:Person }",
+			`const User = struct { let Name = "lofi", getName:fn(self){ return self.Name } }`,
 		},
 	}
 
 	for _, tt := range tests {
-		l := parser.NewLexer("", tt.input)
+		l := lexer.NewLexer("", tt.input)
 		p := parser.NewParser(l.Tokenize(), "")
 		program := p.Parse()
 		actual := program.String()
@@ -83,31 +120,32 @@ func TestStructLetStatementDCL(t *testing.T) {
 	}
 }
 
-func TestTypeStatementDCL(t *testing.T) {
+func TestEnumDeclStatementDCL(t *testing.T) {
 	tests := []struct {
 		input    string
 		expected string
 	}{
 		{
-			"type Martix = array(array(int))",
-			"type Martix = array(array(int))",
+			`Person :: enum {
+				Child,
+				Adult,
+				Aged
+			}`,
+			`const Person = enum { Child, Adult, Aged }`,
 		},
 		{
-			"type Session = map(string, User)",
-			"type Session = map(string, User)",
-		},
-		{
-			"type FullName = [2]string",
-			"type FullName = [2]string",
-		},
-		{
-			"type WhoCreatesTypesLikeThis = [2]array([1]int)",
-			"type WhoCreatesTypesLikeThis = [2]array([1]int)",
+			`Data :: enum {
+   			Int,
+    		Float,
+    		String,
+    		Bool
+			}`,
+			`const Data = enum { Int, Float, String, Bool }`,
 		},
 	}
 
 	for _, tt := range tests {
-		l := parser.NewLexer("", tt.input)
+		l := lexer.NewLexer("", tt.input)
 		p := parser.NewParser(l.Tokenize(), "")
 		program := p.Parse()
 		actual := program.String()
@@ -124,20 +162,20 @@ func TestMemberShipAccessStatementDCL(t *testing.T) {
 	}{
 		{
 			"result.Code = 200",
-			"result.(Code = 200)",
+			"result.Code = 200",
 		},
 		{
 			"file.meta.size = 2048",
-			"file.meta.(size = 2048)",
+			"file.meta.size = 2048",
 		},
 		{
 			`response.body.userInfo.username = "John Doe"`,
-			`response.body.userInfo.(username = "John Doe")`,
+			`response.body.userInfo.username = "John Doe"`,
 		},
 	}
 
 	for _, tt := range tests {
-		l := parser.NewLexer("", tt.input)
+		l := lexer.NewLexer("", tt.input)
 		p := parser.NewParser(l.Tokenize(), "")
 		program := p.Parse()
 		actual := program.String()

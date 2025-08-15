@@ -1,15 +1,17 @@
-package parser
+package lexer
 
 type Operator = string
 
 var (
-	keywords = map[string]TokenKind{
+	Keywords = map[string]TokenKind{
 		"let":    TokenLet,
-		"var":    TokenVar,
-		"type":   TokenType,
+		"const":  TokenConst,
 		"struct": TokenStruct,
+		"self":   TokenSelf,
+		"enum":   TokenEnum,
 		"if":     TokenIf,
 		"else":   TokenElse,
+		"match":  TokenMatch,
 		"fn":     TokenFn,
 		"for":    TokenFor,
 		"in":     TokenIn,
@@ -17,21 +19,12 @@ var (
 		"import": TokenImport,
 		"return": TokenReturn,
 		"skip":   TokenSkip,
-		"array":  TokenArray,
-		"map":    TokenMap,
 		"true":   TokenBool,
 		"false":  TokenBool,
+		"nul":    TokenNul,
 	}
 
-	AtomicTypes = map[string]TYPE{
-		"int":    IntType,
-		"float":  FloatType,
-		"string": StringType,
-		"bool":   BoolType,
-		"void":   VoidType,
-	}
-
-	binOperators = map[TokenKind]Operator{
+	BinOperators = map[TokenKind]Operator{
 		TokenEquals:         "==",
 		TokenGreater:        ">",
 		TokenGreaterOrEqual: ">=",
@@ -43,12 +36,20 @@ var (
 		TokenModule:         "%",
 		TokenPlus:           "+",
 		TokenMinus:          "-",
-		TokenAssign:         "=",
+		TokenAssignMinus:    "-=",
+		TokenAssignMinusOne: "--",
+		TokenAssignPlus:     "+=",
+		TokenAssignPlusOne:  "++",
+		TokenAssignModule:   "%=",
+		TokenAssignMultiply: "*=",
+		TokenAssignSlash:    "/=",
 		TokenAnd:            "&&",
 		TokenOr:             "||",
+		TokenAssignAnd:      "&&=",
+		TokenAssignOr:       "||=",
 	}
 
-	unaryOperators = map[TokenKind]Operator{
+	UnaryOperators = map[TokenKind]Operator{
 		TokenExclamation: "!",
 		TokenMinus:       "-",
 	}

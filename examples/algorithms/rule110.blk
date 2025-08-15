@@ -1,0 +1,49 @@
+import "array"
+
+# reference: https://en.wikipedia.org/wiki/Rule_110
+
+# Rule 110 lookup table
+RULE_110 := [0, 1, 1, 1, 0, 1, 1, 0]
+
+
+# Apply Rule 110 using sliding window
+apply_rule_110 :: fn(cells) {
+    new_cells := []
+
+    for i, cell in cells {
+        # get the left, center, and right cells
+        # with boundary conditions
+        left := if i > 0 {
+            cells[i - 1]
+        } else {
+            0
+        }
+        center := cell
+        right := if i < len(cells) - 1 {
+            cells[i + 1]
+        } else {
+            0
+        }
+        # determine the new state using the lookup table
+        index := left * 4 + center * 2 + right
+        new_state := RULE_110[index]
+        # insert the new state into the new_cells array
+        array.append(new_cells, new_state)
+    }
+
+    # return the updated new_cells array
+    new_cells
+}
+
+
+main :: fn() {
+    # Initial state
+    cells := [0, 1, 0, 1 , 0, 0, 1, 0, 0, 0]
+    print("Initial cells:  " + cells)
+
+    # Apply Rule 110
+    new_cells := apply_rule_110(cells)
+    print("Updated cells:  " + new_cells)
+}
+
+main()

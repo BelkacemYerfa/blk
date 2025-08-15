@@ -1,15 +1,18 @@
-# blk — A Minimalist Systems Programming Language
+# blk — A Minimalist Dynamic Systems Language
 
-`blk` is a statically typed, compiled programming language focused on simplicity, predictability, and a clean developer experience. Inspired by languages like Zig, Odin, and C — but designed to be approachable for learners and hobbyists interested in writing small tools, utilities, and experimenting with low-level systems programming.
+`blk` is a dynamically typed, interpreted language focused on simplicity, expression-oriented design, and minimal syntax. Inspired by Jai, Zig, Odin, and C — but reimagined with flexible semantics and runtime evaluation at its core. Designed for quick scripting, tooling, and prototyping with low ceremony and high expressiveness.
 
 ---
 
 ## ✨ Why blk?
 
-- Minimal syntax: easy to read, easy to parse
-- Explicit types: no hidden behavior
-- No classes or objects — just functions, types, and modules
-- Direct native compilation targets
+- Expression-oriented: every block returns a value
+- Minimal syntax: easy to read and parse
+- Dynamically typed, no explicit type declarations
+- Interpreted: fast feedback, no build steps required
+- Structs, enums, maps, arrays — all built-in
+- Powerful block scoping and control flow
+- Unified declaration model using `::` and `:=`
 
 ---
 
@@ -17,16 +20,25 @@
 
 ```blk
 import "math"
-import "utils"
 
-fn main(): int {
-    let result: int = utils::double(5)
-    print(result)
-    return 0
+User :: struct {
+    name,
+    age,
+
+    greet: fn(self) {
+        print("Hi, I'm " + self.name)
+    }
 }
 
-fn add(a: int, b: int): int {
-    return a + b
+fn main() {
+    u := User{ name: "Ali", age: 22 }
+    u.greet()
+    msg := if u.age > 18 {
+        "Adult"
+    } else {
+        "Minor"
+    }
+    print(msg)
 }
 ```
 
@@ -34,210 +46,200 @@ fn add(a: int, b: int): int {
 
 ## ✅ Language Features
 
-- Static types: `int`, `float`, `bool`, `string`, `[]type` (arrays)
-- Functions with explicit return types and parameters
-- Variables using `let` (immutable) and `var` (mutable)
-- Custom types with `type` for aliasing
-- Structs using `struct` keyword:
+- **Dynamic values**: no static type annotations
+- **All variables** declared with `:=`
+- **Top-level constants** via `::`
+- **Structs with inline methods**
+- **Enums**
+- **Pattern matching** via `match` expression
+- **Expression-based blocks and control flow**
+- **Unified literals**: maps and structs share `{}` syntax
+- **No distinction between expressions and statements**
+
+---
+
+## 🧱 Core Constructs
+
+### Declarations
 
 ```blk
-# type aliasing
-type ID = int
-
-# structs
-struct Person {
-    name: string
-    age: int
+x := 42
+msg :: "Welcome to blk"
+greet :: fn(name) {
+    print("Hello " + name)
 }
 ```
 
-- Array declaration:
-
-for fixed-size arrays, use `[size]type`:
+### Structs
 
 ```blk
-let numbers: [3]int = [1, 2, 3]
-let names: [2]string = ["Alice", "Bob"]
+Vec2 :: struct {
+    x := 0.0,
+    y := 0.0,
+    len: fn() {
+        sqrt(x * x + y * y)
+    }
+}
+
+v := Vec2{
+    x: 3,
+    y: 4
+}
+print(v.len())
 ```
 
-for dynamic arrays, use `array(type)`:
+### Enums
 
 ```blk
-var dynamicNumbers: array(int) = [10, 20, 30]
-var dynamicNames: array(string) = ["Alice", "Bob", "Charlie"]
-```
-
-- Hashmaps using `map(key_type, value_type)`:
-
-```blk
-var settings: map(string, int) = {
-    "volume": 100,
-    "brightness": 80
+Result :: enum {
+    Ok,
+    Error
 }
 ```
 
-- Import system using `import "file"`. No aliasing. Always use namespace prefix:
+---
+
+## 🔁 Control Flow
+
+### If expressions
+
+```blk
+name := if loggedIn {
+    "User"
+} else {
+    "Guest"
+}
+```
+
+### Match expressions
+
+```blk
+kind := match x {
+    0 => "zero",
+    1 => "one",
+    _ => "other"
+}
+```
+
+### While loops
+
+```blk
+i := 0
+while i < 5 {
+    print(i)
+    i += 1
+}
+```
+
+### For loops
+
+```blk
+for idx, val in [1, 2, 3] {
+    print(idx, val)
+}
+
+for k, v in {a: 1, b: 2} {
+    print(k, v)
+}
+```
+
+### Skip
+
+```blk
+while true {
+    if shouldSkip() {
+        skip
+    }
+    doStuff()
+}
+```
+
+---
+
+## 📦 Modules & Imports
 
 ```blk
 import "math"
 import "utils"
-
-let result: int = utils::double(10)
 ```
 
-- All top-level symbols in a module are automatically visible. No `export` keyword is needed.
-- To declare something as internal/private to a module, prefix it with `_`:
-
-```blk
-fn _internal_helper(): int {
-    return 42
-}
-```
-
-- Conditionals: `if`, `else if`, `else`
-- Loops:
-
-```blk
-var i: int = 0
-while i < 10 {
-    print(i)
-    i = i + 1
-}
-```
-
-- Loop control keyword: `skip`:
-
-```blk
-var i: int = 0
-while i < 10 {
-    i = i + 1
-    if i % 2 == 0 {
-        skip
-    }
-    print(i)
-}
-```
-
-- Switch statement:
-
-```blk
-switch x {
-    case 1 {
-        print("One")
-    }
-    case 2, 3 {
-        print("Two or Three")
-    }
-    else {
-        print("Default")
-    }
-}
-```
-
-- Explicit memory management (planned)
-- No runtime garbage collection: fully manual or allocator-driven
-- Macro system (planned): clean, hygienic, declarative and procedural macros planned for later versions
+No aliasing needed — always access via `utils.fn`.
 
 ---
 
-## 📚 Syntax Reference
-
-### Variables
-
-```blk
-let x: int = 42
-var y: float = 3.14
-```
-
-### Functions
-
-```blk
-fn double(value: int): int {
-    return value * 2
-}
-```
-
-### Custom Types
-
-```blk
-type Point {
-    x: float
-    y: float
-}
-
-fn length(p: Point): float {
-    return math::sqrt(p.x * p.x + p.y * p.y)
-}
-```
+## 🗃️ Data Types
 
 ### Arrays
 
 ```blk
-let numbers: [int] = [10, 20, 30]
-let first: int = numbers[0]
+nums := [1, 2, 3]
+names := ["foo", "bar"]
 ```
 
 ### Maps
 
 ```blk
-var config: map(string, int) = map {
-    "width": 1280,
-    "height": 720
+config := {
+    "host": "localhost",
+    "port": "8080"
 }
 ```
 
-### Conditionals
+### Struct literals
 
 ```blk
-if x > 10 {
-    print("Greater")
-} else {
-    print("Smaller or equal")
+person := Person{
+    name: "Zed",
+    age: 20
 }
 ```
 
-### Loops
+---
+
+## Nul values
+
+this is a special value representing the absence of a value, similar to `null/nil` in other languages. It can be used in any context where a value is expected.
+
+idea of name `nul` suggested by [@unmarine](https://github.com/unmarine)
 
 ```blk
-var i: int = 0
-while i < 10 {
-    print(i)
-    i = i + 1
+x := nul # Represents a null value
+```
+
+## 🧠 Expression-Based Semantics
+
+Every code block is an expression. The last expression is the return value of the block — no `return` keyword required.
+
+```blk
+double := fn(x) {
+    x * 2
 }
 ```
 
-### Switch Statements
+---
+
+## 🧪 Example Evaluation
 
 ```blk
-switch x {
-    case 1 {
-        print("One")
+result := fn(x, y) {
+    if x > y {
+        x
+    } else {
+        y
     }
-    case 2, 3 {
-        print("Two or Three")
-    }
-    else {
-        print("Default")
-    }
 }
+
+print(result(10, 20))  # 20
 ```
 
-### Importing Modules
+---
+
+## 📐 Data Shape & Reflection
+
+Types are tracked at runtime via introspection:
 
 ```blk
-import "math"
-import "utils"
-```
-
-- Always use `namespace::symbol` format. No aliasing keyword.
-- No `.blk` file extension in imports.
-
-### Internal/Private Symbols
-
-```blk
-fn _helper(): int {
-    return 123
-}
+typeOf(x) == "int"
 ```
 
 ---
@@ -245,34 +247,26 @@ fn _helper(): int {
 ## 🛠️ Development Roadmap
 
 - [x] Lexer and Tokenizer
-- [x] Parser and AST generator
-- [ ] Semantic analysis and type checking
-- [ ] LLVM IR backend
-- [ ] Official standard library (blk stdlib)
-- [ ] Macro system
+- [x] Parser and AST
+- [ ] Core Interpreter Engine
+- [ ] Error System and Stack Traces
+- [ ] REPL and Debugger
+- [ ] Built-in Modules (math, io, time, etc.)
 
 ---
 
-## ⚙️ Build & Usage
+## ⚙️ Tooling
 
-### Compiling blk programs
-
-```bash
-blk compile main.blk -o main.blkout
-```
-
-### Running blk programs
+### Run
 
 ```bash
 blk run main.blk
 ```
 
-### Building the semantics (Go example)
+### Build
 
 ```bash
 git clone https://github.com/yourname/blk
 cd blk
-go build -o blk cmd/main.go
-./blk compile main.blk -o main
-./main
+go run cmd/main.go run examples/main.blk
 ```

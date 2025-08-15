@@ -1,4 +1,4 @@
-package parser
+package lexer
 
 import (
 	"fmt"
@@ -103,15 +103,40 @@ func (l *Lexer) NextToken() Token {
 		}
 	case TokenColon:
 		l.readChar()
-		token.LiteralToken = LiteralToken{
-			Kind: TokenColon,
-			Text: ":",
+		nextChar := string(l.Content[l.Cur])
+		switch nextChar {
+		case ":":
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenBind,
+				Text: "::",
+			}
+		case "=":
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenWalrus,
+				Text: ":=",
+			}
+		default:
+			token.LiteralToken = LiteralToken{
+				Kind: TokenColon,
+				Text: ":",
+			}
 		}
 	case TokenDot:
 		l.readChar()
-		token.LiteralToken = LiteralToken{
-			Kind: TokenDot,
-			Text: ".",
+		nextChar := string(l.Content[l.Cur])
+		if nextChar == "." {
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenRange,
+				Text: "..",
+			}
+		} else {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenDot,
+				Text: ".",
+			}
 		}
 	case TokenComma:
 		l.readChar()
@@ -121,33 +146,92 @@ func (l *Lexer) NextToken() Token {
 		}
 	case TokenMinus:
 		l.readChar()
-		token.LiteralToken = LiteralToken{
-			Kind: TokenMinus,
-			Text: "-",
+		nextChar := string(l.Content[l.Cur])
+		switch nextChar {
+		case "=":
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenAssignMinus,
+				Text: "-=",
+			}
+		case "-":
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenAssignMinusOne,
+				Text: "--",
+			}
+		default:
+			token.LiteralToken = LiteralToken{
+				Kind: TokenMinus,
+				Text: "-",
+			}
 		}
 	case TokenPlus:
 		l.readChar()
-		token.LiteralToken = LiteralToken{
-			Kind: TokenPlus,
-			Text: "+",
+		nextChar := string(l.Content[l.Cur])
+		switch nextChar {
+		case "=":
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenAssignPlus,
+				Text: "+=",
+			}
+		case "+":
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenAssignPlusOne,
+				Text: "++",
+			}
+		default:
+			token.LiteralToken = LiteralToken{
+				Kind: TokenPlus,
+				Text: "+",
+			}
 		}
 	case TokenMultiply:
 		l.readChar()
-		token.LiteralToken = LiteralToken{
-			Kind: TokenMultiply,
-			Text: "*",
+		equalsChar := string(l.Content[l.Cur])
+		if equalsChar == TokenAssign {
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenAssignMultiply,
+				Text: "*=",
+			}
+		} else {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenMultiply,
+				Text: "*",
+			}
 		}
 	case TokenModule:
 		l.readChar()
-		token.LiteralToken = LiteralToken{
-			Kind: TokenModule,
-			Text: "%",
+		equalsChar := string(l.Content[l.Cur])
+		if equalsChar == TokenAssign {
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenAssignModule,
+				Text: "%=",
+			}
+		} else {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenModule,
+				Text: "%",
+			}
 		}
 	case TokenSlash:
 		l.readChar()
-		token.LiteralToken = LiteralToken{
-			Kind: TokenSlash,
-			Text: "/",
+		equalsChar := string(l.Content[l.Cur])
+		if equalsChar == TokenAssign {
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenAssignSlash,
+				Text: "/=",
+			}
+		} else {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenSlash,
+				Text: "/",
+			}
 		}
 	case TokenExclamation:
 		l.readChar()
@@ -166,14 +250,21 @@ func (l *Lexer) NextToken() Token {
 		}
 	case TokenAssign:
 		l.readChar()
-		equalChar := string(l.Content[l.Cur])
-		if equalChar == TokenAssign {
+		nextChar := string(l.Content[l.Cur])
+		switch nextChar {
+		case TokenAssign:
 			l.readChar()
 			token.LiteralToken = LiteralToken{
 				Kind: TokenEquals,
 				Text: "==",
 			}
-		} else {
+		case TokenGreater:
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenMatch,
+				Text: "=>",
+			}
+		default:
 			token.LiteralToken = LiteralToken{
 				Kind: TokenAssign,
 				Text: "=",
@@ -222,9 +313,18 @@ func (l *Lexer) NextToken() Token {
 		nextChar := string(l.Content[l.Cur])
 		if nextChar == "&" {
 			l.readChar()
-			token.LiteralToken = LiteralToken{
-				Kind: TokenAnd,
-				Text: "&&",
+			nextChar := string(l.Content[l.Cur])
+			if nextChar == "=" {
+				l.readChar()
+				token.LiteralToken = LiteralToken{
+					Kind: TokenAssignAnd,
+					Text: "&&=",
+				}
+			} else {
+				token.LiteralToken = LiteralToken{
+					Kind: TokenAnd,
+					Text: "&&",
+				}
 			}
 		} else {
 			token.LiteralToken = LiteralToken{
@@ -237,9 +337,18 @@ func (l *Lexer) NextToken() Token {
 		nextChar := string(l.Content[l.Cur])
 		if nextChar == "|" {
 			l.readChar()
-			token.LiteralToken = LiteralToken{
-				Kind: TokenOr,
-				Text: "||",
+			nextChar := string(l.Content[l.Cur])
+			if nextChar == "=" {
+				l.readChar()
+				token.LiteralToken = LiteralToken{
+					Kind: TokenAssignOr,
+					Text: "||=",
+				}
+			} else {
+				token.LiteralToken = LiteralToken{
+					Kind: TokenOr,
+					Text: "||",
+				}
 			}
 		} else {
 			token.LiteralToken = LiteralToken{
@@ -310,16 +419,11 @@ func (l *Lexer) readIdentifier() Token {
 
 	text := strings.TrimSpace(string(l.Content[startPos:l.Cur]))
 
-	if tokenKind, isKeyword := keywords[text]; isKeyword {
+	if tokenKind, isKeyword := Keywords[text]; isKeyword {
 		return Token{LiteralToken: LiteralToken{
 			Kind: tokenKind,
 			Text: text,
 		}, Row: row, Col: col}
-	}
-
-	// check for boolean time token
-	if text == "true" || text == "false" {
-		return Token{LiteralToken: LiteralToken{Kind: TokenBool, Text: text}, Row: row, Col: col}
 	}
 
 	return Token{
@@ -373,7 +477,7 @@ func (l *Lexer) readNumber() Token {
 	}
 
 	if l.Cur < len(l.Content) && l.Content[l.Cur] == '.' {
-		if l.Cur < len(l.Content) && l.Content[l.Cur] == '.' {
+		if l.Cur < len(l.Content) && l.Content[l.Cur] == '.' && l.Content[l.Cur+1] != '.' {
 			l.readChar() // consume '.'
 
 			// Read fractional part
@@ -381,6 +485,7 @@ func (l *Lexer) readNumber() Token {
 				l.readChar()
 			}
 		}
+
 		text := string(l.Content[startPos:l.Cur])
 		return Token{
 			LiteralToken: LiteralToken{
