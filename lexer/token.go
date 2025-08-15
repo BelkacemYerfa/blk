@@ -15,6 +15,7 @@ const (
 	TokenIn     TokenKind = "in"
 	TokenWhile  TokenKind = "while"
 	TokenSkip   TokenKind = "skip"
+	TokenBreak  TokenKind = "break"
 	TokenIf     TokenKind = "if"
 	TokenElse   TokenKind = "else"
 	TokenMatch  TokenKind = "match"

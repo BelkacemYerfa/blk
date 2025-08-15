@@ -310,6 +310,15 @@ func (fs *SkipStatement) TokenLiteral() string  { return fs.Token.Text }
 func (nt *SkipStatement) GetToken() lexer.Token { return nt.Token }
 func (fs *SkipStatement) String() string        { return fs.TokenLiteral() }
 
+type BreakStatement struct {
+	Token lexer.Token
+}
+
+func (fs *BreakStatement) statementNode()        {}
+func (fs *BreakStatement) TokenLiteral() string  { return fs.Token.Text }
+func (nt *BreakStatement) GetToken() lexer.Token { return nt.Token }
+func (fs *BreakStatement) String() string        { return fs.TokenLiteral() }
+
 type FunctionExpression struct {
 	Token lexer.Token
 	Self  *Identifier // this indicates the self key

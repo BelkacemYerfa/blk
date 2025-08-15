@@ -19,6 +19,7 @@ var (
 		"import": TokenImport,
 		"return": TokenReturn,
 		"skip":   TokenSkip,
+		"break":  TokenBreak,
 		"true":   TokenBool,
 		"false":  TokenBool,
 		"nul":    TokenNul,

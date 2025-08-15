@@ -316,6 +316,9 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 	case *ast.SkipStatement:
 		return &object.Skip{}
 
+	case *ast.BreakStatement:
+		return &object.Break{}
+
 	case *ast.VarDeclaration:
 		val := i.Eval(nd.Value)
 		if isError(val) {
@@ -783,7 +786,7 @@ func (i *Interpreter) evalBlockStatement(block *ast.BlockStatement) object.Objec
 		result = i.Eval(statement)
 		if result != nil {
 			rt := result.Type()
-			if rt == object.RETURN_VALUE_OBJ || rt == object.ERROR_OBJ {
+			if rt == object.RETURN_VALUE_OBJ || rt == object.ERROR_OBJ || rt == object.BREAK_OBJ || rt == object.SKIP_OBJ {
 				return result
 			}
 		}
@@ -836,6 +839,9 @@ func (i *Interpreter) evalForStatement(nd *ast.ForStatement) object.Object {
 					case object.SKIP_OBJ:
 						// skip to the next iteration
 						continue
+					case object.BREAK_OBJ:
+						// break out of the loop
+						break
 					case object.ERROR_OBJ:
 						return res
 					}
@@ -872,7 +878,7 @@ func (i *Interpreter) evalForStatement(nd *ast.ForStatement) object.Object {
 				}
 
 				// evaluate the body
-				res := i.evalBlockStatement(nd.Body)
+				res := i.Eval(nd.Body)
 				if res != nil {
 					switch res.Type() {
 					case object.RETURN_VALUE_OBJ:
@@ -881,6 +887,9 @@ func (i *Interpreter) evalForStatement(nd *ast.ForStatement) object.Object {
 					case object.SKIP_OBJ:
 						// skip to the next iteration
 						continue
+					case object.BREAK_OBJ:
+						// break out of the loop
+						break
 					case object.ERROR_OBJ:
 						return res
 					}
@@ -917,6 +926,9 @@ func (i *Interpreter) evalWhileStatement(nd *ast.WhileStatement) object.Object {
 				return res
 			case object.SKIP_OBJ:
 				continue
+			case object.BREAK_OBJ:
+				// break out of the loop
+				break
 			case object.ERROR_OBJ:
 				return res
 			}

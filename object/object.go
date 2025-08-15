@@ -22,6 +22,7 @@ const (
 	ARRAY_OBJ           = "ARRAY"
 	MAP_OBJ             = "MAP"
 	SKIP_OBJ            = "SKIP"
+	BREAK_OBJ           = "BREAK"
 	STRUCT_OBJ          = "STRUCT"
 	STRUCT_INSTANCE_OBJ = "STRUCT_INSTANCE"
 	BUILTIN_MODULE      = "BUILTIN_MODULE"
@@ -235,6 +236,11 @@ type Skip struct{}
 
 func (b *Skip) Type() ObjectType { return SKIP_OBJ }
 func (b *Skip) Inspect() string  { return "skip" }
+
+type Break struct{}
+
+func (b *Break) Type() ObjectType { return BREAK_OBJ }
+func (b *Break) Inspect() string  { return "skip" }
 
 type Struct struct {
 	// Fields are both variable decl
