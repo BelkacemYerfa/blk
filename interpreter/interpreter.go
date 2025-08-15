@@ -325,54 +325,7 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			return val
 		}
 
-		// this tells the interpreter that those type of values aren't allowed to be const
-		if val.Type() == object.ARRAY_OBJ || val.Type() == object.MAP_OBJ || val.Type() == object.NUL_OBJ {
-			if nd.Token.Kind == lexer.TokenConst {
-				return newError(ERROR, "%v isn't allowed to be an const, consts are only: ints, floats, strings, booleans", val.Type())
-			}
-		}
-
-		// functions need to be declared as consts
-		if val.Type() == object.FUNCTION_OBJ && nd.Token.Kind != lexer.TokenConst {
-			return newError(ERROR, "functions are required to be declared as consts")
-		}
-
-		castedVal, _ := object.Cast(val)
-		newVal := object.ItemObject{
-			Object:    object.UseCopyValueOrRef(val),
-			IsMutable: nd.Token.Text == lexer.TokenLet,
-		}
-
-		// for multi value assignment from functions
-		if castedVal.Type() == object.RETURN_VALUE_OBJ {
-			returnValues := castedVal.(*object.ReturnValue).Values
-			// the rule here is that var declaration need to be <= len(returnValue) elements
-			if len(nd.Name) > len(returnValues) {
-				return newError(ERROR, "numbers of declaration need to be less or equals to the number of return values")
-			}
-
-			// this handles the declaration of multi values
-			for idx, ident := range nd.Name {
-				currentVarAssigned := object.ItemObject{
-					Object:    object.DeepCopy(returnValues[idx]),
-					IsMutable: newVal.IsMutable,
-				}
-				// define it in the scope
-				_, firstDeclaration := i.env.Define(ident.Value, currentVarAssigned)
-
-				if firstDeclaration {
-					return newError(WARNING, "name %s is already in use", ident.Value)
-				}
-			}
-		} else {
-			singleVar := nd.Name[0]
-			// define it in the scope
-			_, firstDeclaration := i.env.Define(singleVar.Value, newVal)
-
-			if firstDeclaration {
-				return newError(WARNING, "name %s is already in use", singleVar.Value)
-			}
-		}
+		return i.evalVarDeclaration(val, nd)
 
 	case *ast.Identifier:
 		return i.evalIdentifier(nd)
@@ -685,6 +638,86 @@ func (i *Interpreter) evalMapIndexExpression(hashMap, index object.Object) objec
 	}
 
 	return pair.Value
+}
+
+func (i *Interpreter) evalVarDeclaration(val object.Object, nd *ast.VarDeclaration) object.Object {
+	// this tells the interpreter that those type of values aren't allowed to be const
+	if val.Type() == object.NUL_OBJ {
+		if nd.Token.Kind == lexer.TokenConst {
+			return newError(ERROR, "%v isn't allowed to be an const, consts are only: ints, floats, strings, booleans", val.Type())
+		}
+	}
+
+	// functions need to be declared as consts
+	if val.Type() == object.FUNCTION_OBJ && nd.Token.Kind != lexer.TokenConst {
+		return newError(ERROR, "functions are required to be declared as consts")
+	}
+
+	castedVal, _ := object.Cast(val)
+	isMutable := nd.Token.Text == lexer.TokenLet
+	switch v := castedVal.(type) {
+	case *object.Array:
+		// if it is a const mark all of the values as const
+		if !isMutable {
+			for idx, elem := range v.Elements {
+				elem, _ = object.Cast(elem)
+				v.Elements[idx] = object.ItemObject{
+					Object: elem,
+				}
+			}
+		}
+	case *object.Map:
+		// if it is a const mark all of the values as const
+		if !isMutable {
+			for key, val := range v.Pairs {
+				elem, _ := object.Cast(val.Value)
+				v.Pairs[key] = object.HashPair{
+					Key: val.Key,
+					Value: object.ItemObject{
+						Object: elem,
+					},
+				}
+			}
+		}
+	}
+
+	newVal := object.ItemObject{
+		Object:    object.UseCopyValueOrRef(val),
+		IsMutable: isMutable,
+	}
+
+	// for multi value assignment from functions
+	if castedVal.Type() == object.RETURN_VALUE_OBJ {
+		returnValues := castedVal.(*object.ReturnValue).Values
+		// the rule here is that var declaration need to be <= len(returnValue) elements
+		if len(nd.Name) > len(returnValues) {
+			return newError(ERROR, "numbers of declaration need to be less or equals to the number of return values")
+		}
+
+		// this handles the declaration of multi values
+		for idx, ident := range nd.Name {
+			currentVarAssigned := object.ItemObject{
+				Object:    object.DeepCopy(returnValues[idx]),
+				IsMutable: newVal.IsMutable,
+			}
+			// define it in the scope
+			_, firstDeclaration := i.env.Define(ident.Value, currentVarAssigned)
+
+			if firstDeclaration {
+				return newError(WARNING, "name %s is already in use", ident.Value)
+			}
+		}
+	} else {
+		singleVar := nd.Name[0]
+		// define it in the scope
+		_, firstDeclaration := i.env.Define(singleVar.Value, newVal)
+
+		if firstDeclaration {
+			return newError(WARNING, "name %s is already in use", singleVar.Value)
+		}
+	}
+
+	return nil
 }
 
 func (i *Interpreter) evalIdentifier(identifier *ast.Identifier) object.Object {
@@ -1056,7 +1089,7 @@ func (i *Interpreter) evalAssignment(left []LeftRes, right []object.Object) obje
 
 		// Check mutability first
 		if !leftMutable {
-			return newError(ERROR, "%v can't be mutated, since it was defined as const", leftObj)
+			return newError(ERROR, "%v can't be mutated, since it was defined as const", leftObj.Inspect())
 		}
 
 		// Type compatibility check
@@ -1089,6 +1122,7 @@ func (i *Interpreter) evalAssignment(left []LeftRes, right []object.Object) obje
 			}
 
 			return rightObj
+
 		case *object.Integer:
 			if rightTyped, ok := rightObj.(*object.Integer); ok {
 				leftTyped.Value = rightTyped.Value
@@ -1391,7 +1425,8 @@ func (i *Interpreter) evalAssignmentExpression(leftNode ast.Expression, left, ri
 	if !ok {
 		return newError(ERROR, "left side of assignment operation needs to be an identifier ")
 	}
-	// no need to check for mutability since array/hashmaps aren't allowed to be constants
+
+	// mutability already checked in the evalAssignment function, no need to repeat it here
 	lft, leftMutable := object.Cast(left)
 	lrt, _ := object.Cast(right)
 
