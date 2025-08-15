@@ -217,6 +217,53 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 	case *ast.NulLiteral:
 		return &object.Nul{}
 
+	case *ast.RangePattern:
+		evalStart := i.Eval(nd.Start)
+		if isError(evalStart) {
+			return evalStart
+		}
+
+		if evalStart.Type() != object.INTEGER_OBJ {
+			return newError(ERROR, "the left bound of range pattern needs to evaluate to a int, instead got %s", evalStart.Type())
+		}
+
+		evalEnd := i.Eval(nd.End)
+		if isError(evalEnd) {
+			return evalEnd
+		}
+
+		if evalEnd.Type() != object.INTEGER_OBJ {
+			return newError(ERROR, "the right bound of range pattern needs to evaluate to a int, instead got %s", evalStart.Type())
+		}
+
+		// before .. token
+		castedBound, _ := object.Cast(evalStart)
+		leftBound := castedBound.(*object.Integer).Value
+		// after .. token
+		castedBound, _ = object.Cast(evalEnd)
+		rightBound := castedBound.(*object.Integer).Value
+
+		if leftBound > rightBound {
+			return newError(ERROR, "the left bound can't be bigger than the right bound")
+		}
+
+		if len(nd.Op) > 0 && nd.Op == "=" {
+			// this means the last element will be included
+			// an example 1..9, will cover all elements from 1 to 8
+			// 1..=9, will cover all elements from 1 to 9
+			rightBound++
+		}
+
+		elements := []object.Object{}
+		for i := range rightBound {
+			if i < leftBound {
+				continue
+			}
+			elements = append(elements, &object.Integer{Value: i})
+		}
+
+		return &object.Array{Elements: elements, Size: int(rightBound) - int(leftBound)}
+
 	case *ast.ArrayLiteral:
 		elements := i.evalArrayExpression(nd.Elements)
 		if len(elements) == 1 && isError(elements[0]) {
@@ -283,7 +330,7 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		}
 
 		// functions need to be declared as consts
-		if (val.Type() == object.FUNCTION_OBJ) && nd.Token.Kind != lexer.TokenConst {
+		if val.Type() == object.FUNCTION_OBJ && nd.Token.Kind != lexer.TokenConst {
 			return newError(ERROR, "functions are required to be declared as consts")
 		}
 
@@ -773,9 +820,9 @@ func (i *Interpreter) evalForStatement(nd *ast.ForStatement) object.Object {
 
 				// second identifier (value) - optional
 				if len(nd.Identifiers) >= 2 {
-					newVal := object.DeepCopy(elem)
+					// no need for deep copy since the values isn't mutable
 					i.env.OverrideDefine(nd.Identifiers[1].Value, object.ItemObject{
-						Object: newVal,
+						Object: elem,
 					})
 				}
 
@@ -812,17 +859,15 @@ func (i *Interpreter) evalForStatement(nd *ast.ForStatement) object.Object {
 			for _, elem := range tg.Pairs {
 				// first identifier (key) - always present
 				if len(nd.Identifiers) >= 1 && nd.Identifiers[0].Value != "_" {
-					newVal := object.DeepCopy(elem.Key)
 					i.env.OverrideDefine(nd.Identifiers[0].Value, object.ItemObject{
-						Object: newVal,
+						Object: elem.Key,
 					})
 				}
 
 				// second identifier (value) - optional
 				if len(nd.Identifiers) >= 2 {
-					newVal := object.DeepCopy(elem.Value)
 					i.env.OverrideDefine(nd.Identifiers[1].Value, object.ItemObject{
-						Object: newVal,
+						Object: elem.Value,
 					})
 				}
 
@@ -1340,9 +1385,6 @@ func (i *Interpreter) evalAssignmentExpression(leftNode ast.Expression, left, ri
 
 	errMsg := ""
 	switch lft.(type) {
-	case *object.StructInstance:
-		errMsg = "type mismatch on struct instance elements"
-
 	case *object.Array:
 		errMsg = "type mismatch on array elements"
 

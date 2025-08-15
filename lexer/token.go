@@ -36,6 +36,7 @@ const (
 	TokenColon           TokenKind = ":"
 	TokenComma           TokenKind = ","
 	TokenDot             TokenKind = "."
+	TokenRange           TokenKind = ".."
 
 	// Arithmetic Operators
 	TokenMinus          TokenKind = "-"

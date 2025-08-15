@@ -39,6 +39,18 @@ func TestLoopsStatments(t *testing.T) {
 			}`,
 			expected: `for key, value in Users { print(key, value) }`,
 		},
+		{
+			input: `for key, value in 0..=10 {
+				print(key, value)
+			}`,
+			expected: `for key, value in 0..=10 { print(key, value) }`,
+		},
+		{
+			input: `for key, value in 0..=len(input) {
+				print(key, value)
+			}`,
+			expected: `for key, value in 0..=len(input) { print(key, value) }`,
+		},
 	}
 	for _, tt := range tests {
 		l := lexer.NewLexer("", tt.input)

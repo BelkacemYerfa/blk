@@ -125,9 +125,18 @@ func (l *Lexer) NextToken() Token {
 		}
 	case TokenDot:
 		l.readChar()
-		token.LiteralToken = LiteralToken{
-			Kind: TokenDot,
-			Text: ".",
+		nextChar := string(l.Content[l.Cur])
+		if nextChar == "." {
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenRange,
+				Text: "..",
+			}
+		} else {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenDot,
+				Text: ".",
+			}
 		}
 	case TokenComma:
 		l.readChar()
@@ -468,7 +477,7 @@ func (l *Lexer) readNumber() Token {
 	}
 
 	if l.Cur < len(l.Content) && l.Content[l.Cur] == '.' {
-		if l.Cur < len(l.Content) && l.Content[l.Cur] == '.' {
+		if l.Cur < len(l.Content) && l.Content[l.Cur] == '.' && l.Content[l.Cur+1] != '.' {
 			l.readChar() // consume '.'
 
 			// Read fractional part
@@ -476,6 +485,7 @@ func (l *Lexer) readNumber() Token {
 				l.readChar()
 			}
 		}
+
 		text := string(l.Content[startPos:l.Cur])
 		return Token{
 			LiteralToken: LiteralToken{

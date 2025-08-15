@@ -256,6 +256,24 @@ func (ws *WhileStatement) String() string {
 	return out.String()
 }
 
+type RangePattern struct {
+	Token lexer.Token
+	Op    string
+	Start *IntegerLiteral
+	End   Expression
+}
+
+func (fs *RangePattern) expressionNode()       {}
+func (fs *RangePattern) TokenLiteral() string  { return fs.Token.Text }
+func (nt *RangePattern) GetToken() lexer.Token { return nt.Token }
+func (fs *RangePattern) String() string {
+	var out bytes.Buffer
+	out.WriteString(fs.Start.String())
+	out.WriteString(".." + fs.Op)
+	out.WriteString(fs.End.String())
+	return out.String()
+}
+
 type ForStatement struct {
 	Token       lexer.Token
 	Identifiers []*Identifier // mostly the variable
