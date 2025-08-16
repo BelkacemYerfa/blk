@@ -89,6 +89,7 @@ func NewParser(tokens []lexer.Token, filepath string) *Parser {
 	p.registerPrefix(lexer.TokenInt, p.parseIntLiteral)
 	p.registerPrefix(lexer.TokenFloat, p.parseFloatLiteral)
 	p.registerPrefix(lexer.TokenString, p.parseStringLiteral)
+	p.registerPrefix(lexer.TokenChar, p.parseCharLiteral)
 	p.registerPrefix(lexer.TokenNul, p.parseNulLiteral)
 	p.registerPrefix(lexer.TokenBracketOpen, p.parseArrayLiteral)
 	p.registerPrefix(lexer.TokenCurlyBraceOpen, p.parseMapLiteral)
@@ -273,6 +274,8 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 
 func (p *Parser) parseVarDeclaration() (*ast.VarDeclaration, error) {
 	stmt := &ast.VarDeclaration{Token: p.currentToken()}
+	stmt.Mutable = stmt.Token.Kind == lexer.TokenLet
+
 	p.nextToken()
 
 	stmt.Name = p.parseIdentifiers()
@@ -284,7 +287,6 @@ func (p *Parser) parseVarDeclaration() (*ast.VarDeclaration, error) {
 	}
 
 	stmt.Value = p.parseExpression(LOWEST)
-
 	return stmt, nil
 }
 
@@ -323,6 +325,20 @@ func (p *Parser) parseImportStatement() (*ast.ImportStatement, error) {
 	}
 
 	stmt.ModuleName = p.parseStringLiteral().(*ast.StringLiteral)
+
+	fmt.Println(p.currentToken())
+	if p.currentToken().Kind == lexer.TokenAs {
+		// alias for the namespace
+		p.nextToken()
+		fmt.Println(p.currentToken())
+		// bind the alias to it
+		ident := p.parseIdentifier()
+		if ident == nil {
+			return nil, p.Errors[len(p.Errors)-1]
+		}
+
+		stmt.Alias = ident.(*ast.Identifier)
+	}
 
 	return stmt, nil
 }
@@ -699,6 +715,20 @@ func (p *Parser) parseStringLiteral() ast.Expression {
 	return &ast.StringLiteral{
 		Token: tok,
 		Value: tok.Text,
+	}
+}
+
+func (p *Parser) parseCharLiteral() ast.Expression {
+	tok := p.nextToken()
+	code, _, _, err := strconv.UnquoteChar(tok.Text, '\'')
+	fmt.Println(code, err, tok.Text)
+	if err != nil {
+		p.Errors = append(p.Errors, p.error(tok, err.Error()))
+		return nil
+	}
+	return &ast.CharLiteral{
+		Token: tok,
+		Value: code,
 	}
 }
 
@@ -1288,7 +1318,7 @@ func (p *Parser) parseBindExpression() (ast.Statement, error) {
 		},
 		Col: p.currentToken().Col,
 		Row: p.currentToken().Row,
-	}}
+	}, Mutable: true}
 
 	stmt.Name = p.parseIdentifiers()
 
@@ -1302,6 +1332,7 @@ func (p *Parser) parseBindExpression() (ast.Statement, error) {
 				Kind: lexer.TokenConst,
 			},
 		}
+		stmt.Mutable = false
 		// fall through
 	case lexer.TokenWalrus:
 		// fall through
@@ -1358,15 +1389,21 @@ func (p *Parser) parseInfixExpression(left ast.Expression) ast.Expression {
 }
 
 func (p *Parser) parseExpression(precedence int) ast.Expression {
-	prefix := p.prefixParseFns[p.currentToken().Kind]
+	cur := p.currentToken()
+	if cur.Kind == lexer.TokenError {
+		p.Errors = append(p.Errors, p.error(cur, cur.Text))
+		return nil
+	}
+
+	prefix := p.prefixParseFns[cur.Kind]
 
 	if prefix == nil {
-		p.Errors = append(p.Errors, p.error(p.currentToken(), "ain't an ast.Expression, it is a statement"))
+		p.Errors = append(p.Errors, p.error(cur, "ain't an ast.Expression, it is a statement"))
 		return nil
 	}
 
 	leftExp := prefix()
-	cur := p.currentToken()
+	cur = p.currentToken()
 
 	if cur.Kind == lexer.TokenBraceOpen {
 		// make sure that the token before is an identifier

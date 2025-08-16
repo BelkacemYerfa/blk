@@ -22,7 +22,7 @@ func arrayEquals(args ...object.Object) object.Object {
 	}
 
 	return &object.Boolean{
-		Value: object.ObjectEquals(args[0], args[1]),
+		Value: args[0].Equals(args[1]),
 	}
 }
 
@@ -33,29 +33,25 @@ func index(args ...object.Object) object.Object {
 	}
 
 	mapper, _ := object.Cast(args[0])
+	target, _ := object.Cast(args[1])
 
-	actualArray := &object.Array{}
-	switch array := mapper.(type) {
+	switch actualArray := mapper.(type) {
 	case *object.Array:
 		// do something
-		actualArray = array
+		for idx, elem := range actualArray.Elements {
+			if elem.Equals(target) {
+				return &object.Integer{
+					Value: int64(idx),
+				}
+			}
+		}
+		return &object.Integer{
+			Value: -1,
+		}
 	default:
 		return newError("second arg needs to be an array in equals function")
 	}
 
-	targetValue, _ := object.Cast(args[1])
-
-	for idx, elem := range actualArray.Elements {
-		if object.ObjectEquals(targetValue, elem) {
-			return &object.Integer{
-				Value: int64(idx),
-			}
-		}
-	}
-
-	return &object.Integer{
-		Value: -1,
-	}
 }
 
 func APPEND(args ...object.Object) object.Object {

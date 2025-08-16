@@ -75,7 +75,7 @@ func EQUALS(args ...object.Object) object.Object {
 	}
 
 	return &object.Boolean{
-		Value: object.ObjectEquals(args[0], args[1]),
+		Value: args[0].Equals(args[1]),
 	}
 }
 

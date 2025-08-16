@@ -39,9 +39,7 @@ func COPY(args ...object.Object) object.Object {
 			len(args))
 	}
 
-	arg, _ := object.Cast(args[0])
-
-	return object.DeepCopy(arg)
+	return args[0].Copy()
 }
 
 // this is a print function for test only

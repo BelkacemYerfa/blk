@@ -15,6 +15,7 @@ const (
 	BOOLEAN_OBJ         = "BOOLEAN"
 	FLOAT_OBJ           = "FLOAT"
 	STRING_OBJ          = "STRING"
+	CHAR_OBJ            = "CHAR"
 	NUL_OBJ             = "NUL"
 	RETURN_VALUE_OBJ    = "RETURN_VALUE"
 	FUNCTION_OBJ        = "FUNCTION"
@@ -39,26 +40,74 @@ type HashKey struct {
 }
 
 type Object interface {
+
+	// returns the object type, check the prefix_OBJ const above
 	Type() ObjectType
+
+	// inspects the value that is current object has
 	Inspect() string
+
+	// create a deep copy off the current value that the object has
+	Copy() Object
+
+	// checks wether 2 objects are equals or not
+	Equals(other Object) bool
+}
+
+type EmptyObjImplementation struct{}
+
+func (i *EmptyObjImplementation) Type() ObjectType {
+	panic("Not Implemented")
+}
+
+func (i *EmptyObjImplementation) Inspect() string {
+	panic("Not Implemented")
+}
+
+func (i *EmptyObjImplementation) Copy() Object {
+	panic("Not Implemented")
+}
+
+func (i *EmptyObjImplementation) Equals(other Object) bool {
+	panic("Not Implemented")
 }
 
 type Integer struct {
+	EmptyObjImplementation
 	Value int64
 }
 
 func (i *Integer) Type() ObjectType { return INTEGER_OBJ }
 func (i *Integer) Inspect() string  { return fmt.Sprintf("%d", i.Value) }
+func (i *Integer) Copy() Object {
+	return &Integer{
+		Value: i.Value,
+	}
+}
+func (i *Integer) Equals(v Object) bool {
+	bVal, ok := v.(*Integer)
+	return ok && i.Value == bVal.Value
+}
 func (i *Integer) HashKey() HashKey {
 	return HashKey{Type: i.Type(), Value: float64(i.Value)}
 }
 
 type Boolean struct {
+	EmptyObjImplementation
 	Value bool
 }
 
 func (b *Boolean) Type() ObjectType { return BOOLEAN_OBJ }
 func (b *Boolean) Inspect() string  { return fmt.Sprintf("%t", b.Value) }
+func (i *Boolean) Copy() Object {
+	return &Boolean{
+		Value: i.Value,
+	}
+}
+func (i *Boolean) Equals(v Object) bool {
+	bVal, ok := v.(*Boolean)
+	return ok && i.Value == bVal.Value
+}
 func (b *Boolean) HashKey() HashKey {
 	var value uint64
 	if b.Value {
@@ -70,33 +119,79 @@ func (b *Boolean) HashKey() HashKey {
 }
 
 type Float struct {
+	EmptyObjImplementation
 	Value float64
 }
 
 func (b *Float) Type() ObjectType { return FLOAT_OBJ }
 func (b *Float) Inspect() string  { return fmt.Sprintf("%f", b.Value) }
+func (i *Float) Copy() Object {
+	return &Float{
+		Value: i.Value,
+	}
+}
+func (i *Float) Equals(v Object) bool {
+	bVal, ok := v.(*Float)
+	return ok && i.Value == bVal.Value
+}
 func (b *Float) HashKey() HashKey {
 	return HashKey{Type: b.Type(), Value: b.Value}
 }
 
 type String struct {
+	EmptyObjImplementation
 	Value string
 }
 
 func (b *String) Type() ObjectType { return STRING_OBJ }
 func (b *String) Inspect() string  { return b.Value }
+func (i *String) Copy() Object {
+	return &String{
+		Value: i.Value,
+	}
+}
+func (i *String) Equals(v Object) bool {
+	bVal, ok := v.(*String)
+	return ok && i.Value == bVal.Value
+}
 func (s *String) HashKey() HashKey {
 	h := fnv.New64a()
 	h.Write([]byte(s.Value))
 	return HashKey{Type: s.Type(), Value: float64(h.Sum64())}
 }
 
-type Nul struct{}
+type Char struct {
+	EmptyObjImplementation
+	Value rune
+}
+
+func (b *Char) Type() ObjectType { return CHAR_OBJ }
+func (b *Char) Inspect() string  { return string(b.Value) }
+func (i *Char) Copy() Object {
+	return &Char{
+		Value: i.Value,
+	}
+}
+func (i *Char) Equals(v Object) bool {
+	bVal, ok := v.(*Char)
+	return ok && i.Value == bVal.Value
+}
+func (s *Char) HashKey() HashKey {
+	h := fnv.New64a()
+	h.Write([]byte(string(s.Value)))
+	return HashKey{Type: s.Type(), Value: float64(h.Sum64())}
+}
+
+type Nul struct {
+	EmptyObjImplementation
+}
 
 func (b *Nul) Type() ObjectType { return NUL_OBJ }
 func (b *Nul) Inspect() string  { return "nul" }
+func (i *Nul) Copy() Object     { return i }
 
 type ReturnValue struct {
+	EmptyObjImplementation
 	Values []Object
 }
 
@@ -115,6 +210,7 @@ func (rv *ReturnValue) Inspect() string {
 }
 
 type Function struct {
+	EmptyObjImplementation
 	Parameters []*ast.Identifier
 	Body       *ast.BlockStatement
 	Env        *Environment
@@ -137,6 +233,7 @@ func (f *Function) Inspect() string {
 }
 
 type Array struct {
+	EmptyObjImplementation
 	Size     int // if size == -1 means that the array is dynamic
 	Elements []Object
 }
@@ -154,6 +251,34 @@ func (a *Array) Inspect() string {
 	out.WriteString("]")
 	return out.String()
 }
+func (i *Array) Equals(v Object) bool {
+	bVal, ok := v.(*Array)
+	if !ok {
+		return false
+	}
+	if len(bVal.Elements) != len(i.Elements) {
+		return false
+	}
+	for idx, elem := range bVal.Elements {
+		value := i.Elements[idx]
+		if !elem.Equals(value) {
+			return false
+		}
+	}
+	return true
+}
+func (i *Array) Copy() Object {
+	elements := make([]Object, 0)
+
+	for _, v := range i.Elements {
+		elements = append(elements, v.Copy())
+	}
+
+	return &Array{
+		Size:     i.Size,
+		Elements: elements,
+	}
+}
 
 type Hashable interface {
 	HashKey() HashKey
@@ -167,6 +292,7 @@ type HashPair struct {
 type PairsType = map[HashKey]HashPair
 
 type Map struct {
+	EmptyObjImplementation
 	Pairs PairsType
 }
 
@@ -184,16 +310,54 @@ func (a *Map) Inspect() string {
 	return out.String()
 }
 
+func (i *Map) Copy() Object {
+	pairs := make(PairsType, 0)
+
+	for k, v := range i.Pairs {
+		pairs[k] = HashPair{
+			Key:   v.Key.Copy(),
+			Value: v.Value.Copy(),
+		}
+	}
+
+	return &Map{
+		Pairs: pairs,
+	}
+}
+
+func (i *Map) Equals(v Object) bool {
+	bVal, ok := v.(*Map)
+	if !ok {
+		return false
+	}
+	if len(bVal.Pairs) != len(i.Pairs) {
+		return false
+	}
+	for key, elem := range bVal.Pairs {
+		value, ok := i.Pairs[key]
+		if !ok {
+			return false
+		}
+		if !elem.Key.Equals(value.Key) || elem.Value.Equals(value.Value) {
+			return false
+		}
+	}
+	return true
+}
+
 type Error struct {
+	EmptyObjImplementation
 	Message string
 }
 
 func (e *Error) Type() ObjectType { return ERROR_OBJ }
 func (e *Error) Inspect() string  { return e.Message }
+func (e *Error) Copy() Object     { return e }
 
 type BuiltinFunction func(args ...Object) Object
 
 type BuiltinFn struct {
+	EmptyObjImplementation
 	Fn BuiltinFunction
 }
 
@@ -201,6 +365,7 @@ func (b *BuiltinFn) Type() ObjectType { return BUILTIN_OBJ }
 func (b *BuiltinFn) Inspect() string  { return "builtin function" }
 
 type BuiltinConst struct {
+	EmptyObjImplementation
 	Const Object
 }
 
@@ -212,6 +377,7 @@ type Module = map[string]Object
 
 // proper module import with namespaces
 type BuiltInModule struct {
+	EmptyObjImplementation
 	Name  string
 	Attrs map[string]Object
 }
@@ -232,17 +398,22 @@ func (b *UserModule) Type() ObjectType { return USER_MODULE }
 
 func (b *UserModule) Inspect() string { return b.Name }
 
-type Skip struct{}
+type Skip struct {
+	EmptyObjImplementation
+}
 
 func (b *Skip) Type() ObjectType { return SKIP_OBJ }
 func (b *Skip) Inspect() string  { return "skip" }
 
-type Break struct{}
+type Break struct {
+	EmptyObjImplementation
+}
 
 func (b *Break) Type() ObjectType { return BREAK_OBJ }
 func (b *Break) Inspect() string  { return "skip" }
 
 type Struct struct {
+	EmptyObjImplementation
 	// Fields are both variable decl
 	Fields map[string]Object
 	// Methods are the builtin function that u can use from the struct
@@ -263,7 +434,22 @@ func (b *Struct) Inspect() string {
 	return out.String()
 }
 
+func (i *Struct) Copy() Object {
+	strct := &Struct{
+		Fields: make(map[string]Object),
+	}
+
+	for k, v := range i.Fields {
+		strct.Fields[k] = v.Copy()
+	}
+
+	strct.Methods = i.Methods
+
+	return strct
+}
+
 type StructInstance struct {
+	EmptyObjImplementation
 	// Fields are both variable decl
 	Fields map[string]Object
 	// Methods are the builtin function that u can use from the struct
@@ -284,6 +470,20 @@ func (b *StructInstance) Inspect() string {
 	return out.String()
 }
 
+func (i *StructInstance) Copy() Object {
+	strct := &StructInstance{
+		Fields: make(map[string]Object),
+	}
+
+	for k, v := range i.Fields {
+		strct.Fields[k] = v.Copy()
+	}
+
+	strct.Methods = i.Methods
+
+	return strct
+}
+
 func Cast(obj Object) (Object, bool) {
 	switch obj := obj.(type) {
 	case ItemObject:
@@ -292,65 +492,6 @@ func Cast(obj Object) (Object, bool) {
 		return obj.Object, obj.IsMutable
 	default:
 		return obj, true
-	}
-}
-
-func ObjectEquals(a, b Object) bool {
-	a, _ = Cast(a)
-	b, _ = Cast(b)
-	switch aVal := a.(type) {
-	case *Integer:
-		bVal, ok := b.(*Integer)
-		return ok && aVal.Value == bVal.Value
-	case *Boolean:
-		bVal, ok := b.(*Boolean)
-		return ok && aVal.Value == bVal.Value
-	case *String:
-		bVal, ok := b.(*String)
-		return ok && aVal.Value == bVal.Value
-	case *Float:
-		bVal, ok := b.(*Float)
-		return ok && aVal.Value == bVal.Value
-	case *Array:
-		bVal, ok := b.(*Array)
-		if !ok {
-			return false
-		}
-		if len(bVal.Elements) != len(aVal.Elements) {
-			return false
-		}
-		for idx, elem := range bVal.Elements {
-			value := aVal.Elements[idx]
-			if !ObjectEquals(elem, value) {
-				return false
-			}
-		}
-		return true
-	case *Map:
-		bVal, ok := b.(*Map)
-		if !ok {
-			return false
-		}
-		if len(bVal.Pairs) != len(aVal.Pairs) {
-			return false
-		}
-		for key, elem := range bVal.Pairs {
-			value, ok := aVal.Pairs[key]
-			if !ok {
-				return false
-			}
-			if !ObjectEquals(elem.Key, value.Key) {
-				return false
-			}
-			if !ObjectEquals(elem.Value, value.Value) {
-				return false
-			}
-		}
-		return true
-	// struct maybe something here
-	default:
-		// fallback: not equal
-		return false
 	}
 }
 
@@ -453,80 +594,12 @@ func ObjectTypesCheck(a, b Object) bool {
 	}
 }
 
-func DeepCopy(obj Object) Object {
-	switch val := obj.(type) {
-	case *Integer:
-		return &Integer{Value: val.Value}
-	case *String:
-		return &String{Value: val.Value}
-	case *Boolean:
-		return &Boolean{Value: val.Value}
-	case *Float:
-		return &Float{Value: val.Value}
-	case *Array:
-		elements := make([]Object, 0, len(val.Elements))
-		for _, elem := range val.Elements {
-			cast, _ := Cast(elem)
-			elements = append(elements, cast)
-		}
-		return &Array{Elements: elements}
-	case *Map:
-		pairs := make(PairsType, len(val.Pairs))
-		for i, elem := range val.Pairs {
-			key, _ := Cast(elem.Key)
-			value, _ := Cast(elem.Value)
-			pairs[i] = HashPair{
-				Key:   key,
-				Value: value,
-			}
-		}
-		return &Map{Pairs: pairs}
-	case *Struct, *StructInstance:
-		var fields map[string]Object
-		var methods map[string]Object
-
-		switch typed := val.(type) {
-		case *Struct:
-			fields = typed.Fields
-			methods = typed.Methods
-		case *StructInstance:
-			fields = typed.Fields
-			methods = typed.Methods
-		}
-
-		// Deep copy fields
-		copiedFields := make(map[string]Object, len(fields))
-		for k, v := range fields {
-			cast, _ := Cast(v)
-			copiedFields[k] = DeepCopy(cast)
-		}
-
-		// Return the same type as input
-		switch val.(type) {
-		case *Struct:
-			return &Struct{
-				Fields:  copiedFields,
-				Methods: methods,
-			}
-		case *StructInstance:
-			return &StructInstance{
-				Fields:  copiedFields,
-				Methods: methods,
-			}
-		}
-
-		return nil
-	default:
-		return val // For immutable or not-clonable types (like Error, etc.)
-	}
-}
-
 func UseCopyValueOrRef(obj Object) Object {
 	obj, _ = Cast(obj)
 	switch v := obj.(type) {
 	// means that this types are give u a deep copy of their value
 	case *Float, *Integer, *String, *Boolean:
-		return DeepCopy(v)
+		return v.Copy()
 
 	// means that this types are being shallow copied
 	case *Array, *Map, *Struct, *StructInstance:

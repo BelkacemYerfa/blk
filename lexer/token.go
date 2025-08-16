@@ -21,6 +21,7 @@ const (
 	TokenMatch  TokenKind = "match"
 	TokenReturn TokenKind = "return"
 	TokenImport TokenKind = "import"
+	TokenAs     TokenKind = "as"
 
 	// nul values
 	TokenNul TokenKind = "nul"
@@ -79,6 +80,7 @@ const (
 
 	// Var Types
 	TokenString TokenKind = "string"
+	TokenChar   TokenKind = "char" // represents a rune
 	TokenInt    TokenKind = "int"
 	TokenFloat  TokenKind = "float"
 	TokenBool   TokenKind = "bool"

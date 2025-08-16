@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 func NewLexer(filePath string, content string) *Lexer {
@@ -358,6 +359,8 @@ func (l *Lexer) NextToken() Token {
 		}
 	case TokenQuote:
 		return l.readString()
+	case TokenSingleQuote:
+		return l.readRune()
 	case TokenEOF:
 		l.readChar()
 		token.LiteralToken = LiteralToken{
@@ -459,6 +462,54 @@ func (l *Lexer) readString() Token {
 	return Token{
 		LiteralToken: LiteralToken{
 			Kind: TokenString,
+			Text: text,
+		},
+		Row: row,
+		Col: col,
+	}
+}
+
+func (l *Lexer) readRune() Token {
+	start := l.Cur + 1 // skip the opening quote
+	row, col := l.Row, l.Col
+
+	l.Cur++
+
+	for l.Cur < len(l.Content) && l.Content[l.Cur] != '\'' {
+		ch := l.Content[l.Cur]
+		if ch == '\n' {
+			return Token{
+				LiteralToken: LiteralToken{
+					Kind: TokenError,
+					Text: "rune literal isn't terminated",
+				},
+				Row: row,
+				Col: col,
+			}
+		}
+		l.readChar()
+	}
+
+	end := l.Cur
+	l.readChar() // consume the closing quote
+
+	text := string(l.Content[start:end])
+	// check if there are spaces
+	if utf8.RuneCountInString(text) != 1 {
+		// fmt.Println("lexer ", string(text))
+		return Token{
+			LiteralToken: LiteralToken{
+				Kind: TokenError,
+				Text: "illegal rune literal, contains spaces",
+			},
+			Row: row,
+			Col: col,
+		}
+	}
+
+	return Token{
+		LiteralToken: LiteralToken{
+			Kind: TokenChar,
 			Text: text,
 		},
 		Row: row,

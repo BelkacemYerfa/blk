@@ -17,6 +17,7 @@ var (
 		"in":     TokenIn,
 		"while":  TokenWhile,
 		"import": TokenImport,
+		"as":     TokenAs,
 		"return": TokenReturn,
 		"skip":   TokenSkip,
 		"break":  TokenBreak,

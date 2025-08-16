@@ -11,6 +11,8 @@ import (
 
 var (
 	NUL   = &object.Nul{}
+	Skip  = &object.Skip{}
+	Break = &object.Break{}
 	TRUE  = &object.Boolean{Value: true}
 	FALSE = &object.Boolean{Value: false}
 )
@@ -75,7 +77,14 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		return i.evalProgram(nd.Statements)
 
 	case *ast.ImportStatement:
-		if module, ok := i.cachedModules[nd.ModuleName.Value]; ok {
+		moduleName := nd.ModuleName.Value
+
+		// if the module was saved with the alias name
+		if nd.Alias != nil {
+			moduleName = nd.Alias.Value
+		}
+
+		if module, ok := i.cachedModules[moduleName]; ok {
 			return module
 		}
 
@@ -107,7 +116,10 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			IsBuiltIn: true,
 		}
 
-		i.env.Define(nd.ModuleName.Value, newModule)
+		// cache it first
+		i.cachedModules[moduleName] = newModule
+		// define it in the current env
+		i.env.Define(moduleName, newModule)
 
 	case *ast.StructExpression:
 		methods := make(map[string]object.Object, 0)
@@ -160,7 +172,7 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			return newError(ERROR, "to create a struct instance, u need to use a struct")
 		}
 
-		structDefCopy := object.DeepCopy(structDef).(*object.Struct)
+		structDefCopy := structDef.Copy().(*object.Struct)
 		copyOfStructDef := &object.StructInstance{
 			Fields:  structDefCopy.Fields,
 			Methods: structDef.Methods,
@@ -212,10 +224,14 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		return &object.String{
 			Value: nd.Value,
 		}
+	case *ast.CharLiteral:
+		return &object.Char{
+			Value: nd.Value,
+		}
 	case *ast.BooleanLiteral:
 		return nativeBooleanObject(nd.Value)
 	case *ast.NulLiteral:
-		return &object.Nul{}
+		return NUL
 
 	case *ast.RangePattern:
 		evalStart := i.Eval(nd.Start)
@@ -283,7 +299,7 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 				return newError(ERROR, "size of an array needs to of type INTEGER, got %s", evaluatedSize.Type())
 			}
 
-			size = int(object.DeepCopy(evaluatedSize).(*object.Integer).Value)
+			size = int(evaluatedSize.(*object.Integer).Value)
 
 			// verify if the current size matches the amount of element inside of array if it is initialized
 			if size < len(elements) {
@@ -314,10 +330,10 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		return i.evalForStatement(nd)
 
 	case *ast.SkipStatement:
-		return &object.Skip{}
+		return Skip
 
 	case *ast.BreakStatement:
-		return &object.Break{}
+		return Break
 
 	case *ast.VarDeclaration:
 		val := i.Eval(nd.Value)
@@ -397,7 +413,20 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 
 		// For && and || operators, don't evaluate right side yet - let evalBinaryExpression handle it
 		if nd.Operator == lexer.TokenAnd || nd.Operator == lexer.TokenOr {
-			return i.evalBinaryExpression(nd.Operator, nd.Left, nd.Right, left, nil)
+			switch nd.Operator {
+			case lexer.TokenAnd:
+				if !isTruthy(left) {
+					return FALSE // short-circuit
+				}
+				r := i.Eval(nd.Right) // Only evaluate right side if left is truthy
+				return nativeBooleanObject(isTruthy(r))
+			case lexer.TokenOr:
+				if isTruthy(left) {
+					return TRUE // short-circuit
+				}
+				r := i.Eval(nd.Left) // Only evaluate right side if left is falsy
+				return nativeBooleanObject(isTruthy(r))
+			}
 		}
 
 		right := i.Eval(nd.Right)
@@ -405,7 +434,7 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			return right
 		}
 
-		return i.evalBinaryExpression(nd.Operator, nd.Left, nd.Right, left, right)
+		return i.evalBinaryExpression(nd.Operator, left, right)
 
 	case *ast.AssignStatement:
 		leftResults := make([]LeftRes, 0)
@@ -499,7 +528,7 @@ func (i *Interpreter) evalExpressions(exps []ast.Expression, ableToCast bool) []
 		default:
 			// wrap it inside of ItemObject struct
 			argEval = object.ItemObject{
-				Object: object.DeepCopy(ev),
+				Object: ev.Copy(),
 				// means any param that gets passed to the func is mutable
 				// predefined values that u pass are not affected by this
 				IsMutable: true,
@@ -642,23 +671,21 @@ func (i *Interpreter) evalMapIndexExpression(hashMap, index object.Object) objec
 
 func (i *Interpreter) evalVarDeclaration(val object.Object, nd *ast.VarDeclaration) object.Object {
 	// this tells the interpreter that those type of values aren't allowed to be const
-	if val.Type() == object.NUL_OBJ {
-		if nd.Token.Kind == lexer.TokenConst {
-			return newError(ERROR, "%v isn't allowed to be an const, consts are only: ints, floats, strings, booleans", val.Type())
-		}
+	if val.Type() == object.NUL_OBJ && !nd.Mutable {
+		return newError(ERROR, "%v isn't allowed to be an const, consts are only: ints, floats, strings, booleans", val.Type())
 	}
 
 	// functions need to be declared as consts
-	if val.Type() == object.FUNCTION_OBJ && nd.Token.Kind != lexer.TokenConst {
+	if (val.Type() == object.FUNCTION_OBJ) && nd.Mutable {
 		return newError(ERROR, "functions are required to be declared as consts")
 	}
 
 	castedVal, _ := object.Cast(val)
-	isMutable := nd.Token.Text == lexer.TokenLet
+
 	switch v := castedVal.(type) {
 	case *object.Array:
 		// if it is a const mark all of the values as const
-		if !isMutable {
+		if !nd.Mutable {
 			for idx, elem := range v.Elements {
 				elem, _ = object.Cast(elem)
 				v.Elements[idx] = object.ItemObject{
@@ -668,7 +695,7 @@ func (i *Interpreter) evalVarDeclaration(val object.Object, nd *ast.VarDeclarati
 		}
 	case *object.Map:
 		// if it is a const mark all of the values as const
-		if !isMutable {
+		if !nd.Mutable {
 			for key, val := range v.Pairs {
 				elem, _ := object.Cast(val.Value)
 				v.Pairs[key] = object.HashPair{
@@ -683,7 +710,7 @@ func (i *Interpreter) evalVarDeclaration(val object.Object, nd *ast.VarDeclarati
 
 	newVal := object.ItemObject{
 		Object:    object.UseCopyValueOrRef(val),
-		IsMutable: isMutable,
+		IsMutable: nd.Mutable,
 	}
 
 	// for multi value assignment from functions
@@ -697,7 +724,7 @@ func (i *Interpreter) evalVarDeclaration(val object.Object, nd *ast.VarDeclarati
 		// this handles the declaration of multi values
 		for idx, ident := range nd.Name {
 			currentVarAssigned := object.ItemObject{
-				Object:    object.DeepCopy(returnValues[idx]),
+				Object:    returnValues[idx].Copy(),
 				IsMutable: newVal.IsMutable,
 			}
 			// define it in the scope
@@ -1176,22 +1203,7 @@ func (i *Interpreter) evalAssignment(left []LeftRes, right []object.Object) obje
 	return result // Return the result of the last assignment
 }
 
-func (i *Interpreter) evalBinaryExpression(op string, leftNode, rightNode ast.Expression, left, right object.Object) object.Object {
-
-	switch op {
-	case lexer.TokenAnd:
-		if !isTruthy(left) {
-			return FALSE // short-circuit
-		}
-		r := i.Eval(rightNode) // Only evaluate right side if left is truthy
-		return nativeBooleanObject(isTruthy(r))
-	case lexer.TokenOr:
-		if isTruthy(left) {
-			return TRUE // short-circuit
-		}
-		r := i.Eval(rightNode) // Only evaluate right side if left is falsy
-		return nativeBooleanObject(isTruthy(r))
-	}
+func (i *Interpreter) evalBinaryExpression(op string, left, right object.Object) object.Object {
 
 	switch {
 	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
@@ -1210,6 +1222,10 @@ func (i *Interpreter) evalBinaryExpression(op string, leftNode, rightNode ast.Ex
 	case left.Type() == object.STRING_OBJ || right.Type() == object.STRING_OBJ:
 		// allow addition with anything
 		return i.evalStringInfixExpression(op, left, right)
+
+	case left.Type() == object.CHAR_OBJ && right.Type() == object.CHAR_OBJ:
+		// allow addition on char only
+		return i.evalCharInfixExpression(op, left, right)
 
 	case left.Type() == object.NUL_OBJ || right.Type() == object.NUL_OBJ:
 		switch op {
@@ -1236,12 +1252,12 @@ func (i *Interpreter) evalBinaryExpression(op string, leftNode, rightNode ast.Ex
 }
 
 func (i *Interpreter) evalIntegerInfixExpression(op string, lt, rt object.Object) object.Object {
-	l, leftMutable := object.Cast(lt)
-	r, _ := object.Cast(rt)
+	lt, isLeftMutable := object.Cast(lt)
+	rt, _ = object.Cast(rt)
 
 	// cast them to integers
-	left := l.(*object.Integer)
-	right := r.(*object.Integer)
+	left := lt.(*object.Integer)
+	right := rt.(*object.Integer)
 
 	switch op {
 	// arithmetic operations
@@ -1283,13 +1299,11 @@ func (i *Interpreter) evalIntegerInfixExpression(op string, lt, rt object.Object
 		return nativeBooleanObject(left.Value == right.Value)
 
 	case lexer.TokenAssign:
-		if leftMutable {
-			left.Value = right.Value
-			return left
-		} else {
-			// error saying this can't be mutable
-			return newError(ERROR, "%v can't be mutate, since it was defined as const", left)
+		if !isLeftMutable {
+			return newError(ERROR, "can't assign right side to %v, since it is was defined as a const", left.Inspect())
 		}
+		left.Value = right.Value
+		return right
 
 	default:
 		return newError(ERROR, "unknown operator: %s %s %s",
@@ -1301,12 +1315,12 @@ func (i *Interpreter) evalIntegerInfixExpression(op string, lt, rt object.Object
 
 func (i *Interpreter) evalFloatInfixExpression(op string, lt, rt object.Object) object.Object {
 
-	l, leftMutable := object.Cast(lt)
-	r, _ := object.Cast(rt)
+	lt, isLeftMutable := object.Cast(lt)
+	rt, _ = object.Cast(rt)
 
 	// cast them to floats
 	lfValue := 0.0
-	switch left := l.(type) {
+	switch left := lt.(type) {
 	case *object.Float:
 		lfValue = left.Value
 	case *object.Integer:
@@ -1314,7 +1328,7 @@ func (i *Interpreter) evalFloatInfixExpression(op string, lt, rt object.Object) 
 	}
 
 	rgValue := 0.0
-	switch right := r.(type) {
+	switch right := rt.(type) {
 	case *object.Float:
 		rgValue = right.Value
 	case *object.Integer:
@@ -1351,17 +1365,23 @@ func (i *Interpreter) evalFloatInfixExpression(op string, lt, rt object.Object) 
 		return nativeBooleanObject(lfValue != rgValue)
 	case lexer.TokenEquals:
 		return nativeBooleanObject(lfValue == rgValue)
+
 	case lexer.TokenAssign:
-		left := l.(*object.Float)
-		right := r.(*object.Float)
-		if leftMutable {
-			left.Value = right.Value
-			return left
-		} else {
-			// error saying this can't be mutable
-			return newError(ERROR, "%v can't be mutate, since it was defined as const", left)
+		if !isLeftMutable {
+			return newError(ERROR, "can't assign right side to %v, since it is was defined as a const", lt.Inspect())
+		}
+		// both sides need to have the same type
+		if lt.Type() != rt.Type() && lt.Type() == object.FLOAT_OBJ {
+			return newError(ERROR, "type mismatch %s = %s", lt.Type(), rt.Type())
 		}
 
+		// cast both sides to float
+		left := lt.(*object.Float)
+		right := lt.(*object.Float)
+
+		left.Value = right.Value
+
+		return right
 	default:
 		return newError(ERROR, "unknown operator: %s %s %s",
 			lt.Type(), op, rt.Type())
@@ -1371,12 +1391,12 @@ func (i *Interpreter) evalFloatInfixExpression(op string, lt, rt object.Object) 
 
 func (i *Interpreter) evalBooleanInfixExpression(op string, lt, rt object.Object) object.Object {
 
-	l, _ := object.Cast(lt)
-	r, _ := object.Cast(rt)
+	lt, _ = object.Cast(lt)
+	rt, _ = object.Cast(rt)
 
 	// cast them to booleans
-	left := l.(*object.Boolean)
-	right := r.(*object.Boolean)
+	left := lt.(*object.Boolean)
+	right := rt.(*object.Boolean)
 
 	switch op {
 	case lexer.TokenEquals:
@@ -1408,6 +1428,37 @@ func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Ob
 	case lexer.TokenNotEquals:
 		return &object.Boolean{
 			Value: left.Inspect() != right.Inspect(),
+		}
+	}
+
+	return newError(ERROR, "Unsupported operator: %s %s %s",
+		left.Type(), op, right.Type())
+}
+
+func (i *Interpreter) evalCharInfixExpression(op string, lt, rt object.Object) object.Object {
+
+	l, _ := object.Cast(lt)
+	r, _ := object.Cast(rt)
+
+	// cast them to booleans
+	left := l.(*object.Char)
+	right := r.(*object.Char)
+
+	switch op {
+	case lexer.TokenPlus:
+		// cool do the concat
+		return &object.Char{
+			Value: left.Value + right.Value,
+		}
+
+	// comparison
+	case lexer.TokenEquals:
+		return &object.Boolean{
+			Value: left.Value != right.Value,
+		}
+	case lexer.TokenNotEquals:
+		return &object.Boolean{
+			Value: left.Value != right.Value,
 		}
 	}
 

@@ -55,9 +55,10 @@ func (p *Program) String() string {
 }
 
 type VarDeclaration struct {
-	Token lexer.Token // the token.LET token
-	Name  []*Identifier
-	Value Expression
+	Token   lexer.Token // the token.LET token
+	Mutable bool        // indicates if the vars are mutable or not
+	Name    []*Identifier
+	Value   Expression
 }
 
 func (ls *VarDeclaration) statementNode()        {}
@@ -82,6 +83,7 @@ func (ls *VarDeclaration) String() string {
 type ImportStatement struct {
 	Token      lexer.Token // the token.LET token
 	ModuleName *StringLiteral
+	Alias      *Identifier // alias for module name
 }
 
 func (ls *ImportStatement) statementNode()        {}
@@ -91,6 +93,9 @@ func (ls *ImportStatement) String() string {
 	var out bytes.Buffer
 	out.WriteString(ls.TokenLiteral() + " ")
 	out.WriteString(ls.ModuleName.String())
+	if ls.Alias != nil {
+		out.WriteString("as " + ls.Alias.String())
+	}
 	return out.String()
 }
 
@@ -409,6 +414,22 @@ func (sl *StringLiteral) String() string {
 	var out bytes.Buffer
 	out.WriteString(`"`)
 	out.WriteString(sl.Value)
+	out.WriteString(`"`)
+	return out.String()
+}
+
+type CharLiteral struct {
+	Token lexer.Token
+	Value rune
+}
+
+func (sl *CharLiteral) expressionNode()       {}
+func (sl *CharLiteral) TokenLiteral() string  { return sl.Token.Text }
+func (nt *CharLiteral) GetToken() lexer.Token { return nt.Token }
+func (sl *CharLiteral) String() string {
+	var out bytes.Buffer
+	out.WriteString(`"`)
+	out.WriteString(string(sl.Value))
 	out.WriteString(`"`)
 	return out.String()
 }
