@@ -7,6 +7,7 @@ import (
 	"blk/parser"
 	"blk/stdlib"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -487,54 +488,66 @@ func (i *Interpreter) evalModuleImport(nd *ast.ImportStatement) object.Object {
 		return module
 	}
 
-	if isModuleAPath {
-		cwd, _ := os.Getwd()
+	cwd, _ := os.Getwd()
+
+	// means that the module is builtin into the std
+	modulePath, ok := stdlib.BuiltinModules[nd.ModuleName.Value]
+	if !ok && !isModuleAPath {
+		return newError(ERROR, "Module Not found %s", nd.ModuleName)
+	}
+
+	if ok {
+		cwd = filepath.Join(cwd, modulePath)
+	} else {
 		cwd = filepath.Join(cwd, nd.ModuleName.Value)
+	}
 
-		// cycle detection
-		_, ok := i.loadingMods[cwd]
-		if ok {
-			moduleName, _ := os.Stat(i.path)
-			circularModule, _ := os.Stat(cwd)
-			return newError(ERROR, "circular dependency detected in module: %s, issue on %s import", moduleName.Name(), circularModule.Name())
+	// cycle detection
+	_, ok = i.loadingMods[cwd]
+	if ok {
+		moduleName, _ := os.Stat(i.path)
+		circularModule, _ := os.Stat(cwd)
+		return newError(ERROR, "circular dependency detected in module: %s, issue on %s import", moduleName.Name(), circularModule.Name())
+	}
+
+	i.loadingMods[cwd] = true
+	defer func() { i.loadingMods[cwd] = false }()
+
+	content, err := os.ReadFile(cwd)
+	if err != nil {
+		return newError(ERROR, err.Error())
+	}
+	l := lexer.NewLexer(cwd, string(content))
+	p := parser.NewParser(l.Tokenize(), cwd)
+	program := p.Parse()
+
+	tempEnv := object.NewEnvironment(nil)
+
+	moduleInterpreter := &Interpreter{
+		env:           tempEnv,
+		cachedModules: make(map[string]object.Object),
+		loadingMods:   i.loadingMods,
+		path:          cwd,
+	}
+
+	moduleEval := moduleInterpreter.Eval(program)
+
+	// check if the eval triggers any errors on imported module
+	if isError(moduleEval) {
+		return moduleEval
+	}
+
+	exports := make(map[string]object.Object)
+	for name, obj := range tempEnv.GetStore() {
+		// skip private imports
+		if strings.HasPrefix(name, "_") {
+			continue
 		}
+		// save the module as ItemObject type
+		exports[name] = obj
+	}
 
-		i.loadingMods[cwd] = true
-		defer func() { i.loadingMods[cwd] = false }()
-
-		content, err := os.ReadFile(cwd)
-		if err != nil {
-			return newError(ERROR, err.Error())
-		}
-		l := lexer.NewLexer(cwd, string(content))
-		p := parser.NewParser(l.Tokenize(), cwd)
-		program := p.Parse()
-
-		tempEnv := object.NewEnvironment(nil)
-		moduleInterpreter := &Interpreter{
-			env:           tempEnv,
-			cachedModules: make(map[string]object.Object),
-			loadingMods:   i.loadingMods,
-			path:          cwd,
-		}
-
-		moduleEval := moduleInterpreter.Eval(program)
-
-		// check if the eval triggers any errors on imported module
-		if isError(moduleEval) {
-			return moduleEval
-		}
-
-		exports := make(map[string]object.Object)
-		for name, obj := range tempEnv.GetStore() {
-			// skip private imports
-			if strings.HasPrefix(name, "_") {
-				continue
-			}
-			// save the module as ItemObject type
-			exports[name] = obj
-		}
-
+	if isModuleAPath {
 		newModule := object.ItemObject{
 			Object: &object.UserModule{
 				Name:  nd.ModuleName.Value,
@@ -549,30 +562,10 @@ func (i *Interpreter) evalModuleImport(nd *ast.ImportStatement) object.Object {
 		return nil
 	}
 
-	// means that the module is builtin into the std
-	module, ok := stdlib.BuiltinModules[nd.ModuleName.Value]
-	if !ok {
-		return newError(ERROR, "Module Not found %s", nd.ModuleName)
-	}
-	attrs := make(map[string]object.Object, len(module))
-
-	for name, fn := range module {
-		// means that this function is internal and can't be used
-		// doesn't make so much sense cause u can just not register them
-		if strings.HasPrefix(name, "_") {
-			continue
-		}
-		// register function so u it can be used
-		attrs[name] = object.ItemObject{
-			Object:    fn,
-			IsBuiltIn: true,
-		}
-	}
-
 	newModule := object.ItemObject{
 		Object: &object.BuiltInModule{
 			Name:  nd.ModuleName.Value,
-			Attrs: attrs,
+			Attrs: exports,
 		},
 		IsBuiltIn: true,
 	}
@@ -1284,6 +1277,8 @@ func (i *Interpreter) evalAssignment(left []LeftRes, right []object.Object) obje
 }
 
 func (i *Interpreter) evalBinaryExpression(op string, left, right object.Object) object.Object {
+	left, _ = object.Cast(left)
+	right, _ = object.Cast(right)
 
 	switch {
 	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
@@ -1332,8 +1327,6 @@ func (i *Interpreter) evalBinaryExpression(op string, left, right object.Object)
 }
 
 func (i *Interpreter) evalIntegerInfixExpression(op string, lt, rt object.Object) object.Object {
-	lt, isLeftMutable := object.Cast(lt)
-	rt, _ = object.Cast(rt)
 
 	// cast them to integers
 	left := lt.(*object.Integer)
@@ -1346,10 +1339,8 @@ func (i *Interpreter) evalIntegerInfixExpression(op string, lt, rt object.Object
 			Value: left.Value * right.Value,
 		}
 	case lexer.TokenSlash:
-		// needs to be this way so the output of math operations like pow work properly
-		res := float64(left.Value) / float64(right.Value)
-		return &object.Float{
-			Value: res,
+		return &object.Integer{
+			Value: left.Value / right.Value,
 		}
 	case lexer.TokenPlus:
 		return &object.Integer{
@@ -1378,13 +1369,6 @@ func (i *Interpreter) evalIntegerInfixExpression(op string, lt, rt object.Object
 	case lexer.TokenEquals:
 		return nativeBooleanObject(left.Value == right.Value)
 
-	case lexer.TokenAssign:
-		if !isLeftMutable {
-			return newError(ERROR, "can't assign right side to %v, since it is was defined as a const", left.Inspect())
-		}
-		left.Value = right.Value
-		return right
-
 	default:
 		return newError(ERROR, "unknown operator: %s %s %s",
 			left.Type(), op, right.Type())
@@ -1394,9 +1378,6 @@ func (i *Interpreter) evalIntegerInfixExpression(op string, lt, rt object.Object
 }
 
 func (i *Interpreter) evalFloatInfixExpression(op string, lt, rt object.Object) object.Object {
-
-	lt, isLeftMutable := object.Cast(lt)
-	rt, _ = object.Cast(rt)
 
 	// cast them to floats
 	lfValue := 0.0
@@ -1432,6 +1413,11 @@ func (i *Interpreter) evalFloatInfixExpression(op string, lt, rt object.Object) 
 		return &object.Float{
 			Value: lfValue - rgValue,
 		}
+	case lexer.TokenModule:
+		fmt.Println(math.Mod(lfValue, rgValue))
+		return &object.Float{
+			Value: math.Mod(lfValue, rgValue),
+		}
 
 	case lexer.TokenGreater:
 		return nativeBooleanObject(lfValue > rgValue)
@@ -1446,22 +1432,6 @@ func (i *Interpreter) evalFloatInfixExpression(op string, lt, rt object.Object) 
 	case lexer.TokenEquals:
 		return nativeBooleanObject(lfValue == rgValue)
 
-	case lexer.TokenAssign:
-		if !isLeftMutable {
-			return newError(ERROR, "can't assign right side to %v, since it is was defined as a const", lt.Inspect())
-		}
-		// both sides need to have the same type
-		if lt.Type() != rt.Type() && lt.Type() == object.FLOAT_OBJ {
-			return newError(ERROR, "type mismatch %s = %s", lt.Type(), rt.Type())
-		}
-
-		// cast both sides to float
-		left := lt.(*object.Float)
-		right := lt.(*object.Float)
-
-		left.Value = right.Value
-
-		return right
 	default:
 		return newError(ERROR, "unknown operator: %s %s %s",
 			lt.Type(), op, rt.Type())
@@ -1470,9 +1440,6 @@ func (i *Interpreter) evalFloatInfixExpression(op string, lt, rt object.Object) 
 }
 
 func (i *Interpreter) evalBooleanInfixExpression(op string, lt, rt object.Object) object.Object {
-
-	lt, _ = object.Cast(lt)
-	rt, _ = object.Cast(rt)
 
 	// cast them to booleans
 	left := lt.(*object.Boolean)
@@ -1517,12 +1484,9 @@ func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Ob
 
 func (i *Interpreter) evalCharInfixExpression(op string, lt, rt object.Object) object.Object {
 
-	l, _ := object.Cast(lt)
-	r, _ := object.Cast(rt)
-
 	// cast them to booleans
-	left := l.(*object.Char)
-	right := r.(*object.Char)
+	left := lt.(*object.Char)
+	right := rt.(*object.Char)
 
 	switch op {
 	case lexer.TokenPlus:

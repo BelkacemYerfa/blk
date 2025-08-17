@@ -121,15 +121,6 @@ func NewParser(tokens []lexer.Token, filepath string) *Parser {
 	p.registerInfix(lexer.TokenBracketOpen, p.parseIndexExpression)
 	p.registerInfix(lexer.TokenCurlyBraceOpen, p.parseCurlyBraceOpen)
 	p.registerInfix(lexer.TokenDot, p.parseMemberShipAccess)
-	p.registerInfix(lexer.TokenAssignMinus, p.parseAssignOperatorExpression)
-	p.registerInfix(lexer.TokenAssignPlus, p.parseAssignOperatorExpression)
-	p.registerInfix(lexer.TokenAssignModule, p.parseAssignOperatorExpression)
-	p.registerInfix(lexer.TokenAssignMultiply, p.parseAssignOperatorExpression)
-	p.registerInfix(lexer.TokenAssignSlash, p.parseAssignOperatorExpression)
-	p.registerInfix(lexer.TokenAssignOr, p.parseAssignOperatorExpression)
-	p.registerInfix(lexer.TokenAssignAnd, p.parseAssignOperatorExpression)
-	p.registerInfix(lexer.TokenAssignPlusOne, p.parseDoubleOperatorExpression)
-	p.registerInfix(lexer.TokenAssignMinusOne, p.parseDoubleOperatorExpression)
 
 	return &p
 }
@@ -239,14 +230,38 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		}
 
 		// go through the current tokens in the same line until u find :: or :=, if found go to parseBindExpression, otherwise parseExpression statement
+
+		// p.registerInfix(lexer.TokenAssignMinus, p.parseAssignOperatorExpression)
+		// p.registerInfix(lexer.TokenAssignPlus, p.parseAssignOperatorExpression)
+		// p.registerInfix(lexer.TokenAssignModule, p.parseAssignOperatorExpression)
+		// p.registerInfix(lexer.TokenAssignMultiply, p.parseAssignOperatorExpression)
+		// p.registerInfix(lexer.TokenAssignSlash, p.parseAssignOperatorExpression)
+		// p.registerInfix(lexer.TokenAssignOr, p.parseAssignOperatorExpression)
+		// p.registerInfix(lexer.TokenAssignAnd, p.parseAssignOperatorExpression)
+		// p.registerInfix(lexer.TokenAssignPlusOne, p.parseDoubleOperatorExpression)
+		// p.registerInfix(lexer.TokenAssignMinusOne, p.parseDoubleOperatorExpression)
+
+		lexerAssignOperator := []lexer.TokenKind{
+			lexer.TokenAssignSlash, lexer.TokenAssignMultiply, lexer.TokenAssignModule, lexer.TokenAssignMinus, lexer.TokenAssignPlus, lexer.TokenAssignOr, lexer.TokenAssignPlus,
+		}
+
+		lexerAssignPlusOperator := []lexer.TokenKind{
+			lexer.TokenAssignPlusOne, lexer.TokenAssignMinusOne,
+		}
+
+		lexerBindOperators := []lexer.TokenKind{
+			lexer.TokenAssign, lexer.TokenWalrus, lexer.TokenBind,
+		}
+
+		// merge all of them
+		breakToken := slices.Concat(lexerAssignOperator, lexerAssignPlusOperator, lexerBindOperators)
+
 		idx := 1
 		for idx < len(p.Tokens) {
 			token := p.lookToken(idx)
 
 			// Break on assignment operators
-			if token.Kind == lexer.TokenBind ||
-				token.Kind == lexer.TokenWalrus ||
-				token.Kind == lexer.TokenAssign {
+			if slices.Contains(breakToken, token.Kind) {
 				break
 			}
 
@@ -264,6 +279,14 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 
 		if p.lookToken(idx).Kind == lexer.TokenAssign {
 			return p.parseAssignStatement()
+		}
+
+		if slices.Contains(lexerAssignOperator, p.lookToken(idx).Kind) {
+			return p.parseAssignOperatorExpression()
+		}
+
+		if slices.Contains(lexerAssignPlusOperator, p.lookToken(idx).Kind) {
+			return p.parseDoubleOperatorExpression()
 		}
 
 		return p.parseExpressionStatement()
@@ -1261,50 +1284,54 @@ func (p *Parser) parseMemberShipAccess(left ast.Expression) ast.Expression {
 
 // this function is responsible to parsing the assign operator syntax
 // an example of this: index += 1 <=> index = index + 1
-func (p *Parser) parseAssignOperatorExpression(left ast.Expression) ast.Expression {
-	expr := &ast.BinaryExpression{Token: left.GetToken(), Left: left}
-	expr.Operator = "="
+func (p *Parser) parseAssignOperatorExpression() (*ast.AssignStatement, error) {
+	expr := &ast.AssignStatement{Token: p.currentToken()}
 
+	expr.Left = p.parsePrefixExpressionWrapper()
 	// get the operator, from the current op which can be something (+=,%=,..etc)
 	operator := strings.Split(p.currentToken().Text, "=")[0]
 	// consume the operator token
 	p.nextToken()
 	// parse the operator
-	expr.Right = &ast.BinaryExpression{
-		Token:    p.currentToken(),
-		Operator: operator,
-		Left:     left,
-		Right:    p.parseExpression(LOWEST),
+	expr.Right = []ast.Expression{
+		&ast.BinaryExpression{
+			Token:    p.currentToken(),
+			Operator: operator,
+			Left:     expr.Left[0],
+			Right:    p.parseExpression(LOWEST),
+		},
 	}
 
-	return expr
+	return expr, nil
 }
 
 // this function is responsible of parsing the double operator assign
 // an example of this : index++, index-- <=> index = index + 1
 // only support for (+,-) operators
-func (p *Parser) parseDoubleOperatorExpression(left ast.Expression) ast.Expression {
-	expr := &ast.BinaryExpression{Token: left.GetToken(), Left: left}
-	expr.Operator = "="
+func (p *Parser) parseDoubleOperatorExpression() (*ast.AssignStatement, error) {
+	expr := &ast.AssignStatement{Token: p.currentToken()}
 
+	expr.Left = p.parsePrefixExpressionWrapper()
 	// get the operator, from the current op which can be something (+=,%=,..etc)
 	operator := string(p.currentToken().Text[0])
 
 	// parse the operator
-	expr.Right = &ast.BinaryExpression{
-		Token:    p.currentToken(),
-		Operator: operator,
-		Left:     left,
-		// default of it this
-		Right: &ast.IntegerLiteral{
-			Value: 1,
+	expr.Right = []ast.Expression{
+		&ast.BinaryExpression{
+			Token:    p.currentToken(),
+			Operator: operator,
+			Left:     expr.Left[0],
+			// default of it this
+			Right: &ast.IntegerLiteral{
+				Value: 1,
+			},
 		},
 	}
 
 	// consume the operator token (++, --)
 	p.nextToken()
 
-	return expr
+	return expr, nil
 }
 
 func (p *Parser) parseBindExpression() (ast.Statement, error) {
