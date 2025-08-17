@@ -19,6 +19,10 @@ func NewEnvironment(outer *Environment) *Environment {
 	}
 }
 
+func (e *Environment) GetStore() map[string]ItemObject {
+	return e.store
+}
+
 func (e *Environment) Resolve(name string) (ItemObject, bool) {
 	obj, ok := e.store[name]
 	if !ok && e.outer != nil {

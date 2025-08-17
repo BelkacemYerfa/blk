@@ -36,7 +36,7 @@ func Start(in io.Reader, out io.Writer) {
 			}
 			continue
 		}
-		i := interpreter.NewInterpreter(env)
+		i := interpreter.NewInterpreter(env, "")
 		evaluated := i.Eval(program)
 		if evaluated != nil {
 			io.WriteString(out, evaluated.Inspect())

@@ -4,8 +4,11 @@ import (
 	"blk/ast"
 	"blk/lexer"
 	"blk/object"
+	"blk/parser"
 	"blk/stdlib"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -20,15 +23,21 @@ var (
 type Interpreter struct {
 	env           *object.Environment
 	cachedModules map[string]object.Object
+	loadingMods   map[string]bool // tracks modules being loaded
+	path          string
 }
 
-func NewInterpreter(env *object.Environment) *Interpreter {
+func NewInterpreter(env *object.Environment, path string) *Interpreter {
 	if env == nil {
 		env = object.NewEnvironment(nil)
 	}
+	loadingMods := make(map[string]bool)
+	loadingMods[path] = true
 	return &Interpreter{
 		env:           env,
 		cachedModules: make(map[string]object.Object),
+		loadingMods:   loadingMods,
+		path:          path,
 	}
 }
 
@@ -77,49 +86,7 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		return i.evalProgram(nd.Statements)
 
 	case *ast.ImportStatement:
-		moduleName := nd.ModuleName.Value
-
-		// if the module was saved with the alias name
-		if nd.Alias != nil {
-			moduleName = nd.Alias.Value
-		}
-
-		if module, ok := i.cachedModules[moduleName]; ok {
-			return module
-		}
-
-		// means that the module is builtin into the std
-		module, ok := stdlib.BuiltinModules[nd.ModuleName.Value]
-		if !ok {
-			return newError(ERROR, "Module Not found %s", nd.ModuleName)
-		}
-		attrs := make(map[string]object.Object, len(module))
-
-		for name, fn := range module {
-			// means that this function is internal and can't be used
-			// doesn't make so much sense cause u can just not register them
-			if strings.HasPrefix(name, "_") {
-				continue
-			}
-			// register function so u it can be used
-			attrs[name] = object.ItemObject{
-				Object:    fn,
-				IsBuiltIn: true,
-			}
-		}
-
-		newModule := object.ItemObject{
-			Object: &object.BuiltInModule{
-				Name:  nd.ModuleName.Value,
-				Attrs: attrs,
-			},
-			IsBuiltIn: true,
-		}
-
-		// cache it first
-		i.cachedModules[moduleName] = newModule
-		// define it in the current env
-		i.env.Define(moduleName, newModule)
+		return i.evalModuleImport(nd)
 
 	case *ast.StructExpression:
 		methods := make(map[string]object.Object, 0)
@@ -503,6 +470,119 @@ func (i *Interpreter) evalProgram(stmts []ast.Statement) object.Object {
 	}
 
 	return result
+}
+
+func (i *Interpreter) evalModuleImport(nd *ast.ImportStatement) object.Object {
+
+	isModuleAPath := strings.Contains(nd.ModuleName.Value, "/")
+
+	moduleName := nd.ModuleName.Value
+
+	// if the module was saved with the alias name
+	if nd.Alias != nil {
+		moduleName = nd.Alias.Value
+	}
+
+	if module, ok := i.cachedModules[moduleName]; ok {
+		return module
+	}
+
+	if isModuleAPath {
+		cwd, _ := os.Getwd()
+		cwd = filepath.Join(cwd, nd.ModuleName.Value)
+
+		// cycle detection
+		_, ok := i.loadingMods[cwd]
+		if ok {
+			moduleName, _ := os.Stat(i.path)
+			circularModule, _ := os.Stat(cwd)
+			return newError(ERROR, "circular dependency detected in module: %s, issue on %s import", moduleName.Name(), circularModule.Name())
+		}
+
+		i.loadingMods[cwd] = true
+		defer func() { i.loadingMods[cwd] = false }()
+
+		content, err := os.ReadFile(cwd)
+		if err != nil {
+			return newError(ERROR, err.Error())
+		}
+		l := lexer.NewLexer(cwd, string(content))
+		p := parser.NewParser(l.Tokenize(), cwd)
+		program := p.Parse()
+
+		tempEnv := object.NewEnvironment(nil)
+		moduleInterpreter := &Interpreter{
+			env:           tempEnv,
+			cachedModules: make(map[string]object.Object),
+			loadingMods:   i.loadingMods,
+			path:          cwd,
+		}
+
+		moduleEval := moduleInterpreter.Eval(program)
+
+		// check if the eval triggers any errors on imported module
+		if isError(moduleEval) {
+			return moduleEval
+		}
+
+		exports := make(map[string]object.Object)
+		for name, obj := range tempEnv.GetStore() {
+			// skip private imports
+			if strings.HasPrefix(name, "_") {
+				continue
+			}
+			// save the module as ItemObject type
+			exports[name] = obj
+		}
+
+		newModule := object.ItemObject{
+			Object: &object.UserModule{
+				Name:  nd.ModuleName.Value,
+				Attrs: exports,
+			},
+			IsBuiltIn: true,
+		}
+
+		i.cachedModules[moduleName] = newModule
+		i.env.Define(moduleName, newModule)
+
+		return nil
+	}
+
+	// means that the module is builtin into the std
+	module, ok := stdlib.BuiltinModules[nd.ModuleName.Value]
+	if !ok {
+		return newError(ERROR, "Module Not found %s", nd.ModuleName)
+	}
+	attrs := make(map[string]object.Object, len(module))
+
+	for name, fn := range module {
+		// means that this function is internal and can't be used
+		// doesn't make so much sense cause u can just not register them
+		if strings.HasPrefix(name, "_") {
+			continue
+		}
+		// register function so u it can be used
+		attrs[name] = object.ItemObject{
+			Object:    fn,
+			IsBuiltIn: true,
+		}
+	}
+
+	newModule := object.ItemObject{
+		Object: &object.BuiltInModule{
+			Name:  nd.ModuleName.Value,
+			Attrs: attrs,
+		},
+		IsBuiltIn: true,
+	}
+
+	// cache it first
+	i.cachedModules[moduleName] = newModule
+	// define it in the current env
+	i.env.Define(moduleName, newModule)
+
+	return nil
 }
 
 func nativeBooleanObject(val bool) *object.Boolean {
@@ -1522,6 +1602,36 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 			// invokes the call expression
 			ableToCast := function.(object.ItemObject).IsBuiltIn
 			args := i.evalExpressions(ownerProperty.Args, !ableToCast)
+			if len(args) == 1 && isError(args[0]) {
+				// error out
+				return args[0]
+			}
+			return i.applyFunction(function, args)
+
+		case *ast.Identifier:
+			// a given constant in a module
+			identifier, ok := owner.Attrs[ownerProperty.Value]
+			if !ok {
+				return newError(ERROR, "identifier doesn't exist on the module %s", ownerProperty.Value)
+			}
+			// no need for casting
+			return identifier
+
+		default:
+			return newError(ERROR, "property needs to be of type call expression or identifier, for now")
+		}
+
+	case *object.UserModule:
+		switch ownerProperty := property.(type) {
+		case *ast.CallExpression:
+			// search for the corresponding property call and invoke
+			function, ok := owner.Attrs[ownerProperty.Function.Value]
+			if !ok {
+				return newError(ERROR, "function doesn't exist on the module %s", owner.Name)
+			}
+			// invokes the call expression
+			// ableToCast := true
+			args := i.evalExpressions(ownerProperty.Args, true)
 			if len(args) == 1 && isError(args[0]) {
 				// error out
 				return args[0]

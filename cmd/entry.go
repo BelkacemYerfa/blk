@@ -173,7 +173,7 @@ func Run(args []string) {
 	// fmt.Println(ast)
 	// errCollector := internals.NewErrorCollector(tokens)
 
-	i := interpreter.NewInterpreter(nil)
+	i := interpreter.NewInterpreter(nil, targetFile)
 	evaluated := i.Eval(ast)
 
 	if evaluated != nil {

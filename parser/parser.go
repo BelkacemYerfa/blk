@@ -326,11 +326,9 @@ func (p *Parser) parseImportStatement() (*ast.ImportStatement, error) {
 
 	stmt.ModuleName = p.parseStringLiteral().(*ast.StringLiteral)
 
-	fmt.Println(p.currentToken())
 	if p.currentToken().Kind == lexer.TokenAs {
 		// alias for the namespace
 		p.nextToken()
-		fmt.Println(p.currentToken())
 		// bind the alias to it
 		ident := p.parseIdentifier()
 		if ident == nil {
@@ -721,7 +719,6 @@ func (p *Parser) parseStringLiteral() ast.Expression {
 func (p *Parser) parseCharLiteral() ast.Expression {
 	tok := p.nextToken()
 	code, _, _, err := strconv.UnquoteChar(tok.Text, '\'')
-	fmt.Println(code, err, tok.Text)
 	if err != nil {
 		p.Errors = append(p.Errors, p.error(tok, err.Error()))
 		return nil

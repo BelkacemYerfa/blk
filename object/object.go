@@ -390,6 +390,7 @@ func (b *BuiltInModule) Inspect() string { return b.Name }
 // user module, another file
 // TODO: structure to use for user modules
 type UserModule struct {
+	EmptyObjImplementation
 	Name  string
 	Attrs map[string]Object
 }
