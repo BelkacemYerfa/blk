@@ -125,7 +125,7 @@ func (i *EmptyObjImplementation) Equals(other Object) bool {
 }
 
 func (i *EmptyObjImplementation) Binary(op lexer.TokenKind, right Object) Object {
-	panic("Not Implemented")
+	panic(fmt.Sprint("Not Implemented", right))
 }
 
 type Integer struct {
@@ -553,20 +553,15 @@ func (b *Nul) Type() ObjectType { return NUL_OBJ }
 func (b *Nul) Inspect() string  { return "nul" }
 func (i *Nul) Copy() Object     { return i }
 func (i *Nul) Binary(op lexer.TokenKind, r Object) Object {
-	switch r := r.(type) {
-	case *Nul:
-		switch op {
-		case lexer.TokenEquals:
-			return nativeBooleanObject(i == r)
-		case lexer.TokenNotEquals:
-			return nativeBooleanObject(i != r)
+	switch op {
+	case lexer.TokenEquals:
+		return nativeBooleanObject(i == r)
+	case lexer.TokenNotEquals:
+		return nativeBooleanObject(i != r)
 
-		default:
-			// error
-		}
+	default:
+		return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
 	}
-
-	return nil
 }
 
 type ReturnValue struct {
@@ -862,6 +857,23 @@ func (i *StructInstance) Copy() Object {
 	strct.Methods = i.Methods
 
 	return strct
+}
+
+func (i *StructInstance) Binary(op lexer.TokenKind, right Object) Object {
+	switch r := right.(type) {
+	case *Nul:
+		switch op {
+		case lexer.TokenEquals:
+			return FALSE
+		case lexer.TokenNotEquals:
+			return TRUE
+
+		default:
+			return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
+		}
+	default:
+		return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
+	}
 }
 
 func Cast(obj Object) (Object, bool) {

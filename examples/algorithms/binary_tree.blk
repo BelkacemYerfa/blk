@@ -1,3 +1,5 @@
+import "fmt"
+
 # Binary Tree Implementation
 TreeNode :: struct {
     value := 0,
@@ -20,6 +22,35 @@ TreeNode :: struct {
         }
     },
 
+    delete: fn(self, val) {
+        if self.value == val {
+            if self.left == nul && self.right == nul {
+                return nul
+            }
+
+            if self.left == nul {
+                return self.right
+            }
+
+            if self.right == nul {
+                return self.left
+            }
+
+            minValue := self.right.findMin()
+            self.value = minValue
+            self.right = self.right.delete(minValue)
+            return self
+        }
+
+        if val < self.value && self.left != nul {
+            self.left = self.left.delete(val)
+        } else if val > self.value && self.right != nul {
+            self.right = self.right.delete(val)
+        }
+
+        return self
+    },
+
     search: fn(self, val) {
         if self.value == val {
             return true
@@ -38,14 +69,14 @@ TreeNode :: struct {
         if self.left != nul {
             self.left.inOrderTraversal()
         }
-        print("Node value: ", self.value)
+        fmt.println("Node value: ", self.value)
         if self.right != nul {
             self.right.inOrderTraversal()
         }
     },
 
     preOrderTraversal: fn(self) {
-        print("Node value: ", self.value)
+        fmt.println("Node value: ", self.value)
         if self.left != nul {
             self.left.preOrderTraversal()
         }
@@ -61,7 +92,7 @@ TreeNode :: struct {
         if self.right != nul {
             self.right.postOrderTraversal()
         }
-        print("Node value: ", self.value)
+        fmt.println("Node value: ", self.value)
     },
 
     findMin: fn(self) {
@@ -89,19 +120,20 @@ tree.insert(20)
 tree.insert(40)
 tree.insert(60)
 tree.insert(80)
+tree.delete(80)
 
 
-print("In-order traversal:")
+fmt.println("In-order traversal:")
 tree.inOrderTraversal()
 
-print("Pre-order traversal:")
+fmt.println("Pre-order traversal:")
 tree.preOrderTraversal()
 
-print("Post-order traversal:")
+fmt.println("Post-order traversal:")
 tree.postOrderTraversal()
 
-print("Searching for 40: ", tree.search(40))
-print("Searching for 100: ", tree.search(100))
+fmt.println("Searching for 40: ", tree.search(40))
+fmt.println("Searching for 100: ", tree.search(100))
 
-print("Minimum value: ", tree.findMin())
-print("Maximum value: ", tree.findMax())
+fmt.println("Minimum value: ", tree.findMin())
+fmt.println("Maximum value: ", tree.findMax())

@@ -1174,7 +1174,8 @@ func (i *Interpreter) evalAssignment(left []LeftRes, right []object.Object) obje
 
 		// Type compatibility check
 		// for nul value, u can assign it with what u want, then u need to respect the type rule that you're going to have
-		if leftObj.Type() != rightObj.Type() && leftObj.Type() != object.NUL_OBJ {
+		// a value can be nullified if it has a certain value attached to it whatever the value is
+		if leftObj.Type() != rightObj.Type() && leftObj.Type() != object.NUL_OBJ && rightObj.Type() != object.NUL_OBJ {
 			return newError(ERROR, "type mismatch: can't assign %s to %s",
 				rightObj.Type(), leftObj.Type())
 		}
@@ -1263,8 +1264,7 @@ func (i *Interpreter) evalBinaryExpression(op string, left, right object.Object)
 	// Check if either operand is a type that doesn't support binary operations
 	if left.Type() == object.ARRAY_OBJ || left.Type() == object.MAP_OBJ ||
 		right.Type() == object.ARRAY_OBJ || right.Type() == object.MAP_OBJ ||
-		left.Type() == object.STRUCT_OBJ || left.Type() == object.STRUCT_INSTANCE_OBJ ||
-		right.Type() == object.STRUCT_OBJ || right.Type() == object.STRUCT_INSTANCE_OBJ ||
+		left.Type() == object.STRUCT_OBJ || right.Type() == object.STRUCT_OBJ ||
 		left.Type() == object.FUNCTION_OBJ || right.Type() == object.FUNCTION_OBJ {
 		return newError(ERROR, "binary operations not supported on types: %s %s %s",
 			left.Type(), op, right.Type())

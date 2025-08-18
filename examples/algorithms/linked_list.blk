@@ -1,3 +1,5 @@
+import "fmt"
+
 # linked list implementation
 LinkedList :: struct {
     value := 0,
@@ -24,7 +26,7 @@ LinkedList :: struct {
     },
 
     traverse: fn(self) {
-      print("Node: ", self.value)
+      fmt.println("Node: ", self.value)
       if self.next != nul {
         self.next.traverse()
       }
@@ -43,8 +45,8 @@ linkedList.insert(60)
 linkedList.insert(80)
 
 
-print("Traverse:")
+fmt.println("Traverse:")
 linkedList.traverse()
 
-print("Searching for 40: ", linkedList.search(40))
-print("Searching for 100: ", linkedList.search(100))
+fmt.println("Searching for 40: ", linkedList.search(40))
+fmt.println("Searching for 100: ", linkedList.search(100))

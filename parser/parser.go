@@ -937,7 +937,6 @@ func (p *Parser) parseIfExpression() ast.Expression {
 		expr.Alternative = &ast.BlockStatement{
 			Body: []ast.Statement{exprStmt},
 		}
-		fmt.Println(expr)
 	} else {
 		if !p.expect([]lexer.TokenKind{lexer.TokenCurlyBraceOpen}) {
 			p.Errors = append(p.Errors, p.error(p.currentToken(), "expected close curly brace ( } ), got shit"))

@@ -1,4 +1,5 @@
 import "array"
+import "fmt"
 
 # reference: https://en.wikipedia.org/wiki/Rule_110
 
@@ -39,11 +40,11 @@ apply_rule_110 :: fn(cells) {
 main :: fn() {
     # Initial state
     cells := [0, 1, 0, 1 , 0, 0, 1, 0, 0, 0]
-    print("Initial cells:  " + cells)
+    fmt.println("Initial cells:  " , cells)
 
     # Apply Rule 110
     new_cells := apply_rule_110(cells)
-    print("Updated cells:  " + new_cells)
+    fmt.println("Updated cells:  " , new_cells)
 }
 
 main()
