@@ -234,6 +234,12 @@ func (l *Lexer) NextToken() Token {
 				Text: "/",
 			}
 		}
+	case TokenQuestion:
+		l.readChar()
+		token.LiteralToken = LiteralToken{
+			Kind: TokenQuestion,
+			Text: "?",
+		}
 	case TokenExclamation:
 		l.readChar()
 		equalChar := string(l.Content[l.Cur])

@@ -11,6 +11,7 @@ var (
 		"enum":   TokenEnum,
 		"if":     TokenIf,
 		"else":   TokenElse,
+		"use":    TokenUse,
 		"match":  TokenMatch,
 		"fn":     TokenFn,
 		"for":    TokenFor,

@@ -16,6 +16,7 @@ const (
 	TokenWhile  TokenKind = "while"
 	TokenSkip   TokenKind = "skip"
 	TokenBreak  TokenKind = "break"
+	TokenUse    TokenKind = "use"
 	TokenIf     TokenKind = "if"
 	TokenElse   TokenKind = "else"
 	TokenMatch  TokenKind = "match"
@@ -39,6 +40,7 @@ const (
 	TokenComma           TokenKind = ","
 	TokenDot             TokenKind = "."
 	TokenRange           TokenKind = ".."
+	TokenQuestion        TokenKind = "?"
 
 	// Arithmetic Operators
 	TokenMinus          TokenKind = "-"

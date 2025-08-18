@@ -104,11 +104,23 @@ Result :: enum {
 ### If expressions
 
 ```blk
+# regular if
 name := if loggedIn {
     "User"
 } else {
     "Guest"
 }
+
+# ternary-like if
+
+user := User{ name: "Alice", age: 22 }
+
+# with use/else tokens
+age := if user.age > 18 use "Adult" else "Minor"
+
+# with ?/: tokens
+age := if user.age > 18 ? "Adult" : "Minor"
+
 ```
 
 ### Match expressions

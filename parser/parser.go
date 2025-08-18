@@ -167,8 +167,8 @@ func (p *Parser) expect(kinds []lexer.TokenKind) bool {
 	return true
 }
 
-func (p *Parser) error(tok lexer.Token, msg string) error {
-	errMsg := fmt.Sprintf("\033[1;90m%s:%d:%d:\033[0m ERROR: %s", p.FilePath, tok.Row, tok.Col, msg)
+func (p *Parser) error(tok lexer.Token, msg ...interface{}) error {
+	errMsg := fmt.Sprintf("\033[1;90m%s:%d:%d:\033[0m ERROR: %s", p.FilePath, tok.Row, tok.Col, fmt.Sprint(msg...))
 
 	return errors.New(errMsg)
 }
@@ -913,29 +913,54 @@ func (p *Parser) parseIfExpression() ast.Expression {
 		return elem == "if-mode"
 	})
 
-	if !p.expect([]lexer.TokenKind{lexer.TokenCurlyBraceOpen}) {
-		p.Errors = append(p.Errors, p.error(p.currentToken(), "expected close curly brace ( } ), got shit"))
-		return nil
-	}
-
-	expr.Consequence = p.parseBlockStatement().(*ast.BlockStatement)
-
-	tok := p.nextToken()
-
-	// check if there is an else stmt
-	if tok.Kind == lexer.TokenElse {
-		tok = p.currentToken()
-		// support for else if
-		if tok.Kind == lexer.TokenIf {
-			expr.Alternative = p.parseIfExpression()
-		} else {
-			if !p.expect([]lexer.TokenKind{lexer.TokenCurlyBraceOpen}) {
-				return nil
-			}
-			expr.Alternative = p.parseBlockStatement()
+	// look ahead to the next token
+	if p.currentToken().Kind == lexer.TokenQuestion || p.currentToken().Kind == lexer.TokenUse {
+		// do something
+		p.nextToken() // consume the ?
+		exprStmt, err := p.parseExpressionStatement()
+		if err != nil {
+			return nil
 		}
+		expr.Consequence = &ast.BlockStatement{
+			Body: []ast.Statement{exprStmt},
+		}
+		tok := p.nextToken()
+		if tok.Kind != lexer.TokenColon && tok.Kind != lexer.TokenElse {
+			p.Errors = append(p.Errors, p.error(p.currentToken(), "expected else or : as following token for the ternary definition, got ", tok.Kind))
+			return nil
+		}
+		// fill the alternative case
+		exprStmt, err = p.parseExpressionStatement()
+		if err != nil {
+			return nil
+		}
+		expr.Alternative = &ast.BlockStatement{
+			Body: []ast.Statement{exprStmt},
+		}
+		fmt.Println(expr)
 	} else {
-		p.Pos--
+		if !p.expect([]lexer.TokenKind{lexer.TokenCurlyBraceOpen}) {
+			p.Errors = append(p.Errors, p.error(p.currentToken(), "expected close curly brace ( } ), got shit"))
+			return nil
+		}
+		expr.Consequence = p.parseBlockStatement().(*ast.BlockStatement)
+		tok := p.nextToken()
+
+		// check if there is an else stmt
+		if tok.Kind == lexer.TokenElse {
+			tok = p.currentToken()
+			// support for else if
+			if tok.Kind == lexer.TokenIf {
+				expr.Alternative = p.parseIfExpression()
+			} else {
+				if !p.expect([]lexer.TokenKind{lexer.TokenCurlyBraceOpen}) {
+					return nil
+				}
+				expr.Alternative = p.parseBlockStatement()
+			}
+		} else {
+			p.Pos--
+		}
 	}
 
 	return expr
