@@ -7,18 +7,14 @@ import (
 	"blk/parser"
 	"blk/stdlib"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
 var (
-	NUL   = &object.Nul{}
 	Skip  = &object.Skip{}
 	Break = &object.Break{}
-	TRUE  = &object.Boolean{Value: true}
-	FALSE = &object.Boolean{Value: false}
 )
 
 type Interpreter struct {
@@ -199,7 +195,7 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 	case *ast.BooleanLiteral:
 		return nativeBooleanObject(nd.Value)
 	case *ast.NulLiteral:
-		return NUL
+		return object.NUL
 
 	case *ast.RangePattern:
 		evalStart := i.Eval(nd.Start)
@@ -383,17 +379,17 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		if nd.Operator == lexer.TokenAnd || nd.Operator == lexer.TokenOr {
 			switch nd.Operator {
 			case lexer.TokenAnd:
-				if !isTruthy(left) {
-					return FALSE // short-circuit
+				if !object.IsTruthy(left) {
+					return object.FALSE // short-circuit
 				}
 				r := i.Eval(nd.Right) // Only evaluate right side if left is truthy
-				return nativeBooleanObject(isTruthy(r))
+				return nativeBooleanObject(object.IsTruthy(r))
 			case lexer.TokenOr:
-				if isTruthy(left) {
-					return TRUE // short-circuit
+				if object.IsTruthy(left) {
+					return object.TRUE // short-circuit
 				}
 				r := i.Eval(nd.Left) // Only evaluate right side if left is falsy
-				return nativeBooleanObject(isTruthy(r))
+				return nativeBooleanObject(object.IsTruthy(r))
 			}
 		}
 
@@ -488,66 +484,58 @@ func (i *Interpreter) evalModuleImport(nd *ast.ImportStatement) object.Object {
 		return module
 	}
 
-	cwd, _ := os.Getwd()
-
-	// means that the module is builtin into the std
-	modulePath, ok := stdlib.BuiltinModules[nd.ModuleName.Value]
-	if !ok && !isModuleAPath {
-		return newError(ERROR, "Module Not found %s", nd.ModuleName)
-	}
-
-	if ok {
-		cwd = filepath.Join(cwd, modulePath)
-	} else {
-		cwd = filepath.Join(cwd, nd.ModuleName.Value)
-	}
-
-	// cycle detection
-	_, ok = i.loadingMods[cwd]
-	if ok {
-		moduleName, _ := os.Stat(i.path)
-		circularModule, _ := os.Stat(cwd)
-		return newError(ERROR, "circular dependency detected in module: %s, issue on %s import", moduleName.Name(), circularModule.Name())
-	}
-
-	i.loadingMods[cwd] = true
-	defer func() { i.loadingMods[cwd] = false }()
-
-	content, err := os.ReadFile(cwd)
-	if err != nil {
-		return newError(ERROR, err.Error())
-	}
-	l := lexer.NewLexer(cwd, string(content))
-	p := parser.NewParser(l.Tokenize(), cwd)
-	program := p.Parse()
-
-	tempEnv := object.NewEnvironment(nil)
-
-	moduleInterpreter := &Interpreter{
-		env:           tempEnv,
-		cachedModules: make(map[string]object.Object),
-		loadingMods:   i.loadingMods,
-		path:          cwd,
-	}
-
-	moduleEval := moduleInterpreter.Eval(program)
-
-	// check if the eval triggers any errors on imported module
-	if isError(moduleEval) {
-		return moduleEval
-	}
-
-	exports := make(map[string]object.Object)
-	for name, obj := range tempEnv.GetStore() {
-		// skip private imports
-		if strings.HasPrefix(name, "_") {
-			continue
-		}
-		// save the module as ItemObject type
-		exports[name] = obj
-	}
-
 	if isModuleAPath {
+
+		cwd, _ := os.Getwd()
+		cwd = filepath.Join(cwd, nd.ModuleName.Value)
+
+		// means that the module is builtin into the std
+
+		// cycle detection
+		_, ok := i.loadingMods[cwd]
+		if ok {
+			moduleName, _ := os.Stat(i.path)
+			circularModule, _ := os.Stat(cwd)
+			return newError(ERROR, "circular dependency detected in module: %s, issue on %s import", moduleName.Name(), circularModule.Name())
+		}
+
+		i.loadingMods[cwd] = true
+		defer func() { i.loadingMods[cwd] = false }()
+
+		content, err := os.ReadFile(cwd)
+		if err != nil {
+			return newError(ERROR, err.Error())
+		}
+		l := lexer.NewLexer(cwd, string(content))
+		p := parser.NewParser(l.Tokenize(), cwd)
+		program := p.Parse()
+
+		tempEnv := object.NewEnvironment(nil)
+
+		moduleInterpreter := &Interpreter{
+			env:           tempEnv,
+			cachedModules: make(map[string]object.Object),
+			loadingMods:   i.loadingMods,
+			path:          cwd,
+		}
+
+		moduleEval := moduleInterpreter.Eval(program)
+
+		// check if the eval triggers any errors on imported module
+		if isError(moduleEval) {
+			return moduleEval
+		}
+
+		exports := make(map[string]object.Object)
+		for name, obj := range tempEnv.GetStore() {
+			// skip private imports
+			if strings.HasPrefix(name, "_") {
+				continue
+			}
+			// save the module as ItemObject type
+			exports[name] = obj
+		}
+
 		newModule := object.ItemObject{
 			Object: &object.UserModule{
 				Name:  nd.ModuleName.Value,
@@ -562,10 +550,15 @@ func (i *Interpreter) evalModuleImport(nd *ast.ImportStatement) object.Object {
 		return nil
 	}
 
+	module, ok := stdlib.BuiltinModules[nd.ModuleName.Value]
+	if !ok && !isModuleAPath {
+		return newError(ERROR, "Module Not found %s", nd.ModuleName)
+	}
+
 	newModule := object.ItemObject{
 		Object: &object.BuiltInModule{
 			Name:  nd.ModuleName.Value,
-			Attrs: exports,
+			Attrs: module,
 		},
 		IsBuiltIn: true,
 	}
@@ -580,9 +573,9 @@ func (i *Interpreter) evalModuleImport(nd *ast.ImportStatement) object.Object {
 
 func nativeBooleanObject(val bool) *object.Boolean {
 	if val {
-		return TRUE
+		return object.TRUE
 	}
-	return FALSE
+	return object.FALSE
 }
 
 func (i *Interpreter) evalExpressions(exps []ast.Expression, ableToCast bool) []object.Object {
@@ -1051,7 +1044,7 @@ func (i *Interpreter) evalWhileStatement(nd *ast.WhileStatement) object.Object {
 
 	condition, _ = object.Cast(condition)
 
-	for isTruthy(condition) {
+	for object.IsTruthy(condition) {
 		res := i.Eval(nd.Body)
 		if res != nil {
 			switch res.Type() {
@@ -1075,19 +1068,6 @@ func (i *Interpreter) evalWhileStatement(nd *ast.WhileStatement) object.Object {
 
 	// maybe
 	return nil
-}
-
-func isTruthy(obj object.Object) bool {
-	switch obj {
-	case NUL:
-		return false
-	case TRUE:
-		return true
-	case FALSE:
-		return false
-	default:
-		return true
-	}
 }
 
 func (i *Interpreter) evalIfExpression(nd *ast.IfExpression) object.Object {
@@ -1142,13 +1122,13 @@ func (i *Interpreter) evalBangOperatorExpression(right object.Object) *object.Bo
 
 	switch rt := rt.(type) {
 	case *object.Nul:
-		return TRUE
+		return object.TRUE
 	case *object.Boolean:
 		if rt.Value {
-			return FALSE
+			return object.FALSE
 		}
 
-		return TRUE
+		return object.TRUE
 	}
 
 	return nil
@@ -1280,234 +1260,17 @@ func (i *Interpreter) evalBinaryExpression(op string, left, right object.Object)
 	left, _ = object.Cast(left)
 	right, _ = object.Cast(right)
 
-	switch {
-	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
-		return i.evalIntegerInfixExpression(op, left, right)
-
-	// this allows arithmetic operation / comparison on floats & integers
-	case (left.Type() == object.INTEGER_OBJ || left.Type() == object.FLOAT_OBJ) &&
-		(right.Type() == object.INTEGER_OBJ || right.Type() == object.FLOAT_OBJ):
-		return i.evalFloatInfixExpression(op, left, right)
-
-	case left.Type() == object.BOOLEAN_OBJ && right.Type() == object.BOOLEAN_OBJ:
-		// this not allowed at all (no operations on booleans)
-		// the only op allowed are (&&, ||)
-		return i.evalBooleanInfixExpression(op, left, right)
-
-	case left.Type() == object.STRING_OBJ || right.Type() == object.STRING_OBJ:
-		// allow addition with anything
-		return i.evalStringInfixExpression(op, left, right)
-
-	case left.Type() == object.CHAR_OBJ && right.Type() == object.CHAR_OBJ:
-		// allow addition on char only
-		return i.evalCharInfixExpression(op, left, right)
-
-	case left.Type() == object.NUL_OBJ || right.Type() == object.NUL_OBJ:
-		switch op {
-		case lexer.TokenEquals:
-			return nativeBooleanObject(left == right)
-		case lexer.TokenNotEquals:
-			return nativeBooleanObject(left != right)
-
-		default:
-			// error
-			return newError(ERROR, "Unsupported operator: %s %s %s",
-				left.Type(), op, right.Type())
-		}
-
-	case left.Type() != right.Type():
-		return newError(ERROR, "type mismatch: %s %s %s",
-			left.Type(), op, right.Type())
-
-	default:
-		return newError(ERROR, "unknown operator: %s %s %s",
+	// Check if either operand is a type that doesn't support binary operations
+	if left.Type() == object.ARRAY_OBJ || left.Type() == object.MAP_OBJ ||
+		right.Type() == object.ARRAY_OBJ || right.Type() == object.MAP_OBJ ||
+		left.Type() == object.STRUCT_OBJ || left.Type() == object.STRUCT_INSTANCE_OBJ ||
+		right.Type() == object.STRUCT_OBJ || right.Type() == object.STRUCT_INSTANCE_OBJ ||
+		left.Type() == object.FUNCTION_OBJ || right.Type() == object.FUNCTION_OBJ {
+		return newError(ERROR, "binary operations not supported on types: %s %s %s",
 			left.Type(), op, right.Type())
 	}
 
-}
-
-func (i *Interpreter) evalIntegerInfixExpression(op string, lt, rt object.Object) object.Object {
-
-	// cast them to integers
-	left := lt.(*object.Integer)
-	right := rt.(*object.Integer)
-
-	switch op {
-	// arithmetic operations
-	case lexer.TokenMultiply:
-		return &object.Integer{
-			Value: left.Value * right.Value,
-		}
-	case lexer.TokenSlash:
-		return &object.Integer{
-			Value: left.Value / right.Value,
-		}
-	case lexer.TokenPlus:
-		return &object.Integer{
-			Value: left.Value + right.Value,
-		}
-	case lexer.TokenMinus:
-		return &object.Integer{
-			Value: left.Value - right.Value,
-		}
-	case lexer.TokenModule:
-		return &object.Integer{
-			Value: left.Value % right.Value,
-		}
-
-		// comparison operators
-	case lexer.TokenGreater:
-		return nativeBooleanObject(left.Value > right.Value)
-	case lexer.TokenGreaterOrEqual:
-		return nativeBooleanObject(left.Value >= right.Value)
-	case lexer.TokenLess:
-		return nativeBooleanObject(left.Value < right.Value)
-	case lexer.TokenLessOrEqual:
-		return nativeBooleanObject(left.Value <= right.Value)
-	case lexer.TokenNotEquals:
-		return nativeBooleanObject(left.Value != right.Value)
-	case lexer.TokenEquals:
-		return nativeBooleanObject(left.Value == right.Value)
-
-	default:
-		return newError(ERROR, "unknown operator: %s %s %s",
-			left.Type(), op, right.Type())
-
-	}
-
-}
-
-func (i *Interpreter) evalFloatInfixExpression(op string, lt, rt object.Object) object.Object {
-
-	// cast them to floats
-	lfValue := 0.0
-	switch left := lt.(type) {
-	case *object.Float:
-		lfValue = left.Value
-	case *object.Integer:
-		lfValue = float64(left.Value)
-	}
-
-	rgValue := 0.0
-	switch right := rt.(type) {
-	case *object.Float:
-		rgValue = right.Value
-	case *object.Integer:
-		rgValue = float64(right.Value)
-	}
-
-	switch op {
-	case lexer.TokenMultiply:
-		return &object.Float{
-			Value: lfValue * rgValue,
-		}
-	case lexer.TokenSlash:
-		return &object.Float{
-			Value: lfValue / rgValue,
-		}
-	case lexer.TokenPlus:
-		return &object.Float{
-			Value: lfValue + rgValue,
-		}
-	case lexer.TokenMinus:
-		return &object.Float{
-			Value: lfValue - rgValue,
-		}
-	case lexer.TokenModule:
-		fmt.Println(math.Mod(lfValue, rgValue))
-		return &object.Float{
-			Value: math.Mod(lfValue, rgValue),
-		}
-
-	case lexer.TokenGreater:
-		return nativeBooleanObject(lfValue > rgValue)
-	case lexer.TokenGreaterOrEqual:
-		return nativeBooleanObject(lfValue >= rgValue)
-	case lexer.TokenLess:
-		return nativeBooleanObject(lfValue < rgValue)
-	case lexer.TokenLessOrEqual:
-		return nativeBooleanObject(lfValue <= rgValue)
-	case lexer.TokenNotEquals:
-		return nativeBooleanObject(lfValue != rgValue)
-	case lexer.TokenEquals:
-		return nativeBooleanObject(lfValue == rgValue)
-
-	default:
-		return newError(ERROR, "unknown operator: %s %s %s",
-			lt.Type(), op, rt.Type())
-	}
-
-}
-
-func (i *Interpreter) evalBooleanInfixExpression(op string, lt, rt object.Object) object.Object {
-
-	// cast them to booleans
-	left := lt.(*object.Boolean)
-	right := rt.(*object.Boolean)
-
-	switch op {
-	case lexer.TokenEquals:
-		return nativeBooleanObject(left.Value == right.Value)
-	case lexer.TokenNotEquals:
-		return nativeBooleanObject(left.Value != right.Value)
-
-	default:
-		// error
-		return newError(ERROR, "Unsupported operator: %s %s %s",
-			left.Type(), op, right.Type())
-	}
-}
-
-func (i *Interpreter) evalStringInfixExpression(op string, left, right object.Object) object.Object {
-
-	switch op {
-	case lexer.TokenPlus:
-		// cool do the concat
-		return &object.String{
-			Value: left.Inspect() + right.Inspect(),
-		}
-
-	// comparison
-	case lexer.TokenEquals:
-		return &object.Boolean{
-			Value: left.Inspect() == right.Inspect(),
-		}
-	case lexer.TokenNotEquals:
-		return &object.Boolean{
-			Value: left.Inspect() != right.Inspect(),
-		}
-	}
-
-	return newError(ERROR, "Unsupported operator: %s %s %s",
-		left.Type(), op, right.Type())
-}
-
-func (i *Interpreter) evalCharInfixExpression(op string, lt, rt object.Object) object.Object {
-
-	// cast them to booleans
-	left := lt.(*object.Char)
-	right := rt.(*object.Char)
-
-	switch op {
-	case lexer.TokenPlus:
-		// cool do the concat
-		return &object.Char{
-			Value: left.Value + right.Value,
-		}
-
-	// comparison
-	case lexer.TokenEquals:
-		return &object.Boolean{
-			Value: left.Value != right.Value,
-		}
-	case lexer.TokenNotEquals:
-		return &object.Boolean{
-			Value: left.Value != right.Value,
-		}
-	}
-
-	return newError(ERROR, "Unsupported operator: %s %s %s",
-		left.Type(), op, right.Type())
+	return left.Binary(op, right)
 }
 
 // this function is responsible for handling assign op for both struct, hashmaps, structs
@@ -1564,7 +1327,7 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 				return newError(ERROR, "function doesn't exist on the module %s", owner.Name)
 			}
 			// invokes the call expression
-			ableToCast := function.(object.ItemObject).IsBuiltIn
+			ableToCast := true
 			args := i.evalExpressions(ownerProperty.Args, !ableToCast)
 			if len(args) == 1 && isError(args[0]) {
 				// error out

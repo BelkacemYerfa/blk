@@ -2,6 +2,7 @@ package object
 
 import (
 	"blk/ast"
+	"blk/lexer"
 	"bytes"
 	"fmt"
 	"hash/fnv"
@@ -39,6 +40,50 @@ type HashKey struct {
 	Value float64
 }
 
+var (
+	NUL   = &Nul{}
+	TRUE  = &Boolean{Value: true}
+	FALSE = &Boolean{Value: false}
+)
+
+func IsTruthy(obj Object) bool {
+	switch obj {
+	case NUL:
+		return false
+	case TRUE:
+		return true
+	case FALSE:
+		return false
+	default:
+		return true
+	}
+}
+
+func nativeBooleanObject(val bool) *Boolean {
+	if val {
+		return TRUE
+	}
+	return FALSE
+}
+
+type LEVEL = int
+
+const (
+	WARNING LEVEL = iota
+	ERROR
+)
+
+func newError(level LEVEL, format string, a ...interface{}) *Error {
+	prefix := "ERROR"
+
+	if level == WARNING {
+		prefix = "WARNING"
+	}
+
+	msg := fmt.Sprintf(`%s: %s`, prefix, format)
+	return &Error{Message: fmt.Sprintf(msg, a...)}
+}
+
 type Object interface {
 
 	// returns the object type, check the prefix_OBJ const above
@@ -52,7 +97,14 @@ type Object interface {
 
 	// checks wether 2 objects are equals or not
 	Equals(other Object) bool
+
+	// binary operation
+	// this is used to eval binary operation of different type, mainly used on the primitive types
+	Binary(op lexer.TokenKind, right Object) Object
 }
+
+// inspiration of this system from
+// https://github.com/d5/tengo/blob/master/objects.go
 
 type EmptyObjImplementation struct{}
 
@@ -72,6 +124,10 @@ func (i *EmptyObjImplementation) Equals(other Object) bool {
 	panic("Not Implemented")
 }
 
+func (i *EmptyObjImplementation) Binary(op lexer.TokenKind, right Object) Object {
+	panic("Not Implemented")
+}
+
 type Integer struct {
 	EmptyObjImplementation
 	Value int64
@@ -87,6 +143,88 @@ func (i *Integer) Copy() Object {
 func (i *Integer) Equals(v Object) bool {
 	bVal, ok := v.(*Integer)
 	return ok && i.Value == bVal.Value
+}
+func (i *Integer) Binary(op lexer.TokenKind, r Object) Object {
+	switch r := r.(type) {
+	case *Integer:
+		switch op {
+		case lexer.TokenMultiply:
+			return &Integer{
+				Value: i.Value * r.Value,
+			}
+		case lexer.TokenSlash:
+			return &Integer{
+				Value: i.Value / r.Value,
+			}
+		case lexer.TokenPlus:
+			return &Integer{
+				Value: i.Value + r.Value,
+			}
+		case lexer.TokenMinus:
+			return &Integer{
+				Value: i.Value - r.Value,
+			}
+		case lexer.TokenModule:
+			return &Integer{
+				Value: i.Value % r.Value,
+			}
+
+		case lexer.TokenGreater:
+			return nativeBooleanObject(int64(i.Value) > r.Value)
+		case lexer.TokenGreaterOrEqual:
+			return nativeBooleanObject(int64(i.Value) >= r.Value)
+		case lexer.TokenLess:
+			return nativeBooleanObject(int64(i.Value) < r.Value)
+		case lexer.TokenLessOrEqual:
+			return nativeBooleanObject(int64(i.Value) <= r.Value)
+		case lexer.TokenNotEquals:
+			return nativeBooleanObject(int64(i.Value) != r.Value)
+		case lexer.TokenEquals:
+			return nativeBooleanObject(int64(i.Value) == r.Value)
+
+		default:
+			return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
+		}
+	case *Float:
+		switch op {
+		case lexer.TokenMultiply:
+			return &Float{
+				Value: float64(i.Value) * r.Value,
+			}
+		case lexer.TokenSlash:
+			return &Float{
+				Value: float64(i.Value) / r.Value,
+			}
+		case lexer.TokenPlus:
+			return &Float{
+				Value: float64(i.Value) + r.Value,
+			}
+		case lexer.TokenMinus:
+			return &Float{
+				Value: float64(i.Value) - r.Value,
+			}
+
+		case lexer.TokenGreater:
+			return nativeBooleanObject(float64(i.Value) > r.Value)
+		case lexer.TokenGreaterOrEqual:
+			return nativeBooleanObject(float64(i.Value) >= r.Value)
+		case lexer.TokenLess:
+			return nativeBooleanObject(float64(i.Value) < r.Value)
+		case lexer.TokenLessOrEqual:
+			return nativeBooleanObject(float64(i.Value) <= r.Value)
+		case lexer.TokenNotEquals:
+			return nativeBooleanObject(float64(i.Value) != r.Value)
+		case lexer.TokenEquals:
+			return nativeBooleanObject(float64(i.Value) == r.Value)
+
+		default:
+			return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
+		}
+
+	default:
+		return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
+	}
+
 }
 func (i *Integer) HashKey() HashKey {
 	return HashKey{Type: i.Type(), Value: float64(i.Value)}
@@ -107,6 +245,24 @@ func (i *Boolean) Copy() Object {
 func (i *Boolean) Equals(v Object) bool {
 	bVal, ok := v.(*Boolean)
 	return ok && i.Value == bVal.Value
+}
+func (i *Boolean) Binary(op lexer.TokenKind, r Object) Object {
+	switch r := r.(type) {
+	case *Boolean:
+		switch op {
+		case lexer.TokenNotEquals:
+			return nativeBooleanObject(i.Value != r.Value)
+		case lexer.TokenEquals:
+			return nativeBooleanObject(i.Value == r.Value)
+
+		default:
+			return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
+		}
+
+	default:
+		return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
+	}
+
 }
 func (b *Boolean) HashKey() HashKey {
 	var value uint64
@@ -134,6 +290,85 @@ func (i *Float) Equals(v Object) bool {
 	bVal, ok := v.(*Float)
 	return ok && i.Value == bVal.Value
 }
+func (i *Float) Binary(op lexer.TokenKind, r Object) Object {
+	switch r := r.(type) {
+	case *Integer:
+		switch op {
+		case lexer.TokenMultiply:
+			return &Float{
+				Value: i.Value * float64(r.Value),
+			}
+		case lexer.TokenSlash:
+			return &Float{
+				Value: i.Value / float64(r.Value),
+			}
+		case lexer.TokenPlus:
+			return &Float{
+				Value: i.Value + float64(r.Value),
+			}
+		case lexer.TokenMinus:
+			return &Float{
+				Value: i.Value - float64(r.Value),
+			}
+
+		case lexer.TokenGreater:
+			return nativeBooleanObject(i.Value > float64(r.Value))
+		case lexer.TokenGreaterOrEqual:
+			return nativeBooleanObject(i.Value >= float64(r.Value))
+		case lexer.TokenLess:
+			return nativeBooleanObject(i.Value < float64(r.Value))
+		case lexer.TokenLessOrEqual:
+			return nativeBooleanObject(i.Value <= float64(r.Value))
+		case lexer.TokenNotEquals:
+			return nativeBooleanObject(i.Value != float64(r.Value))
+		case lexer.TokenEquals:
+			return nativeBooleanObject(i.Value == float64(r.Value))
+
+		default:
+			return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
+		}
+
+	case *Float:
+		switch op {
+		case lexer.TokenMultiply:
+			return &Float{
+				Value: i.Value * r.Value,
+			}
+		case lexer.TokenSlash:
+			return &Float{
+				Value: i.Value / r.Value,
+			}
+		case lexer.TokenPlus:
+			return &Float{
+				Value: i.Value + r.Value,
+			}
+		case lexer.TokenMinus:
+			return &Float{
+				Value: i.Value - r.Value,
+			}
+
+		case lexer.TokenGreater:
+			return nativeBooleanObject(i.Value > r.Value)
+		case lexer.TokenGreaterOrEqual:
+			return nativeBooleanObject(i.Value >= r.Value)
+		case lexer.TokenLess:
+			return nativeBooleanObject(i.Value < r.Value)
+		case lexer.TokenLessOrEqual:
+			return nativeBooleanObject(i.Value <= r.Value)
+		case lexer.TokenNotEquals:
+			return nativeBooleanObject(i.Value != r.Value)
+		case lexer.TokenEquals:
+			return nativeBooleanObject(i.Value == r.Value)
+
+		default:
+			return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
+		}
+
+	default:
+		return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
+	}
+}
+
 func (b *Float) HashKey() HashKey {
 	return HashKey{Type: b.Type(), Value: b.Value}
 }
@@ -153,6 +388,57 @@ func (i *String) Copy() Object {
 func (i *String) Equals(v Object) bool {
 	bVal, ok := v.(*String)
 	return ok && i.Value == bVal.Value
+}
+func (i *String) Binary(op lexer.TokenKind, r Object) Object {
+	switch op {
+	case lexer.TokenPlus:
+		switch r := r.(type) {
+		case *String:
+			return &String{
+				Value: i.Value + r.Value,
+			}
+		default:
+			return &String{
+				Value: i.Value + r.Inspect(),
+			}
+		}
+
+	case lexer.TokenGreater:
+		switch r := r.(type) {
+		case *String:
+			return nativeBooleanObject(i.Value > r.Value)
+		}
+	case lexer.TokenGreaterOrEqual:
+		switch r := r.(type) {
+		case *String:
+			return nativeBooleanObject(i.Value >= r.Value)
+		}
+	case lexer.TokenLess:
+		switch r := r.(type) {
+		case *String:
+			return nativeBooleanObject(i.Value < r.Value)
+		}
+	case lexer.TokenLessOrEqual:
+		switch r := r.(type) {
+		case *String:
+			return nativeBooleanObject(i.Value <= r.Value)
+		}
+	case lexer.TokenNotEquals:
+		switch r := r.(type) {
+		case *String:
+			return nativeBooleanObject(i.Value != r.Value)
+		}
+	case lexer.TokenEquals:
+		switch r := r.(type) {
+		case *String:
+			return nativeBooleanObject(i.Value == r.Value)
+		}
+	default:
+		return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
+	}
+
+	return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
+
 }
 func (s *String) HashKey() HashKey {
 	h := fnv.New64a()
@@ -176,6 +462,83 @@ func (i *Char) Equals(v Object) bool {
 	bVal, ok := v.(*Char)
 	return ok && i.Value == bVal.Value
 }
+func (i *Char) Binary(op lexer.TokenKind, r Object) Object {
+	switch r := r.(type) {
+	case *Char:
+		switch op {
+
+		case lexer.TokenPlus:
+			return &Char{
+				Value: i.Value + r.Value,
+			}
+
+		case lexer.TokenGreater:
+			return nativeBooleanObject(i.Value > r.Value)
+		case lexer.TokenGreaterOrEqual:
+			return nativeBooleanObject(i.Value >= r.Value)
+		case lexer.TokenLess:
+			return nativeBooleanObject(i.Value < r.Value)
+		case lexer.TokenLessOrEqual:
+			return nativeBooleanObject(i.Value <= r.Value)
+		case lexer.TokenNotEquals:
+			return nativeBooleanObject(i.Value != r.Value)
+		case lexer.TokenEquals:
+			return nativeBooleanObject(i.Value == r.Value)
+
+		default:
+			return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
+		}
+
+	case *String:
+		switch op {
+
+		case lexer.TokenPlus:
+			return &String{
+				Value: string(i.Value) + r.Value,
+			}
+
+		case lexer.TokenGreater:
+			return nativeBooleanObject(string(i.Value) > r.Value)
+		case lexer.TokenGreaterOrEqual:
+			return nativeBooleanObject(string(i.Value) >= r.Value)
+		case lexer.TokenLess:
+			return nativeBooleanObject(string(i.Value) < r.Value)
+		case lexer.TokenLessOrEqual:
+			return nativeBooleanObject(string(i.Value) <= r.Value)
+		case lexer.TokenNotEquals:
+			return nativeBooleanObject(string(i.Value) != r.Value)
+		case lexer.TokenEquals:
+			return nativeBooleanObject(string(i.Value) == r.Value)
+
+		default:
+			return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
+		}
+
+	case *Integer:
+		switch op {
+
+		case lexer.TokenGreater:
+			return nativeBooleanObject(i.Value > rune(r.Value))
+		case lexer.TokenGreaterOrEqual:
+			return nativeBooleanObject(i.Value >= rune(r.Value))
+		case lexer.TokenLess:
+			return nativeBooleanObject(i.Value < rune(r.Value))
+		case lexer.TokenLessOrEqual:
+			return nativeBooleanObject(i.Value <= rune(r.Value))
+		case lexer.TokenNotEquals:
+			return nativeBooleanObject(i.Value != rune(r.Value))
+		case lexer.TokenEquals:
+			return nativeBooleanObject(i.Value == rune(r.Value))
+
+		default:
+			return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
+		}
+
+	default:
+		return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
+	}
+
+}
 func (s *Char) HashKey() HashKey {
 	h := fnv.New64a()
 	h.Write([]byte(string(s.Value)))
@@ -189,6 +552,22 @@ type Nul struct {
 func (b *Nul) Type() ObjectType { return NUL_OBJ }
 func (b *Nul) Inspect() string  { return "nul" }
 func (i *Nul) Copy() Object     { return i }
+func (i *Nul) Binary(op lexer.TokenKind, r Object) Object {
+	switch r := r.(type) {
+	case *Nul:
+		switch op {
+		case lexer.TokenEquals:
+			return nativeBooleanObject(i == r)
+		case lexer.TokenNotEquals:
+			return nativeBooleanObject(i != r)
+
+		default:
+			// error
+		}
+	}
+
+	return nil
+}
 
 type ReturnValue struct {
 	EmptyObjImplementation

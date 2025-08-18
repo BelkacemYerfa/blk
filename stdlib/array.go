@@ -7,8 +7,8 @@ import (
 // math module definition
 var arrayModule = object.Module{
 	"equals": &object.BuiltinFn{Fn: arrayEquals},
-	"index":  &object.BuiltinFn{Fn: index},
-	"append": &object.BuiltinFn{Fn: APPEND},
+	"index":  &object.BuiltinFn{Fn: arrayIndex},
+	"append": &object.BuiltinFn{Fn: arrayAppend},
 }
 
 func arrayEquals(args ...object.Object) object.Object {
@@ -26,7 +26,7 @@ func arrayEquals(args ...object.Object) object.Object {
 	}
 }
 
-func index(args ...object.Object) object.Object {
+func arrayIndex(args ...object.Object) object.Object {
 	if len(args) != 2 {
 		return newError("wrong number of arguments. got=%d, want=2",
 			len(args))
@@ -54,7 +54,7 @@ func index(args ...object.Object) object.Object {
 
 }
 
-func APPEND(args ...object.Object) object.Object {
+func arrayAppend(args ...object.Object) object.Object {
 	if len(args) != 2 {
 		return newError("wrong number of arguments. got=%d, want=2",
 			len(args))
