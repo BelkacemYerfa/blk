@@ -606,6 +606,24 @@ func (f *Function) Inspect() string {
 	return out.String()
 }
 
+type Range struct {
+	EmptyObjImplementation
+	Elements []Object
+}
+func (a *Range) Type() ObjectType { return ARRAY_OBJ }
+func (a *Range) Inspect() string {
+	var out bytes.Buffer
+	out.WriteString("[")
+	for idx, elem := range a.Elements {
+		out.WriteString(elem.Inspect())
+		if idx+1 <= len(a.Elements)-1 {
+			out.WriteString(", ")
+		}
+	}
+	out.WriteString("]")
+	return out.String()
+}
+
 type Array struct {
 	EmptyObjImplementation
 	Size     int // if size == -1 means that the array is dynamic

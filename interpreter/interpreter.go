@@ -242,7 +242,7 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 			elements = append(elements, &object.Integer{Value: i})
 		}
 
-		return &object.Array{Elements: elements, Size: int(rightBound) - int(leftBound)}
+		return &object.Range{Elements: elements}
 
 	case *ast.ArrayLiteral:
 		elements := i.evalArrayExpression(nd.Elements)
@@ -1104,6 +1104,52 @@ func (i *Interpreter) evalForStatement(nd *ast.ForStatement) object.Object {
 				if len(nd.Identifiers) >= 2 {
 					i.env.OverrideDefine(nd.Identifiers[1].Value, object.ItemObject{
 						Object: elem.Value,
+					})
+				}
+
+				// evaluate the body
+				res := i.Eval(nd.Body)
+				if res != nil {
+					switch res.Type() {
+					case object.RETURN_VALUE_OBJ:
+						// early return
+						return res
+					case object.SKIP_OBJ:
+						// skip to the next iteration
+						continue
+					case object.BREAK_OBJ:
+						// break out of the loop
+						break
+					case object.ERROR_OBJ:
+						return res
+					}
+				}
+			}
+		}
+		i.exitScope()
+
+	case *object.Range:
+		// pattern of i..j
+		// this requires one identifier where that identifier will be the value of from i to j or j-1 (based if j is included or excluded)
+		if len(tg.Elements) == 0 {
+			// skip don't do anything
+			return nil
+		}
+
+		i.enterScope()
+		{
+			// init the value directly
+			for _, elem := range tg.Elements {
+				// first identifier (value) - always present
+				// second identifier (value) - optional
+				if len(nd.Identifiers) >= 2 {
+					// no need for deep copy since the values isn't mutable
+					return newError(ERROR, "with range pattern, there is only one identifier required, no need for second one")
+				}
+
+				if len(nd.Identifiers) >= 1 && nd.Identifiers[0].Value != "_" {
+					i.env.OverrideDefine(nd.Identifiers[0].Value, object.ItemObject{
+						Object: elem,
 					})
 				}
 
