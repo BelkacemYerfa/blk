@@ -281,11 +281,44 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		if isError(left) {
 			return left
 		}
-		index := i.Eval(nd.Index)
-		if isError(index) {
-			return index
+		if !nd.Range {
+			index := i.Eval(nd.Start)
+			if isError(index) {
+				return index
+			}
+			return i.evalIndexExpression(left, index)
+		} else {
+			if nd.Start == nil && nd.End == nil {
+				return newError(ERROR, "can't use [i:j] syntax without providing at least one of the bound")
+			}
+			var Start, End object.Object
+			// return an array from i to j
+			if nd.Start != nil {
+				Start = i.Eval(nd.Start)
+				if isError(Start) {
+					return Start
+				}
+
+				if Start.Type() != object.INTEGER_OBJ {
+					return newError(ERROR, "the start bound needs to be of type integer, got %s", Start.Type())
+				}
+				Start, _ = object.Cast(Start)
+			}
+
+			if nd.End != nil {
+				End = i.Eval(nd.End)
+				if isError(End) {
+					return End
+				}
+
+				if End.Type() != object.INTEGER_OBJ {
+					return newError(ERROR, "the end bound needs to be of type integer, got %s", End.Type())
+				}
+				End, _ = object.Cast(End)
+			}
+
+			return i.evalRangeExpression(left, Start, End)
 		}
-		return i.evalIndexExpression(left, index)
 
 	case *ast.WhileStatement:
 		return i.evalWhileStatement(nd)
@@ -707,6 +740,73 @@ func (i *Interpreter) evalIndexExpression(lf, index object.Object) object.Object
 	}
 }
 
+func (i *Interpreter) evalRangeExpression(lf, start, end object.Object) object.Object {
+	// make sure that the left is either a map or an array
+
+	if lf.Type() != object.ARRAY_OBJ {
+		return newError(ERROR, "left side needs to be either an array with range expression, got %v", lf.Type())
+	}
+
+	lf, _ = object.Cast(lf)
+	left := lf.(*object.Array)
+
+	// case of [i:j]
+	if start != nil && end != nil {
+		startVal := start.(*object.Integer).Value
+		endVal := end.(*object.Integer).Value
+
+		if startVal < 0 || endVal < 0 {
+			return newError(ERROR, "both bound start, end should be greater >= 0")
+		}
+
+		// make sure that i <= j
+		if startVal > endVal {
+			return newError(ERROR, "the start bound should be less then the end bound, got %d>%d", startVal, endVal)
+		}
+
+		// check that the end bound <= len(left.Elements)
+		if endVal > int64(len(left.Elements)) {
+			return newError(ERROR, "the end bound should be less <= length of the array element bound")
+		}
+
+		return &object.Array{
+			Elements: left.Elements[startVal:endVal],
+		}
+	}
+
+	// case of [i:]
+	if start != nil {
+		startVal := start.(*object.Integer).Value
+		if startVal < 0 {
+			return newError(ERROR, "the start bound should be greater >= 0")
+		}
+		if startVal > int64(len(left.Elements)) {
+			return newError(ERROR, "the start bound should be less <= length of the array element bound")
+		}
+
+		return &object.Array{
+			Elements: left.Elements[startVal:],
+		}
+	}
+
+	// case of [:j]
+	if end != nil {
+		endVal := end.(*object.Integer).Value
+		if endVal < 0 {
+			return newError(ERROR, "the end bound should be greater >= 0")
+		}
+		if endVal > int64(len(left.Elements)) {
+			return newError(ERROR, "the end bound should be less <= length of the array element bound")
+		}
+
+		return &object.Array{
+			Elements: left.Elements[:endVal],
+		}
+	}
+
+	return newError(ERROR, "weird case, not counted for")
+}
+
 func (i *Interpreter) evalArrayIndexExpression(array, index object.Object) object.Object {
 	arrayObject := array.(*object.Array)
 	idx := index.(*object.Integer).Value
@@ -925,6 +1025,10 @@ func (i *Interpreter) evalForStatement(nd *ast.ForStatement) object.Object {
 	// check that the target is either an array or a map
 	target, _ := object.Cast(i.Eval(nd.Target))
 
+	if isError(target) {
+		return target
+	}
+
 	switch tg := target.(type) {
 	case *object.Array:
 		// max : 2 identifier
@@ -1025,7 +1129,7 @@ func (i *Interpreter) evalForStatement(nd *ast.ForStatement) object.Object {
 		i.exitScope()
 
 	default:
-		return newError(ERROR, "target needs to be either an array or a map, got %v", tg.Type())
+		return newError(ERROR, "target needs to be either an array or a map, got %s", tg.Type())
 	}
 
 	return nil
@@ -1378,24 +1482,12 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 			return newError(ERROR, "property needs to be of type call expression or identifier, for now")
 		}
 
-	case *object.StructInstance, *object.Struct:
-
-		var fields map[string]object.Object
-		var methods map[string]object.Object
-
-		switch owner := owner.(type) {
-		case *object.Struct:
-			fields = owner.Fields
-			methods = owner.Methods
-		case *object.StructInstance:
-			fields = owner.Fields
-			methods = owner.Methods
-		}
+	case *object.StructInstance:
 
 		switch ownerProperty := property.(type) {
 		case *ast.CallExpression:
 			// search for the corresponding property call and invoke
-			methodItem, ok := methods[ownerProperty.Function.Value]
+			methodItem, ok := owner.Methods[ownerProperty.Function.Value]
 			if !ok {
 				return newError(ERROR, "method doesn't exist on the struct %v", ownerProperty.Function)
 			}
@@ -1428,7 +1520,7 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 
 		case *ast.Identifier:
 			// a given constant in a module
-			identifier, ok := fields[ownerProperty.Value]
+			identifier, ok := owner.Fields[ownerProperty.Value]
 			if !ok {
 				return newError(ERROR, "identifier doesn't exist on the struct %v", obj)
 			}
@@ -1470,13 +1562,46 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 			// cast to get the actual object (unwrap ItemObject if needed)
 			actualField, _ := object.Cast(fieldObj)
 
-			// evaluate the index
-			index := i.Eval(ownerProperty.Index)
-			if isError(index) {
-				return index
-			}
+			if !ownerProperty.Range {
+				// evaluate the index
+				index := i.Eval(ownerProperty.Start)
+				if isError(index) {
+					return index
+				}
 
-			return i.evalIndexExpression(actualField, index)
+				return i.evalIndexExpression(actualField, index)
+			} else {
+				if ownerProperty.Start == nil && ownerProperty.End == nil {
+					return newError(ERROR, "can't use [i:j] syntax without providing at least one of the bound")
+				}
+				var Start, End object.Object
+				// return an array from i to j
+				if ownerProperty.Start != nil {
+					Start = i.Eval(ownerProperty.Start)
+					if isError(Start) {
+						return Start
+					}
+
+					if Start.Type() != object.INTEGER_OBJ {
+						return newError(ERROR, "the start bound needs to be of type integer, got %s", Start.Type())
+					}
+					Start, _ = object.Cast(Start)
+				}
+
+				if ownerProperty.End != nil {
+					End = i.Eval(ownerProperty.End)
+					if isError(End) {
+						return End
+					}
+
+					if End.Type() != object.INTEGER_OBJ {
+						return newError(ERROR, "the end bound needs to be of type integer, got %s", End.Type())
+					}
+					End, _ = object.Cast(End)
+				}
+
+				return i.evalRangeExpression(actualField, Start, End)
+			}
 
 		default:
 			return newError(ERROR, "struct only support call expression, or identifier access, what u're doing isn't allowed")
@@ -1529,8 +1654,12 @@ func (i *Interpreter) evalRecursiveAssignment(ownerObj, rightObj object.Object, 
 		// cast to get the actual object (unwrap ItemObject if needed)
 		actualField, _ := object.Cast(fieldObj)
 
+		if property.Range {
+			return newError(ERROR, "can't assign values to a range")
+		}
+
 		// evaluate the index
-		index := i.Eval(property.Index)
+		index := i.Eval(property.Start)
 		if isError(index) {
 			return index
 		}

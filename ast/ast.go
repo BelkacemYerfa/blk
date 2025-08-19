@@ -638,7 +638,9 @@ func (ce *CallExpression) String() string {
 type IndexExpression struct {
 	Token lexer.Token // The [ token
 	Left  Expression
-	Index Expression
+	Range bool
+	Start Expression
+	End   Expression
 }
 
 func (ie *IndexExpression) expressionNode()       {}
@@ -648,7 +650,11 @@ func (ie *IndexExpression) String() string {
 	var out bytes.Buffer
 	out.WriteString(ie.Left.String())
 	out.WriteString("[")
-	out.WriteString(ie.Index.String())
+	out.WriteString(ie.Start.String())
+	if ie.Range {
+		out.WriteString(":")
+	}
+	out.WriteString(ie.End.String())
 	out.WriteString("]")
 	return out.String()
 }

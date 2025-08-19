@@ -1201,12 +1201,21 @@ func (p *Parser) parseCallArguments() []ast.Expression {
 }
 
 func (p *Parser) parseIndexExpression(left ast.Expression) ast.Expression {
-	// TODO: if left expr is nil return an error
 	exp := &ast.IndexExpression{Token: left.GetToken(), Left: left}
-
 	p.nextToken()
 
-	exp.Index = p.parseExpression(LOWEST)
+	if p.currentToken().Kind != lexer.TokenColon {
+		exp.Start = p.parseExpression(LOWEST)
+	}
+
+	if p.currentToken().Kind == lexer.TokenColon {
+		exp.Range = true
+		p.nextToken() // consume :
+	}
+
+	if p.currentToken().Kind != lexer.TokenBracketClose {
+		exp.End = p.parseExpression(LOWEST)
+	}
 
 	if !p.expect([]lexer.TokenKind{lexer.TokenBracketClose}) {
 		return nil
