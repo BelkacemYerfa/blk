@@ -36,6 +36,7 @@ const (
 	TokenBraceClose      TokenKind = ")"
 	TokenQuote           TokenKind = `"`
 	TokenSingleQuote     TokenKind = `'`
+	TokenRawString       TokenKind = "`"
 	TokenColon           TokenKind = ":"
 	TokenComma           TokenKind = ","
 	TokenDot             TokenKind = "."

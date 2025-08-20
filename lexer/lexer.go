@@ -367,6 +367,8 @@ func (l *Lexer) NextToken() Token {
 		return l.readString()
 	case TokenSingleQuote:
 		return l.readRune()
+	case TokenRawString:
+		return l.readRawString()
 	case TokenEOF:
 		l.readChar()
 		token.LiteralToken = LiteralToken{
@@ -452,6 +454,17 @@ func (l *Lexer) readString() Token {
 	l.Cur++
 
 	for l.Cur < len(l.Content) && l.Content[l.Cur] != '"' {
+		ch := l.Content[l.Cur]
+		if ch == '\n' {
+			return Token{
+				LiteralToken: LiteralToken{
+					Kind: TokenError,
+					Text: "string literal isn't terminated",
+				},
+				Row: row,
+				Col: col,
+			}
+		}
 		l.readChar()
 	}
 
@@ -516,6 +529,36 @@ func (l *Lexer) readRune() Token {
 	return Token{
 		LiteralToken: LiteralToken{
 			Kind: TokenChar,
+			Text: text,
+		},
+		Row: row,
+		Col: col,
+	}
+}
+
+func (l *Lexer) readRawString() Token {
+	start := l.Cur + 1 // skip the opening quote
+	row, col := l.Row, l.Col
+
+	l.Cur++
+
+	for l.Cur < len(l.Content) && l.Content[l.Cur] != '`' {
+		l.readChar()
+	}
+
+	if l.Cur >= len(l.Content) {
+		fmt.Println(`ERROR: the quoted data, doesn't have a closing Quote (")`)
+		os.Exit(1)
+	}
+
+	end := l.Cur
+	l.readChar() // consume the closing quote
+
+	text := strings.TrimSpace(string(l.Content[start:end]))
+
+	return Token{
+		LiteralToken: LiteralToken{
+			Kind: TokenString,
 			Text: text,
 		},
 		Row: row,

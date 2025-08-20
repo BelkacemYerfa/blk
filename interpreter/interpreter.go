@@ -373,24 +373,14 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		return &object.ReturnValue{Values: returnValues}
 
 	case *ast.ScopeStatement:
-		var evaluation object.Object
 		i.enterScope()
-		{
-			// scope makes it easier to understand
-			evaluation = i.evalBlockStatement(nd.Body)
-		}
-		i.exitScope()
-		return evaluation
+		defer i.exitScope()
+		return i.evalBlockStatement(nd.Body)
 
 	case *ast.BlockStatement:
-		var evaluation object.Object
 		i.enterScope()
-		{
-			// scope makes it easier to understand
-			evaluation = i.evalBlockStatement(nd)
-		}
-		i.exitScope()
-		return evaluation
+		defer i.exitScope()
+		return i.evalBlockStatement(nd)
 
 	case *ast.IfExpression:
 		return i.evalIfExpression(nd)
@@ -723,14 +713,32 @@ func (i *Interpreter) evalMapExpression(prs map[ast.Expression]ast.Expression) o
 
 func (i *Interpreter) evalIndexExpression(lf, index object.Object) object.Object {
 	// make sure that the left is either a map or an array
-	lf, _ = object.Cast(lf)
+	lf, isLeftMutable := object.Cast(lf)
 	index, _ = object.Cast(index)
+
 	switch lf := lf.(type) {
 	case *object.Array:
 		if index.Type() != object.INTEGER_OBJ {
 			return newError(ERROR, "index side needs to be an integer, got %v", index.Type())
 		}
 		return i.evalArrayIndexExpression(lf, index)
+
+	case *object.String:
+		if index.Type() != object.INTEGER_OBJ {
+			return newError(ERROR, "index side needs to be an integer, got %v", index.Type())
+		}
+		array := make([]object.Object, 0)
+		for _, elem := range lf.Value {
+			array = append(array, object.ItemObject{
+				Object: &object.Char{
+					Value: elem,
+				},
+				IsMutable: isLeftMutable,
+			})
+		}
+		return i.evalArrayIndexExpression(&object.Array{
+			Elements: array,
+		}, index)
 
 	case *object.Map:
 		return i.evalMapIndexExpression(lf, index)
@@ -743,12 +751,27 @@ func (i *Interpreter) evalIndexExpression(lf, index object.Object) object.Object
 func (i *Interpreter) evalRangeExpression(lf, start, end object.Object) object.Object {
 	// make sure that the left is either a map or an array
 
-	if lf.Type() != object.ARRAY_OBJ {
+	if lf.Type() != object.ARRAY_OBJ && lf.Type() != object.STRING_OBJ {
 		return newError(ERROR, "left side needs to be either an array with range expression, got %v", lf.Type())
 	}
 
 	lf, _ = object.Cast(lf)
-	left := lf.(*object.Array)
+
+	// handle string case
+	var left *object.Array
+	if lf.Type() == object.STRING_OBJ {
+		array := make([]object.Object, 0)
+		for _, elem := range lf.(*object.String).Value {
+			array = append(array, &object.Char{
+				Value: elem,
+			})
+		}
+		left = &object.Array{
+			Elements: array,
+		}
+	} else {
+		left = lf.(*object.Array)
+	}
 
 	// case of [i:j]
 	if start != nil && end != nil {
@@ -1029,153 +1052,50 @@ func (i *Interpreter) evalForStatement(nd *ast.ForStatement) object.Object {
 		return target
 	}
 
-	switch tg := target.(type) {
-	case *object.Array:
-		// max : 2 identifier
-		// 1: indicates the index of the current value
-		// 2: indicates the current value
-		if len(tg.Elements) == 0 {
-			// skip don't do anything
-			return nil
-		}
+	iterable, ok := target.(object.Iterable)
 
-		i.enterScope()
-		{
-			// init the index with value 0
-			// init the value with first elem value
-			for idx, elem := range tg.Elements {
-				// first identifier (index) - always present
-				if len(nd.Identifiers) >= 1 && nd.Identifiers[0].Value != "_" {
-					i.env.OverrideDefine(nd.Identifiers[0].Value, object.ItemObject{
-						Object: &object.Integer{Value: int64(idx)},
-					})
-				}
+	if !ok {
+		return newError(ERROR, "target needs to be either an array or a map, got %s", target.Type())
+	}
 
-				// second identifier (value) - optional
-				if len(nd.Identifiers) >= 2 {
-					// no need for deep copy since the values isn't mutable
-					i.env.OverrideDefine(nd.Identifiers[1].Value, object.ItemObject{
-						Object: elem,
-					})
-				}
+	items := iterable.Iter()
+	if len(items) == 0 {
+		return nil
+	}
 
-				// evaluate the body
-				res := i.Eval(nd.Body)
-				if res != nil {
-					switch res.Type() {
-					case object.RETURN_VALUE_OBJ:
-						// early return
-						return res
-					case object.SKIP_OBJ:
-						// skip to the next iteration
-						continue
-					case object.BREAK_OBJ:
-						// break out of the loop
-						break
-					case object.ERROR_OBJ:
-						return res
-					}
-				}
+	i.enterScope()
+	defer i.exitScope()
+
+	for _, item := range items {
+		// bind identifiers
+		if len(nd.Identifiers) >= 1 && nd.Identifiers[0].Value != "_" {
+			if target.Type() == object.RANGE_OBJ {
+				i.env.OverrideDefine(nd.Identifiers[0].Value, object.ItemObject{Object: item.Value})
+			} else {
+				i.env.OverrideDefine(nd.Identifiers[0].Value, object.ItemObject{Object: item.Index})
 			}
 		}
-		i.exitScope()
 
-	case *object.Map:
-		// max : 2 identifier
-		// 1: indicates the key
-		// 2: indicates the value associated with the key
-
-		if len(tg.Pairs) == 0 {
-			// skip
-			return nil
-		}
-
-		i.enterScope()
-		{
-			for _, elem := range tg.Pairs {
-				// first identifier (key) - always present
-				if len(nd.Identifiers) >= 1 && nd.Identifiers[0].Value != "_" {
-					i.env.OverrideDefine(nd.Identifiers[0].Value, object.ItemObject{
-						Object: elem.Key,
-					})
-				}
-
-				// second identifier (value) - optional
-				if len(nd.Identifiers) >= 2 {
-					i.env.OverrideDefine(nd.Identifiers[1].Value, object.ItemObject{
-						Object: elem.Value,
-					})
-				}
-
-				// evaluate the body
-				res := i.Eval(nd.Body)
-				if res != nil {
-					switch res.Type() {
-					case object.RETURN_VALUE_OBJ:
-						// early return
-						return res
-					case object.SKIP_OBJ:
-						// skip to the next iteration
-						continue
-					case object.BREAK_OBJ:
-						// break out of the loop
-						break
-					case object.ERROR_OBJ:
-						return res
-					}
-				}
+		if target.Type() != object.RANGE_OBJ {
+			if len(nd.Identifiers) >= 2 && nd.Identifiers[1].Value != "_" {
+				i.env.OverrideDefine(nd.Identifiers[1].Value, object.ItemObject{Object: item.Value})
 			}
 		}
-		i.exitScope()
 
-	case *object.Range:
-		// pattern of i..j
-		// this requires one identifier where that identifier will be the value of from i to j or j-1 (based if j is included or excluded)
-		if len(tg.Elements) == 0 {
-			// skip don't do anything
-			return nil
-		}
-
-		i.enterScope()
-		{
-			// init the value directly
-			for _, elem := range tg.Elements {
-				// first identifier (value) - always present
-				// second identifier (value) - optional
-				if len(nd.Identifiers) >= 2 {
-					// no need for deep copy since the values isn't mutable
-					return newError(ERROR, "with range pattern, there is only one identifier required, no need for second one")
-				}
-
-				if len(nd.Identifiers) >= 1 && nd.Identifiers[0].Value != "_" {
-					i.env.OverrideDefine(nd.Identifiers[0].Value, object.ItemObject{
-						Object: elem,
-					})
-				}
-
-				// evaluate the body
-				res := i.Eval(nd.Body)
-				if res != nil {
-					switch res.Type() {
-					case object.RETURN_VALUE_OBJ:
-						// early return
-						return res
-					case object.SKIP_OBJ:
-						// skip to the next iteration
-						continue
-					case object.BREAK_OBJ:
-						// break out of the loop
-						break
-					case object.ERROR_OBJ:
-						return res
-					}
-				}
+		// evaluate body
+		res := i.Eval(nd.Body)
+		if res != nil {
+			switch res.Type() {
+			case object.RETURN_VALUE_OBJ:
+				return res
+			case object.SKIP_OBJ:
+				continue
+			case object.BREAK_OBJ:
+				return nil
+			case object.ERROR_OBJ:
+				return res
 			}
 		}
-		i.exitScope()
-
-	default:
-		return newError(ERROR, "target needs to be either an array or a map, got %s", tg.Type())
 	}
 
 	return nil
@@ -1371,6 +1291,19 @@ func (i *Interpreter) evalAssignment(left []LeftRes, right []object.Object) obje
 			}
 		case *object.String:
 			if rightTyped, ok := rightObj.(*object.String); ok {
+				leftTyped.Value = rightTyped.Value
+				result = leftTyped
+			}
+		case *object.Char:
+			if rightTyped, ok := rightObj.(*object.Char); ok {
+				if node, ok := node.(*ast.IndexExpression); ok {
+					// left side is an array
+					eval := i.Eval(node.Left)
+					if eval.Type() == object.STRING_OBJ {
+						return newError(ERROR, "left side is a string, for that index is not assignable")
+					}
+				}
+
 				leftTyped.Value = rightTyped.Value
 				result = leftTyped
 			}

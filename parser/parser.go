@@ -231,16 +231,6 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 
 		// go through the current tokens in the same line until u find :: or :=, if found go to parseBindExpression, otherwise parseExpression statement
 
-		// p.registerInfix(lexer.TokenAssignMinus, p.parseAssignOperatorExpression)
-		// p.registerInfix(lexer.TokenAssignPlus, p.parseAssignOperatorExpression)
-		// p.registerInfix(lexer.TokenAssignModule, p.parseAssignOperatorExpression)
-		// p.registerInfix(lexer.TokenAssignMultiply, p.parseAssignOperatorExpression)
-		// p.registerInfix(lexer.TokenAssignSlash, p.parseAssignOperatorExpression)
-		// p.registerInfix(lexer.TokenAssignOr, p.parseAssignOperatorExpression)
-		// p.registerInfix(lexer.TokenAssignAnd, p.parseAssignOperatorExpression)
-		// p.registerInfix(lexer.TokenAssignPlusOne, p.parseDoubleOperatorExpression)
-		// p.registerInfix(lexer.TokenAssignMinusOne, p.parseDoubleOperatorExpression)
-
 		lexerAssignOperator := []lexer.TokenKind{
 			lexer.TokenAssignSlash, lexer.TokenAssignMultiply, lexer.TokenAssignModule, lexer.TokenAssignMinus, lexer.TokenAssignPlus, lexer.TokenAssignOr, lexer.TokenAssignPlus,
 		}

@@ -22,6 +22,7 @@ const (
 	FUNCTION_OBJ        = "FUNCTION"
 	IMPORT_OBJ          = "IMPORT"
 	ARRAY_OBJ           = "ARRAY"
+	RANGE_OBJ           = "RANGE"
 	MAP_OBJ             = "MAP"
 	SKIP_OBJ            = "SKIP"
 	BREAK_OBJ           = "BREAK"
@@ -101,6 +102,18 @@ type Object interface {
 	// binary operation
 	// this is used to eval binary operation of different type, mainly used on the primitive types
 	Binary(op lexer.TokenKind, right Object) Object
+}
+
+type Iterable interface {
+	// this returns an iteration item the exposes both
+	// an index (can be an integer for arrays/strings, hashable key type if the element is a hashmap)
+	// and a value which is the current value in the loop
+	Iter() []IterationItem
+}
+
+type IterationItem struct {
+	Index Object // could be Integer, String (key), etc
+	Value Object
 }
 
 // inspiration of this system from
@@ -375,6 +388,7 @@ func (b *Float) HashKey() HashKey {
 
 type String struct {
 	EmptyObjImplementation
+	Iterable
 	Value string
 }
 
@@ -439,6 +453,26 @@ func (i *String) Binary(op lexer.TokenKind, r Object) Object {
 
 	return newError(ERROR, "Unsupported operation %s %s %s", i.Type(), op, r.Type())
 
+}
+func (i *String) Iter() []IterationItem {
+	elements := make([]IterationItem, 0)
+
+	if len(i.Value) == 0 {
+		return elements
+	}
+
+	for idx, elem := range i.Value {
+		elements = append(elements, IterationItem{
+			Index: &Integer{
+				Value: int64(idx),
+			},
+			Value: &Char{
+				Value: elem,
+			},
+		})
+	}
+
+	return elements
 }
 func (s *String) HashKey() HashKey {
 	h := fnv.New64a()
@@ -608,9 +642,11 @@ func (f *Function) Inspect() string {
 
 type Range struct {
 	EmptyObjImplementation
+	Iterable
 	Elements []Object
 }
-func (a *Range) Type() ObjectType { return ARRAY_OBJ }
+
+func (a *Range) Type() ObjectType { return RANGE_OBJ }
 func (a *Range) Inspect() string {
 	var out bytes.Buffer
 	out.WriteString("[")
@@ -623,9 +659,25 @@ func (a *Range) Inspect() string {
 	out.WriteString("]")
 	return out.String()
 }
+func (i *Range) Iter() []IterationItem {
+	elements := make([]IterationItem, 0)
+
+	if len(i.Elements) == 0 {
+		return elements
+	}
+
+	for _, elem := range i.Elements {
+		elements = append(elements, IterationItem{
+			Value: elem,
+		})
+	}
+
+	return elements
+}
 
 type Array struct {
 	EmptyObjImplementation
+	Iterable
 	Size     int // if size == -1 means that the array is dynamic
 	Elements []Object
 }
@@ -671,6 +723,24 @@ func (i *Array) Copy() Object {
 		Elements: elements,
 	}
 }
+func (i *Array) Iter() []IterationItem {
+	elements := make([]IterationItem, 0)
+
+	if len(i.Elements) == 0 {
+		return elements
+	}
+
+	for idx, elem := range i.Elements {
+		elements = append(elements, IterationItem{
+			Index: &Integer{
+				Value: int64(idx),
+			},
+			Value: elem,
+		})
+	}
+
+	return elements
+}
 
 type Hashable interface {
 	HashKey() HashKey
@@ -685,6 +755,7 @@ type PairsType = map[HashKey]HashPair
 
 type Map struct {
 	EmptyObjImplementation
+	Iterable
 	Pairs PairsType
 }
 
@@ -735,6 +806,23 @@ func (i *Map) Equals(v Object) bool {
 		}
 	}
 	return true
+}
+
+func (i *Map) Iter() []IterationItem {
+	elements := make([]IterationItem, 0)
+
+	if len(i.Pairs) == 0 {
+		return elements
+	}
+
+	for _, elem := range i.Pairs {
+		elements = append(elements, IterationItem{
+			Index: elem.Key,
+			Value: elem.Value,
+		})
+	}
+
+	return elements
 }
 
 type Error struct {

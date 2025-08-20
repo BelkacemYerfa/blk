@@ -650,11 +650,15 @@ func (ie *IndexExpression) String() string {
 	var out bytes.Buffer
 	out.WriteString(ie.Left.String())
 	out.WriteString("[")
-	out.WriteString(ie.Start.String())
+	if ie.Start != nil {
+		out.WriteString(ie.Start.String())
+	}
 	if ie.Range {
 		out.WriteString(":")
 	}
-	out.WriteString(ie.End.String())
+	if ie.End != nil {
+		out.WriteString(ie.End.String())
+	}
 	out.WriteString("]")
 	return out.String()
 }
