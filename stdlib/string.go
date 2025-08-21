@@ -12,6 +12,7 @@ var stringModule = object.Module{
 	"hasPrefix":   &object.BuiltinFn{Fn: funcSSB(strings.HasPrefix)},
 	"contains":    &object.BuiltinFn{Fn: funcSSB(strings.Contains)},
 	"containsAny": &object.BuiltinFn{Fn: funcSSB(strings.ContainsAny)},
+	"equalFold":   &object.BuiltinFn{Fn: funcSSB(strings.EqualFold)},
 	"toUpperCase": &object.BuiltinFn{Fn: funcSS(strings.ToUpper)},
 	"toLowerCase": &object.BuiltinFn{Fn: funcSS(strings.ToLower)},
 }

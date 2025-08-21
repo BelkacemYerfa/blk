@@ -5,11 +5,12 @@ import (
 )
 
 var hashmapModule = object.Module{
-	"keys":      &object.BuiltinFn{Fn: KEYS},
-	"values":    &object.BuiltinFn{Fn: VALUES},
-	"equals":    &object.BuiltinFn{Fn: EQUALS},
-	"insert":    &object.BuiltinFn{Fn: INSERT},
-	"get_value": &object.BuiltinFn{Fn: GET_VALUE},
+	"keys":     &object.BuiltinFn{Fn: KEYS},
+	"values":   &object.BuiltinFn{Fn: VALUES},
+	"equals":   &object.BuiltinFn{Fn: EQUALS},
+	"insert":   &object.BuiltinFn{Fn: INSERT},
+	"getValue": &object.BuiltinFn{Fn: GET_VALUE},
+	"delete":   &object.BuiltinFn{Fn: DELETE},
 }
 
 func KEYS(args ...object.Object) object.Object {
@@ -183,4 +184,41 @@ func GET_VALUE(args ...object.Object) object.Object {
 
 	// actual value
 	return value.Value
+}
+
+func DELETE(args ...object.Object) object.Object {
+	if len(args) != 2 {
+		return newError("wrong number of arguments. got=%d, want=2",
+			len(args))
+	}
+
+	if args[0].Type() != object.MAP_OBJ {
+		return newError("first arg needs to be of type map, got %v", args[0].Type())
+	}
+
+	arg, isMutable := object.Cast(args[0])
+
+	if !isMutable {
+		return newError("provided map isn't mutable, since it was defined as a const, consider changing it to a mutable var")
+	}
+
+	args[1], _ = object.Cast(args[1])
+
+	key, ok := args[1].(object.Hashable)
+
+	if !ok {
+		return newError("provided value doesn't can't be used as key")
+	}
+
+	mapp := arg.(*object.Map)
+
+	_, ok = mapp.Pairs[key.HashKey()]
+
+	if !ok {
+		return newError("key (%v) is not associated with any value", key)
+	}
+
+	delete(mapp.Pairs, key.HashKey())
+
+	return mapp
 }
