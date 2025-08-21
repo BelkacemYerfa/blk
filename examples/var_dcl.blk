@@ -5,8 +5,8 @@ e :: 2.718
 let size = 100
 
 Person :: struct {
-  Name,
-  Age
+  Name := "",
+  Age := 0
 }
 
 hashMap := {

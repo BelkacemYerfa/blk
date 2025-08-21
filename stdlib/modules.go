@@ -16,4 +16,5 @@ var BuiltinModules = map[string]object.Module{
 	"type":    typeModule,
 	"array":   arrayModule,
 	"hashmap": hashmapModule,
+	"strings": stringModule,
 }
