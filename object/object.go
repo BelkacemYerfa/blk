@@ -994,7 +994,7 @@ func Cast(obj Object) (Object, bool) {
 }
 
 // build an equals method to all of the object type representation
-func ObjectTypesCheck(a, b Object) bool {
+func ObjectTypesCheck(a, b Object, checkLen bool) bool {
 	a, _ = Cast(a)
 	b, _ = Cast(b)
 	switch aVal := a.(type) {
@@ -1017,12 +1017,13 @@ func ObjectTypesCheck(a, b Object) bool {
 		if !ok {
 			return false
 		}
-		if len(bVal.Elements) != len(aVal.Elements) {
+		if checkLen && len(bVal.Elements) != len(aVal.Elements) {
 			return false
 		}
+		// TODO check this one for elements where the length is different
 		for idx, elem := range bVal.Elements {
 			value := aVal.Elements[idx]
-			if !ObjectTypesCheck(elem, value) {
+			if !ObjectTypesCheck(elem, value, checkLen) {
 				return false
 			}
 		}
@@ -1032,7 +1033,7 @@ func ObjectTypesCheck(a, b Object) bool {
 		if !ok {
 			return false
 		}
-		if len(bVal.Pairs) != len(aVal.Pairs) {
+		if checkLen && len(bVal.Pairs) != len(aVal.Pairs) {
 			return false
 		}
 		for key, elem := range bVal.Pairs {
@@ -1040,10 +1041,10 @@ func ObjectTypesCheck(a, b Object) bool {
 			if !ok {
 				return false
 			}
-			if !ObjectTypesCheck(elem.Key, value.Key) {
+			if !ObjectTypesCheck(elem.Key, value.Key, checkLen) {
 				return false
 			}
-			if !ObjectTypesCheck(elem.Value, value.Value) {
+			if !ObjectTypesCheck(elem.Value, value.Value, checkLen) {
 				return false
 			}
 		}
@@ -1072,7 +1073,7 @@ func ObjectTypesCheck(a, b Object) bool {
 			aFields = aTyped.Fields
 		}
 
-		if len(bFields) != len(aFields) {
+		if checkLen && len(bFields) != len(aFields) {
 			return false
 		}
 		for k, v := range bFields {
@@ -1080,7 +1081,7 @@ func ObjectTypesCheck(a, b Object) bool {
 			if !ok {
 				return false
 			}
-			if !ObjectTypesCheck(v, val) {
+			if !ObjectTypesCheck(v, val, checkLen) {
 				return false
 			}
 		}

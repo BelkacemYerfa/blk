@@ -644,7 +644,7 @@ func (i *Interpreter) evalArrayExpression(exps []ast.Expression) []object.Object
 		if idx == 0 {
 			firstElem = elemEval
 		}
-		if !object.ObjectTypesCheck(firstElem, elemEval) {
+		if !object.ObjectTypesCheck(firstElem, elemEval, true) {
 			// throw an error here
 			return []object.Object{
 				newError(ERROR, "multitude of types, (%v,%v), array elements should be of one type", firstElem.Type(), elemEval.Type()),
@@ -701,7 +701,7 @@ func (i *Interpreter) evalMapExpression(prs map[ast.Expression]ast.Expression) o
 		if idx == 0 {
 			valEl = value
 		}
-		if !object.ObjectTypesCheck(valEl, value) {
+		if !object.ObjectTypesCheck(valEl, value, true) {
 			return newError(ERROR, "multitude of types detected, value elements of a map should be of one type")
 		}
 		pairs[hashed] = object.HashPair{Key: key, Value: value}
@@ -1380,7 +1380,7 @@ func (i *Interpreter) evalAssignmentExpression(leftNode ast.Expression, left, ri
 		errMsg = "type mismatch on map elements"
 	}
 
-	typeCheck := object.ObjectTypesCheck(lft, lrt)
+	typeCheck := object.ObjectTypesCheck(lft, lrt, true)
 
 	if !typeCheck {
 		return newError(ERROR, errMsg)

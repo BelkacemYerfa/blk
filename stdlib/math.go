@@ -70,7 +70,7 @@ var mathModule = object.Module{
 	"sqrt":        &object.BuiltinFn{Fn: funcF64F64(math.Sqrt)},
 	"tan":         &object.BuiltinFn{Fn: funcF64F64(math.Tan)},
 	"tanh":        &object.BuiltinFn{Fn: funcF64F64(math.Tanh)},
-	"Trunc":       &object.BuiltinFn{Fn: funcF64F64(math.Trunc)},
+	"trunc":       &object.BuiltinFn{Fn: funcF64F64(math.Trunc)},
 	"y0":          &object.BuiltinFn{Fn: funcF64F64(math.Y0)},
 	"y1":          &object.BuiltinFn{Fn: funcF64F64(math.Y1)},
 	"dim":         &object.BuiltinFn{Fn: func2F64F64(math.Dim)},
