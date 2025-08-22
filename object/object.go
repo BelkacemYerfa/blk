@@ -985,9 +985,8 @@ func (i *StructInstance) Binary(op lexer.TokenKind, right Object) Object {
 func Cast(obj Object) (Object, bool) {
 	switch obj := obj.(type) {
 	case ItemObject:
-		return obj.Object, obj.IsMutable
-	case *ItemObject:
-		return obj.Object, obj.IsMutable
+		o, mut := Cast(obj.Object)
+		return o, mut
 	default:
 		return obj, true
 	}

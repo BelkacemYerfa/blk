@@ -15,6 +15,7 @@ var stringModule = object.Module{
 	"equalFold":   &object.BuiltinFn{Fn: funcSSB(strings.EqualFold)},
 	"toUpperCase": &object.BuiltinFn{Fn: funcSS(strings.ToUpper)},
 	"toLowerCase": &object.BuiltinFn{Fn: funcSS(strings.ToLower)},
+	// TODO: add the trim functionalities
 }
 
 func stringJoin(args ...object.Object) object.Object {
