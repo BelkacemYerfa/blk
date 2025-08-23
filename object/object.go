@@ -921,7 +921,7 @@ func (i *Struct) Copy() Object {
 	}
 
 	for k, v := range i.Fields {
-		strct.Fields[k] = v.Copy()
+		strct.Fields[k] = v
 	}
 
 	strct.Methods = i.Methods

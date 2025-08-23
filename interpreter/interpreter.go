@@ -1410,8 +1410,7 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 				return newError(ERROR, "function doesn't exist on the module %s", owner.Name)
 			}
 			// invokes the call expression
-			ableToCast := true
-			args := i.evalExpressions(ownerProperty.Args, !ableToCast)
+			args := i.evalExpressions(ownerProperty.Args, false)
 			if len(args) == 1 && isError(args[0]) {
 				// error out
 				return args[0]
@@ -1462,7 +1461,6 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 		}
 
 	case *object.StructInstance:
-
 		switch ownerProperty := property.(type) {
 		case *ast.CallExpression:
 			// search for the corresponding property call and invoke
@@ -1516,7 +1514,6 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 			return identifier
 
 		case *ast.MemberShipExpression:
-
 			// the immediate property here is going to be the new part owner of the other property that u want to get access to
 			// example of this: self.person.greet()
 			// self.person is going to become the immediate property

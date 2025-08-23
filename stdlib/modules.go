@@ -13,7 +13,7 @@ func newError(format string, a ...interface{}) *object.Error {
 var BuiltinModules = map[string]object.Module{
 	"fmt":     fmtModule,
 	"math":    mathModule,
-	"type":    typeModule,
+	"types":   typeModule,
 	"array":   arrayModule,
 	"hashmap": hashmapModule,
 	"strings": stringModule,

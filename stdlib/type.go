@@ -4,7 +4,7 @@ import (
 	"blk/object"
 )
 
-// type module definition
+// types module definition
 var typeModule = object.Module{
 	"INTEGER": &object.String{
 		Value: object.INTEGER_OBJ,
