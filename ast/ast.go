@@ -306,14 +306,14 @@ func (fs *ForStatement) String() string {
 	return out.String()
 }
 
-type SkipStatement struct {
+type NextStatement struct {
 	Token lexer.Token
 }
 
-func (fs *SkipStatement) statementNode()        {}
-func (fs *SkipStatement) TokenLiteral() string  { return fs.Token.Text }
-func (nt *SkipStatement) GetToken() lexer.Token { return nt.Token }
-func (fs *SkipStatement) String() string        { return fs.TokenLiteral() }
+func (fs *NextStatement) statementNode()        {}
+func (fs *NextStatement) TokenLiteral() string  { return fs.Token.Text }
+func (nt *NextStatement) GetToken() lexer.Token { return nt.Token }
+func (fs *NextStatement) String() string        { return fs.TokenLiteral() }
 
 type BreakStatement struct {
 	Token lexer.Token

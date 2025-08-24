@@ -24,7 +24,7 @@ const (
 	ARRAY_OBJ           = "ARRAY"
 	RANGE_OBJ           = "RANGE"
 	MAP_OBJ             = "MAP"
-	SKIP_OBJ            = "SKIP"
+	NEXT_OBJ            = "NEXT"
 	BREAK_OBJ           = "BREAK"
 	STRUCT_OBJ          = "STRUCT"
 	STRUCT_INSTANCE_OBJ = "STRUCT_INSTANCE"
@@ -879,19 +879,19 @@ func (b *UserModule) Type() ObjectType { return USER_MODULE }
 
 func (b *UserModule) Inspect() string { return b.Name }
 
-type Skip struct {
+type Next struct {
 	EmptyObjImplementation
 }
 
-func (b *Skip) Type() ObjectType { return SKIP_OBJ }
-func (b *Skip) Inspect() string  { return "skip" }
+func (b *Next) Type() ObjectType { return NEXT_OBJ }
+func (b *Next) Inspect() string  { return "next" }
 
 type Break struct {
 	EmptyObjImplementation
 }
 
 func (b *Break) Type() ObjectType { return BREAK_OBJ }
-func (b *Break) Inspect() string  { return "skip" }
+func (b *Break) Inspect() string  { return "break" }
 
 type Struct struct {
 	EmptyObjImplementation

@@ -213,8 +213,8 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		return p.parseWhileStatement()
 	case lexer.TokenFor:
 		return p.parseForStatement()
-	case lexer.TokenSkip:
-		return p.parseSkipStatement()
+	case lexer.TokenNext:
+		return p.parseNextStatement()
 	case lexer.TokenBreak:
 		return p.parseBreakStatement()
 	case lexer.TokenIdentifier, lexer.TokenSelf:
@@ -611,16 +611,16 @@ func (p *Parser) parseForStatement() (*ast.ForStatement, error) {
 	return stmt, nil
 }
 
-func (p *Parser) parseSkipStatement() (*ast.SkipStatement, error) {
-	stmt := &ast.SkipStatement{Token: p.currentToken()}
-	// consume the skip token
+func (p *Parser) parseNextStatement() (*ast.NextStatement, error) {
+	stmt := &ast.NextStatement{Token: p.currentToken()}
+	// consume the next token
 	p.nextToken()
 	return stmt, nil
 }
 
 func (p *Parser) parseBreakStatement() (*ast.BreakStatement, error) {
 	stmt := &ast.BreakStatement{Token: p.currentToken()}
-	// consume the skip token
+	// consume the break token
 	p.nextToken()
 	return stmt, nil
 }
@@ -1180,7 +1180,11 @@ func (p *Parser) parseCallArguments() []ast.Expression {
 
 	for p.currentToken().Kind == lexer.TokenComma {
 		p.nextToken()
-		args = append(args, p.parseExpression(LOWEST))
+		expr := p.parseExpression(LOWEST)
+		if expr == nil {
+			return nil
+		}
+		args = append(args, expr)
 	}
 
 	if !p.expect([]lexer.TokenKind{lexer.TokenBraceClose}) {

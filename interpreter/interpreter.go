@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	Skip  = &object.Skip{}
+	Next  = &object.Next{}
 	Break = &object.Break{}
 )
 
@@ -326,8 +326,8 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 	case *ast.ForStatement:
 		return i.evalForStatement(nd)
 
-	case *ast.SkipStatement:
-		return Skip
+	case *ast.NextStatement:
+		return Next
 
 	case *ast.BreakStatement:
 		return Break
@@ -1035,7 +1035,7 @@ func (i *Interpreter) evalBlockStatement(block *ast.BlockStatement) object.Objec
 		result = i.Eval(statement)
 		if result != nil {
 			rt := result.Type()
-			if rt == object.RETURN_VALUE_OBJ || rt == object.ERROR_OBJ || rt == object.BREAK_OBJ || rt == object.SKIP_OBJ {
+			if rt == object.RETURN_VALUE_OBJ || rt == object.ERROR_OBJ || rt == object.BREAK_OBJ || rt == object.NEXT_OBJ {
 				return result
 			}
 		}
@@ -1088,7 +1088,7 @@ func (i *Interpreter) evalForStatement(nd *ast.ForStatement) object.Object {
 			switch res.Type() {
 			case object.RETURN_VALUE_OBJ:
 				return res
-			case object.SKIP_OBJ:
+			case object.NEXT_OBJ:
 				continue
 			case object.BREAK_OBJ:
 				return nil
@@ -1120,7 +1120,7 @@ func (i *Interpreter) evalWhileStatement(nd *ast.WhileStatement) object.Object {
 			switch res.Type() {
 			case object.RETURN_VALUE_OBJ:
 				return res
-			case object.SKIP_OBJ:
+			case object.NEXT_OBJ:
 				continue
 			case object.BREAK_OBJ:
 				// break out of the loop

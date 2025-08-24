@@ -48,7 +48,7 @@ insertionSort :: fn() {
 
   for i, value in input {
     if i == 0 {
-      skip
+      next
     }
 
     key := input[i]

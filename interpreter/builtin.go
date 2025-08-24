@@ -18,6 +18,7 @@ var builtInFunction = object.Module{
 	"char":   &object.BuiltinFn{Fn: toChar},
 	"typeOf": &object.BuiltinFn{Fn: typeOf},
 	"clear":  &object.BuiltinFn{Fn: clear},
+	"assert": &object.BuiltinFn{Fn: assert},
 }
 
 func size(args ...object.Object) object.Object {
@@ -246,6 +247,34 @@ func clear(args ...object.Object) object.Object {
 	default:
 		return newError(ERROR, "argument type isn't supported, expected array or map, got %s", arg.Type())
 	}
+}
+
+func assert(args ...object.Object) object.Object {
+	if len(args) != 2 {
+		return newError(ERROR, "wrong number of arguments. got=%d, want=1",
+			len(args))
+	}
+
+	args0, _ := object.Cast(args[0])
+
+	if args0.Type() != object.BOOLEAN_OBJ {
+		return newError(ERROR, "first argument type needs to be a boolean got %v", args0)
+	}
+
+	args1, _ := object.Cast(args[1])
+
+	if args1.Type() != object.STRING_OBJ {
+		return newError(ERROR, "second argument type needs to be a boolean got %v", args1)
+	}
+
+	cnd := args0.(*object.Boolean)
+	assertion := args1.(*object.String)
+
+	if cnd.Value {
+		panic(assertion.Value)
+	}
+
+	return &object.Nul{}
 }
 
 var builtInConstants = map[string]*object.BuiltinConst{}
