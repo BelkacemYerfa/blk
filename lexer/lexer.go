@@ -510,8 +510,8 @@ func (l *Lexer) readString() Token {
 	end := l.Cur
 	l.readChar() // consume the closing quote
 
-	raw := string(l.Content[start:end])
-	text := l.unescapeString(raw)
+	text := string(l.Content[start:end])
+	text = l.unescapeString(text)
 
 	return Token{
 		LiteralToken: LiteralToken{

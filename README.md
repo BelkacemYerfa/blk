@@ -155,12 +155,14 @@ for k, v in {a: 1, b: 2} {
 }
 ```
 
-### Skip
+### next
+
+idea of name `next` suggested by [@gaurangrshah](https://github.com/gaurangrshah)
 
 ```blk
 while true {
     if shouldSkip() {
-        skip
+        next
     }
     doStuff()
 }

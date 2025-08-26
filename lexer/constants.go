@@ -20,7 +20,7 @@ var (
 		"import": TokenImport,
 		"as":     TokenAs,
 		"return": TokenReturn,
-		"skip":   TokenSkip,
+		"next":   TokenNext,
 		"break":  TokenBreak,
 		"true":   TokenBool,
 		"false":  TokenBool,
