@@ -17,6 +17,7 @@ var builtInFunction = object.Module{
 	"bool":   &object.BuiltinFn{Fn: toBool},
 	"char":   &object.BuiltinFn{Fn: toChar},
 	"typeOf": &object.BuiltinFn{Fn: typeOf},
+	"clear":  &object.BuiltinFn{Fn: clear},
 }
 
 func size(args ...object.Object) object.Object {
@@ -220,6 +221,30 @@ func typeOf(args ...object.Object) object.Object {
 
 	return &object.String{
 		Value: string(args[0].Type()),
+	}
+}
+
+func clear(args ...object.Object) object.Object {
+	if len(args) != 1 {
+		return newError(ERROR, "wrong number of arguments. got=%d, want=1",
+			len(args))
+	}
+
+	arg, isMutable := object.Cast(args[0])
+
+	if !isMutable {
+		return newError(ERROR, "provided argument isn't mutable, consider changing the definition of it to let")
+	}
+
+	switch arg := arg.(type) {
+	case *object.Array:
+		arg.Elements = make([]object.Object, 0)
+		return arg
+	case *object.Map:
+		arg.Pairs = make(object.PairsType, 0)
+		return arg
+	default:
+		return newError(ERROR, "argument type isn't supported, expected array or map, got %s", arg.Type())
 	}
 }
 

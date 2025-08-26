@@ -644,7 +644,7 @@ func (i *Interpreter) evalArrayExpression(exps []ast.Expression) []object.Object
 		if idx == 0 {
 			firstElem = elemEval
 		}
-		if !object.ObjectTypesCheck(firstElem, elemEval) {
+		if !object.ObjectTypesCheck(firstElem, elemEval, true) {
 			// throw an error here
 			return []object.Object{
 				newError(ERROR, "multitude of types, (%v,%v), array elements should be of one type", firstElem.Type(), elemEval.Type()),
@@ -701,7 +701,7 @@ func (i *Interpreter) evalMapExpression(prs map[ast.Expression]ast.Expression) o
 		if idx == 0 {
 			valEl = value
 		}
-		if !object.ObjectTypesCheck(valEl, value) {
+		if !object.ObjectTypesCheck(valEl, value, true) {
 			return newError(ERROR, "multitude of types detected, value elements of a map should be of one type")
 		}
 		pairs[hashed] = object.HashPair{Key: key, Value: value}
@@ -1380,7 +1380,7 @@ func (i *Interpreter) evalAssignmentExpression(leftNode ast.Expression, left, ri
 		errMsg = "type mismatch on map elements"
 	}
 
-	typeCheck := object.ObjectTypesCheck(lft, lrt)
+	typeCheck := object.ObjectTypesCheck(lft, lrt, true)
 
 	if !typeCheck {
 		return newError(ERROR, errMsg)
@@ -1410,8 +1410,7 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 				return newError(ERROR, "function doesn't exist on the module %s", owner.Name)
 			}
 			// invokes the call expression
-			ableToCast := true
-			args := i.evalExpressions(ownerProperty.Args, !ableToCast)
+			args := i.evalExpressions(ownerProperty.Args, false)
 			if len(args) == 1 && isError(args[0]) {
 				// error out
 				return args[0]
@@ -1462,7 +1461,6 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 		}
 
 	case *object.StructInstance:
-
 		switch ownerProperty := property.(type) {
 		case *ast.CallExpression:
 			// search for the corresponding property call and invoke
@@ -1516,7 +1514,6 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 			return identifier
 
 		case *ast.MemberShipExpression:
-
 			// the immediate property here is going to be the new part owner of the other property that u want to get access to
 			// example of this: self.person.greet()
 			// self.person is going to become the immediate property

@@ -5,13 +5,17 @@ import (
 )
 
 var hashmapModule = object.Module{
-	"keys":      &object.BuiltinFn{Fn: KEYS},
-	"values":    &object.BuiltinFn{Fn: VALUES},
-	"equals":    &object.BuiltinFn{Fn: EQUALS},
-	"insert":    &object.BuiltinFn{Fn: INSERT},
-	"get_value": &object.BuiltinFn{Fn: GET_VALUE},
+	"keys":     &object.BuiltinFn{Fn: KEYS},
+	"values":   &object.BuiltinFn{Fn: VALUES},
+	"equals":   &object.BuiltinFn{Fn: EQUALS},
+	"insert":   &object.BuiltinFn{Fn: INSERT},
+	"getValue": &object.BuiltinFn{Fn: GET_VALUE},
+	"delete":   &object.BuiltinFn{Fn: DELETE},
 }
 
+// takes a hashmap, returns an array containing all the keys in the hashmap
+// usage:
+// -	keys := hashmap.keys(users)
 func KEYS(args ...object.Object) object.Object {
 	if len(args) != 1 {
 		return newError("wrong number of arguments. got=%d, want=1",
@@ -38,6 +42,9 @@ func KEYS(args ...object.Object) object.Object {
 	}
 }
 
+// takes a hashmap, returns an array containing all the values in the hashmap
+// usage:
+// -	values := hashmap.values(users)
 func VALUES(args ...object.Object) object.Object {
 	if len(args) != 1 {
 		return newError("wrong number of arguments. got=%d, want=1",
@@ -64,6 +71,11 @@ func VALUES(args ...object.Object) object.Object {
 	}
 }
 
+// takes a 2 hashmaps, returns a boolean wether those are equal or not
+// if len(map1) != len(map2), a false is returned
+// if at least one value doesn't exist on one of the maps, or the value is different, a false is returned
+// usage:
+// -	equals := hashmap.equals(users, people)
 func EQUALS(args ...object.Object) object.Object {
 	if len(args) != 2 {
 		return newError("wrong number of arguments. got=%d, want=3",
@@ -79,6 +91,13 @@ func EQUALS(args ...object.Object) object.Object {
 	}
 }
 
+// takes a hashmap, key-value, and insert the pair into the hashmap
+// if key doesn't implement the hashable interface an error is returned
+// a key can be one of this (char, string, boolean, int, float)
+// provided key needs to be also of the same type the current keys of the hashmap are
+// value provided needs to be of the same type the current value of the hashmap are
+// usage:
+// -	hashmap.insert(users, "John Doe", 28)
 func INSERT(args ...object.Object) object.Object {
 	if len(args) != 3 {
 		return newError("wrong number of arguments. got=%d, want=3",
@@ -150,6 +169,11 @@ func INSERT(args ...object.Object) object.Object {
 	}
 }
 
+// takes a hashmap, key, and returns the associated value with the key
+// a key can be one of this (char, string, boolean, int, float)
+// if no value found with the key and error will get returned
+// usage:
+// -	value := hashmap.getValue(users, "John Doe")
 func GET_VALUE(args ...object.Object) object.Object {
 	if len(args) != 2 {
 		return newError("wrong number of arguments. got=%d, want=2",
@@ -183,4 +207,45 @@ func GET_VALUE(args ...object.Object) object.Object {
 
 	// actual value
 	return value.Value
+}
+
+// takes a hashmap, key, and deletes if found the key-value pair
+// if no value associated with the key, it will return an error
+// usage:
+// -	hashmap.delete(users, "John Doe")
+func DELETE(args ...object.Object) object.Object {
+	if len(args) != 2 {
+		return newError("wrong number of arguments. got=%d, want=2",
+			len(args))
+	}
+
+	if args[0].Type() != object.MAP_OBJ {
+		return newError("first arg needs to be of type map, got %v", args[0].Type())
+	}
+
+	arg, isMutable := object.Cast(args[0])
+
+	if !isMutable {
+		return newError("provided map isn't mutable, since it was defined as a const, consider changing it to a mutable var")
+	}
+
+	args[1], _ = object.Cast(args[1])
+
+	key, ok := args[1].(object.Hashable)
+
+	if !ok {
+		return newError("provided value doesn't can't be used as key")
+	}
+
+	mapp := arg.(*object.Map)
+
+	_, ok = mapp.Pairs[key.HashKey()]
+
+	if !ok {
+		return newError("key (%v) is not associated with any value", key)
+	}
+
+	delete(mapp.Pairs, key.HashKey())
+
+	return mapp
 }

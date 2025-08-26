@@ -2,7 +2,7 @@ import "math"
 import "utils"
 
 main :: fn() {
-    let value = double(21)
+    let value = utils.double(21)
     print(value)
     return 0
 }

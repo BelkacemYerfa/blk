@@ -447,6 +447,40 @@ func (l *Lexer) readIdentifier() Token {
 	}
 }
 
+func (l *Lexer) unescapeString(raw string) string {
+	out := ""
+	i := 0
+	for i < len(raw) {
+		if raw[i] == '\\' && i+1 < len(raw) {
+			switch raw[i+1] {
+			case 'n':
+				out += "\n"
+				i += 2
+			case 't':
+				out += "\t"
+				i += 2
+			case 'r':
+				out += "\r"
+				i += 2
+			case '\\':
+				out += "\\"
+				i += 2
+			case '"':
+				out += "\""
+				i += 2
+			default:
+				// if unknown escape, keep it raw
+				out += string(raw[i])
+				i++
+			}
+		} else {
+			out += string(raw[i])
+			i++
+		}
+	}
+	return out
+}
+
 func (l *Lexer) readString() Token {
 	start := l.Cur + 1 // skip the opening quote
 	row, col := l.Row, l.Col
@@ -476,7 +510,8 @@ func (l *Lexer) readString() Token {
 	end := l.Cur
 	l.readChar() // consume the closing quote
 
-	text := strings.TrimSpace(string(l.Content[start:end]))
+	raw := string(l.Content[start:end])
+	text := l.unescapeString(raw)
 
 	return Token{
 		LiteralToken: LiteralToken{
@@ -547,14 +582,15 @@ func (l *Lexer) readRawString() Token {
 	}
 
 	if l.Cur >= len(l.Content) {
-		fmt.Println(`ERROR: the quoted data, doesn't have a closing Quote (")`)
+		fmt.Println("ERROR: the quoted data doesn't have a closing backtick (`)")
 		os.Exit(1)
 	}
 
 	end := l.Cur
-	l.readChar() // consume the closing quote
+	l.readChar() // consume the closing backtick
 
-	text := strings.TrimSpace(string(l.Content[start:end]))
+	// ✅ Keep raw, no unescaping
+	text := string(l.Content[start:end])
 
 	return Token{
 		LiteralToken: LiteralToken{

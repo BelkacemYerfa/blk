@@ -21,7 +21,7 @@ func TestAtomicLetStatementDCL(t *testing.T) {
 		},
 		{
 			`let result = "Hello from " + "blk" `,
-			`let result = ("Hello from" + "blk")`,
+			`let result = ("Hello from " + "blk")`,
 		},
 		{
 			"let result = 3.14 * 2.36 / 6.3",
@@ -51,7 +51,7 @@ func TestAtomicLetStatementDCL(t *testing.T) {
 			"const none_value = nul",
 		},
 		{
-			`result := "Hello from " + "blk" `,
+			`result := "Hello from" + "blk" `,
 			`let result = ("Hello from" + "blk")`,
 		},
 		{

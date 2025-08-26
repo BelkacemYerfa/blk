@@ -1,6 +1,6 @@
 Vec2 :: struct {
-    x,
-    y,
+    x := 0,
+    y := 0,
 
     length: fn() {
         return sqrt(x * x + y * y)
