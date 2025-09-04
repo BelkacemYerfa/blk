@@ -1323,6 +1323,10 @@ func (i *Interpreter) evalAssignment(left []LeftRes, right []object.Object) obje
 
 				return i.evalRecursiveAssignment(evalObj, rightObj, node.Object, node.Property)
 
+			// case to be added here if it is of type ast.IndexExpression
+			case *ast.IndexExpression:
+				return newError(ERROR, "not implemented yet")
+
 			default:
 				return newError(ERROR, "left side of assignment operation needs to be an identifier ")
 			}
@@ -1421,7 +1425,7 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 			// a given constant in a module
 			identifier, ok := owner.Attrs[ownerProperty.Value]
 			if !ok {
-				return newError(ERROR, "identifier doesn't exist on the module %s", ownerProperty.Value)
+				return newError(ERROR, "%s doesn't exist on the module %s", identifier, ownerProperty.Value)
 			}
 			// no need for casting
 			return identifier

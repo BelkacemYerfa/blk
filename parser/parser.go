@@ -581,7 +581,7 @@ func (p *Parser) parseForStatement() (*ast.ForStatement, error) {
 	if p.lookToken(1).Kind == lexer.TokenRange {
 		// use the range pattern struct fro the ast (ast.RangePattern)
 		pattern := &ast.RangePattern{Token: p.currentToken()}
-		pattern.Start = p.parseIntLiteral().(*ast.IntegerLiteral)
+		pattern.Start = p.parseExpression(OR)
 		tok := p.nextToken()
 		if tok.Kind != lexer.TokenRange {
 			return nil, p.error(tok, "expected .. token, got shit")

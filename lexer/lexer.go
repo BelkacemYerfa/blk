@@ -620,17 +620,27 @@ func (l *Lexer) readNumber() Token {
 			for l.Cur < len(l.Content) && isDigit(l.Content[l.Cur]) {
 				l.readChar()
 			}
+			text := string(l.Content[startPos:l.Cur])
+			return Token{
+				LiteralToken: LiteralToken{
+					Kind: TokenFloat,
+					Text: text,
+				},
+				Row: row,
+				Col: col,
+			}
 		}
 
 		text := string(l.Content[startPos:l.Cur])
 		return Token{
 			LiteralToken: LiteralToken{
-				Kind: TokenFloat,
+				Kind: TokenInt,
 				Text: text,
 			},
 			Row: row,
 			Col: col,
 		}
+
 	} else {
 		text := string(l.Content[startPos:l.Cur])
 

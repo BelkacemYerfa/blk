@@ -21,4 +21,10 @@ var typeModule = object.Module{
 	"BOOLEAN": &object.String{
 		Value: object.BOOLEAN_OBJ,
 	},
+	"ARRAY": &object.String{
+		Value: object.ARRAY_OBJ,
+	},
+	"MAP": &object.String{
+		Value: object.MAP_OBJ,
+	},
 }

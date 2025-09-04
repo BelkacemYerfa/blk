@@ -95,7 +95,7 @@ func arrayAppend(args ...object.Object) object.Object {
 		newValue, _ := object.Cast(args[1])
 
 		// means that the array reached it limits
-		if actualArray.Size == len(actualArray.Elements) {
+		if actualArray.Size == len(actualArray.Elements) && actualArray.Size > 0 {
 			return newError("can't append more value to this array, since it reached the max len allowed for it, initialization %d, current %d", actualArray.Size, len(actualArray.Elements))
 		}
 
@@ -366,8 +366,8 @@ func arrayInsert(args ...object.Object) object.Object {
 
 	// check the variadic params left are of the same type of the array type
 	variadic := &object.Array{
-		Size:     len(args[3:]),
-		Elements: args[3:],
+		Size:     len(args[2:]),
+		Elements: args[2:],
 	}
 
 	// type check first on the variadicElems

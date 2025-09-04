@@ -264,7 +264,7 @@ func (ws *WhileStatement) String() string {
 type RangePattern struct {
 	Token lexer.Token
 	Op    string
-	Start *IntegerLiteral
+	Start Expression
 	End   Expression
 }
 
