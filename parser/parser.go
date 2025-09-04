@@ -13,48 +13,64 @@ import (
 const (
 	_ int = iota
 	LOWEST
-	ASSIGN
-	OR
-	AND
+	ASSIGN      // =
+	OR          // ||
+	AND         // &&
+	BitOr       // |
+	BitXor      // ^
+	BitAnd      // &
 	EQUALS      // == !=
 	LESSGREATER // > < >= <=
+	BitShift    // << >>
 	SUM         // + -
 	PRODUCT     // * / %
-	PREFIX      // -X or !X
+	PREFIX      // -X or !X or ~X
 	CALL        // myFunction(X)
 	INDEX       // arr[i]
 	STRUCT      // Vec2{}.distance()
 )
 
 var precedences = map[lexer.TokenKind]int{
-	lexer.TokenCurlyBraceOpen: ASSIGN,
-	lexer.TokenBind:           ASSIGN,
-	lexer.TokenWalrus:         ASSIGN,
-	lexer.TokenOr:             OR,
-	lexer.TokenAssignOr:       OR,
-	lexer.TokenAnd:            AND,
-	lexer.TokenAssignAnd:      AND,
-	lexer.TokenEquals:         EQUALS,
-	lexer.TokenNotEquals:      EQUALS,
-	lexer.TokenLess:           LESSGREATER,
-	lexer.TokenLessOrEqual:    LESSGREATER,
-	lexer.TokenGreater:        LESSGREATER,
-	lexer.TokenGreaterOrEqual: LESSGREATER,
-	lexer.TokenPlus:           SUM,
-	lexer.TokenAssignPlus:     SUM,
-	lexer.TokenAssignPlusOne:  SUM,
-	lexer.TokenMinus:          SUM,
-	lexer.TokenAssignMinus:    SUM,
-	lexer.TokenAssignMinusOne: SUM,
-	lexer.TokenSlash:          PRODUCT,
-	lexer.TokenAssignSlash:    PRODUCT,
-	lexer.TokenMultiply:       PRODUCT,
-	lexer.TokenAssignMultiply: PRODUCT,
-	lexer.TokenModule:         PRODUCT,
-	lexer.TokenAssignModule:   PRODUCT,
-	lexer.TokenBraceOpen:      CALL,
-	lexer.TokenBracketOpen:    INDEX,
-	lexer.TokenDot:            STRUCT,
+	lexer.TokenCurlyBraceOpen:      ASSIGN,
+	lexer.TokenBind:                ASSIGN,
+	lexer.TokenWalrus:              ASSIGN,
+	lexer.TokenOr:                  OR,
+	lexer.TokenAssignOr:            OR,
+	lexer.TokenAnd:                 AND,
+	lexer.TokenAssignAnd:           AND,
+	lexer.TokenBitOr:               BitOr,
+	lexer.TokenAssignBitOr:         BitOr,
+	lexer.TokenBitXOR:              BitXor,
+	lexer.TokenAssignBitXor:        BitXor,
+	lexer.TokenBitAnd:              BitAnd,
+	lexer.TokenAssignBitAnd:        BitAnd,
+	lexer.TokenEquals:              EQUALS,
+	lexer.TokenNotEquals:           EQUALS,
+	lexer.TokenLess:                LESSGREATER,
+	lexer.TokenLessOrEqual:         LESSGREATER,
+	lexer.TokenGreater:             LESSGREATER,
+	lexer.TokenGreaterOrEqual:      LESSGREATER,
+	lexer.TokenBitRightShift:       BitShift,
+	lexer.TokenAssignBitRightShift: BitShift,
+	lexer.TokenBitLeftShift:        BitShift,
+	lexer.TokenAssignBitLeftShift:  BitShift,
+	lexer.TokenPlus:                SUM,
+	lexer.TokenAssignPlus:          SUM,
+	lexer.TokenAssignPlusOne:       SUM,
+	lexer.TokenMinus:               SUM,
+	lexer.TokenAssignMinus:         SUM,
+	lexer.TokenAssignMinusOne:      SUM,
+	lexer.TokenSlash:               PRODUCT,
+	lexer.TokenAssignSlash:         PRODUCT,
+	lexer.TokenMultiply:            PRODUCT,
+	lexer.TokenAssignMultiply:      PRODUCT,
+	lexer.TokenModule:              PRODUCT,
+	lexer.TokenAssignModule:        PRODUCT,
+	lexer.TokenExclamation:         PREFIX,
+	lexer.TokenBitNot:              PREFIX,
+	lexer.TokenBraceOpen:           CALL,
+	lexer.TokenBracketOpen:         INDEX,
+	lexer.TokenDot:                 STRUCT,
 }
 
 type (
@@ -94,6 +110,7 @@ func NewParser(tokens []lexer.Token, filepath string) *Parser {
 	p.registerPrefix(lexer.TokenBracketOpen, p.parseArrayLiteral)
 	p.registerPrefix(lexer.TokenCurlyBraceOpen, p.parseMapLiteral)
 	p.registerPrefix(lexer.TokenExclamation, p.parsePrefixExpression)
+	p.registerPrefix(lexer.TokenBitNot, p.parsePrefixExpression)
 	p.registerPrefix(lexer.TokenMinus, p.parsePrefixExpression)
 	p.registerPrefix(lexer.TokenBool, p.parseBooleanLiteral)
 	p.registerPrefix(lexer.TokenBraceOpen, p.parseGroupedExpression)
@@ -117,6 +134,11 @@ func NewParser(tokens []lexer.Token, filepath string) *Parser {
 	p.registerInfix(lexer.TokenGreater, p.parseInfixExpression)
 	p.registerInfix(lexer.TokenLessOrEqual, p.parseInfixExpression)
 	p.registerInfix(lexer.TokenGreaterOrEqual, p.parseInfixExpression)
+	p.registerInfix(lexer.TokenBitAnd, p.parseInfixExpression)
+	p.registerInfix(lexer.TokenBitOr, p.parseInfixExpression)
+	p.registerInfix(lexer.TokenBitXOR, p.parseInfixExpression)
+	p.registerInfix(lexer.TokenBitLeftShift, p.parseInfixExpression)
+	p.registerInfix(lexer.TokenBitRightShift, p.parseInfixExpression)
 	p.registerInfix(lexer.TokenBraceOpen, p.parseCallExpression)
 	p.registerInfix(lexer.TokenBracketOpen, p.parseIndexExpression)
 	p.registerInfix(lexer.TokenCurlyBraceOpen, p.parseCurlyBraceOpen)
@@ -232,7 +254,7 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		// go through the current tokens in the same line until u find :: or :=, if found go to parseBindExpression, otherwise parseExpression statement
 
 		lexerAssignOperator := []lexer.TokenKind{
-			lexer.TokenAssignSlash, lexer.TokenAssignMultiply, lexer.TokenAssignModule, lexer.TokenAssignMinus, lexer.TokenAssignPlus, lexer.TokenAssignOr, lexer.TokenAssignPlus,
+			lexer.TokenAssignSlash, lexer.TokenAssignMultiply, lexer.TokenAssignModule, lexer.TokenAssignMinus, lexer.TokenAssignPlus, lexer.TokenAssignOr, lexer.TokenAssignPlus, lexer.TokenAssignBitAnd, lexer.TokenAssignBitLeftShift, lexer.TokenAssignBitRightShift, lexer.TokenAssignBitOr, lexer.TokenAssignBitXor,
 		}
 
 		lexerAssignPlusOperator := []lexer.TokenKind{

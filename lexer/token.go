@@ -63,6 +63,19 @@ const (
 	TokenAssignSlash    TokenKind = "/="
 	TokenAssignModule   TokenKind = "%="
 
+	// Bitwise Operators
+	TokenBitAnd              TokenKind = "&"
+	TokenBitOr               TokenKind = "|"
+	TokenBitNot              TokenKind = "~"
+	TokenBitXOR              TokenKind = "^"
+	TokenBitRightShift       TokenKind = ">>"
+	TokenBitLeftShift        TokenKind = "<<"
+	TokenAssignBitAnd        TokenKind = "&="
+	TokenAssignBitOr         TokenKind = "|="
+	TokenAssignBitXor        TokenKind = "^="
+	TokenAssignBitRightShift TokenKind = ">>="
+	TokenAssignBitLeftShift  TokenKind = "<<="
+
 	// Bind Operators
 	TokenAssign TokenKind = "="
 	TokenBind   TokenKind = "::"

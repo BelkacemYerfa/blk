@@ -286,6 +286,21 @@ func (l *Lexer) NextToken() Token {
 				Kind: TokenGreaterOrEqual,
 				Text: ">=",
 			}
+		} else if nextChar == TokenGreater {
+			l.readChar()
+			nextChar := string(l.Content[l.Cur])
+			if nextChar == TokenAssign {
+				l.readChar()
+				token.LiteralToken = LiteralToken{
+					Kind: TokenAssignBitRightShift,
+					Text: ">>=",
+				}
+			} else {
+				token.LiteralToken = LiteralToken{
+					Kind: TokenBitRightShift,
+					Text: ">>",
+				}
+			}
 		} else if isLetter(char) {
 			return l.readIdentifier()
 		} else if isDigit(char) {
@@ -305,6 +320,21 @@ func (l *Lexer) NextToken() Token {
 				Kind: TokenGreaterOrEqual,
 				Text: "<=",
 			}
+		} else if nextChar == TokenLess {
+			l.readChar()
+			nextChar := string(l.Content[l.Cur])
+			if nextChar == TokenAssign {
+				l.readChar()
+				token.LiteralToken = LiteralToken{
+					Kind: TokenAssignBitLeftShift,
+					Text: "<<=",
+				}
+			} else {
+				token.LiteralToken = LiteralToken{
+					Kind: TokenBitLeftShift,
+					Text: "<<",
+				}
+			}
 		} else if isLetter(char) {
 			return l.readIdentifier()
 		} else if isDigit(char) {
@@ -315,10 +345,31 @@ func (l *Lexer) NextToken() Token {
 				Text: "<",
 			}
 		}
+	case TokenBitXOR:
+		l.readChar()
+		nextChar := string(l.Content[l.Cur])
+		if nextChar == TokenAssign {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenAssignBitXor,
+				Text: "^",
+			}
+		} else {
+			token.LiteralToken = LiteralToken{
+				Kind: TokenBitXOR,
+				Text: "^",
+			}
+		}
+	case TokenBitNot:
+		l.readChar()
+		token.LiteralToken = LiteralToken{
+			Kind: TokenBitNot,
+			Text: "~",
+		}
 	case "&":
 		l.readChar()
 		nextChar := string(l.Content[l.Cur])
-		if nextChar == "&" {
+		switch nextChar {
+		case "&":
 			l.readChar()
 			nextChar := string(l.Content[l.Cur])
 			if nextChar == "=" {
@@ -333,16 +384,22 @@ func (l *Lexer) NextToken() Token {
 					Text: "&&",
 				}
 			}
-		} else {
+		case "=":
 			token.LiteralToken = LiteralToken{
-				Kind: TokenError,
-				Text: nextChar,
+				Kind: TokenAssignBitAnd,
+				Text: "&=",
+			}
+		default:
+			token.LiteralToken = LiteralToken{
+				Kind: TokenBitAnd,
+				Text: "&",
 			}
 		}
 	case "|":
 		l.readChar()
 		nextChar := string(l.Content[l.Cur])
-		if nextChar == "|" {
+		switch nextChar {
+		case "|":
 			l.readChar()
 			nextChar := string(l.Content[l.Cur])
 			if nextChar == "=" {
@@ -357,10 +414,15 @@ func (l *Lexer) NextToken() Token {
 					Text: "||",
 				}
 			}
-		} else {
+		case "=":
 			token.LiteralToken = LiteralToken{
-				Kind: TokenError,
-				Text: nextChar,
+				Kind: TokenAssignOr,
+				Text: "|=",
+			}
+		default:
+			token.LiteralToken = LiteralToken{
+				Kind: TokenBitOr,
+				Text: "|",
 			}
 		}
 	case TokenQuote:
@@ -640,7 +702,6 @@ func (l *Lexer) readNumber() Token {
 			Row: row,
 			Col: col,
 		}
-
 	} else {
 		text := string(l.Content[startPos:l.Cur])
 
@@ -653,7 +714,6 @@ func (l *Lexer) readNumber() Token {
 			Col: col,
 		}
 	}
-
 }
 
 func (l *Lexer) skipComment() {

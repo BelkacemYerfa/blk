@@ -182,6 +182,31 @@ func (i *Integer) Binary(op lexer.TokenKind, r Object) Object {
 				Value: i.Value % r.Value,
 			}
 
+		case lexer.TokenBitOr:
+			return &Integer{
+				Value: i.Value | r.Value,
+			}
+
+		case lexer.TokenBitXOR:
+			return &Integer{
+				Value: i.Value ^ r.Value,
+			}
+
+		case lexer.TokenBitAnd:
+			return &Integer{
+				Value: i.Value & r.Value,
+			}
+
+		case lexer.TokenBitLeftShift:
+			return &Integer{
+				Value: i.Value << r.Value,
+			}
+
+		case lexer.TokenBitRightShift:
+			return &Integer{
+				Value: i.Value >> r.Value,
+			}
+
 		case lexer.TokenGreater:
 			return nativeBooleanObject(int64(i.Value) > r.Value)
 		case lexer.TokenGreaterOrEqual:

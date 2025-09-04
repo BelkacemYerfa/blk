@@ -1181,10 +1181,19 @@ func (i *Interpreter) evalUnaryExpression(op string, right object.Object) object
 	case lexer.TokenMinus:
 		// support for both ints and floats
 		return i.evalMinusPrefixOperatorExpression(right)
+
+	case lexer.TokenBitNot:
+		if right.Type() != object.INTEGER_OBJ {
+			return newError(ERROR, "~ operator can only be applied on integers")
+		}
+		val := right.(*object.Integer).Value
+		return &object.Integer{
+			Value: ^val,
+		}
 	default:
+		return newError(ERROR, "unknown operator: %s%s", op, right.Type())
 	}
 
-	return newError(ERROR, "unknown operator: %s%s", op, right.Type())
 }
 
 func (i *Interpreter) evalBangOperatorExpression(right object.Object) *object.Boolean {
