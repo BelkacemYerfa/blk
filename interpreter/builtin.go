@@ -4,6 +4,7 @@ import (
 	"blk/object"
 	"fmt"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -146,8 +147,27 @@ func toString(args ...object.Object) object.Object {
 			Value: fmt.Sprint(arg.Value),
 		}
 
+	case *object.Array:
+		// elements need to be of type char
+		// check length first
+		if len(arg.Elements) == 0 {
+			return newError(ERROR, "array is empty, consider filling it before")
+		}
+
+		if arg.Elements[0].Type() != object.CHAR_OBJ {
+			return newError(ERROR, "only array of char is accepted, instead got=%s", arg.Elements[0].Type())
+		}
+		res := make([]string, 0, len(arg.Elements))
+		for _, v := range arg.Elements {
+			res = append(res, v.Inspect())
+		}
+		return &object.String{
+			Value: strings.Join(res, ""),
+		}
+
 	case *object.String:
 		return arg
+
 	}
 
 	return newError(ERROR, "unsupported input type %s", args[0].Type())

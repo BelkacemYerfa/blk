@@ -18,6 +18,7 @@ var arrayModule = object.Module{
 	"insert":  &object.BuiltinFn{Fn: arrayInsert},
 	"delete":  &object.BuiltinFn{Fn: arrayDelete},
 	"concat":  &object.BuiltinFn{Fn: arrayConcat},
+	// "contains": &object.BuiltinFn{Fn: arrayContains},
 }
 
 // checks if 2 arrays are equals or not, and this by using a builtin method on the object interface
@@ -476,3 +477,35 @@ func arrayConcat(args ...object.Object) object.Object {
 		Elements: temp,
 	}
 }
+
+// func arrayContains(args ...object.Object) object.Object {
+// 	if len(args) != 2 {
+// 		return newError("wrong number of arguments. got=%d, want=2",
+// 			len(args))
+// 	}
+// 	arg, _ := object.Cast(args[0])
+
+// 	if arg.Type() != object.ARRAY_OBJ {
+// 		return newError("argument needs to be of type array, got %v", arg.Type())
+// 	}
+
+// 	array := arg.(*object.Array)
+
+// 	acceptedTypes := []object.ObjectType{
+// 		object.STRING_OBJ, object.INTEGER_OBJ, object.FLOAT_OBJ,
+// 	}
+
+// 	// check that element type is one of this for sorting
+// 	// string, int, float
+// 	if !slices.Contains(acceptedTypes, array.Elements[0].Type()) {
+// 		return newError("max method, only works on strings, integers and floats, provided element type %v", array.Elements[0].Type())
+// 	}
+
+// 	arg2, _ := object.Cast(args[2])
+
+// 	if !slices.Contains(acceptedTypes, arg )
+
+// 	_, found := slices.BinarySearchFunc(array.Elements)
+
+// 	return found
+// }

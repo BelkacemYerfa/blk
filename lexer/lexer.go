@@ -651,7 +651,7 @@ func (l *Lexer) readRawString() Token {
 	end := l.Cur
 	l.readChar() // consume the closing backtick
 
-	// ✅ Keep raw, no unescaping
+	// keep raw, no unescaping
 	text := string(l.Content[start:end])
 
 	return Token{

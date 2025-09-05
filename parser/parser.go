@@ -471,7 +471,8 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method) {
 			p.nextToken()
 
 			methods = append(methods, &ast.Method{
-				Key:   method,
+				Key: method,
+				// better handling in this case
 				Value: p.parseFunctionExpression().(*ast.FunctionExpression),
 			})
 		case lexer.TokenWalrus:

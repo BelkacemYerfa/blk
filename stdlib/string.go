@@ -46,7 +46,7 @@ func stringJoin(args ...object.Object) object.Object {
 	// check the type of elements in the array
 	// needs to be of type string
 	if array.Elements[0].Type() != object.STRING_OBJ {
-		return newError("first arg needs to be of type array, got=%v", args[0].Type())
+		return newError("element type needs to be of type string, got=%s", array.Elements[0].Type())
 	}
 
 	// second one is the separator which is a string

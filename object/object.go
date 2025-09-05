@@ -931,10 +931,10 @@ func (b *Struct) Inspect() string {
 	var out bytes.Buffer
 	out.WriteString("struct {")
 	for name, field := range b.Fields {
-		out.WriteString(name + " := " + field.Inspect())
+		out.WriteString(name + " := " + field.Inspect() + ", ")
 	}
 	for name, function := range b.Methods {
-		out.WriteString(name + " : " + function.Inspect())
+		out.WriteString(name + " : " + function.Inspect() + ", ")
 	}
 	out.WriteString("}")
 	return out.String()
@@ -967,10 +967,10 @@ func (b *StructInstance) Inspect() string {
 	var out bytes.Buffer
 	out.WriteString("struct {")
 	for name, field := range b.Fields {
-		out.WriteString(name + " := " + field.Inspect())
+		out.WriteString(name + " := " + field.Inspect() + ", ")
 	}
 	for name, function := range b.Methods {
-		out.WriteString(name + " : " + function.Inspect())
+		out.WriteString(name + " : " + function.Inspect() + ", ")
 	}
 	out.WriteString("}")
 	return out.String()

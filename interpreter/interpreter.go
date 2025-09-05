@@ -1124,7 +1124,7 @@ func (i *Interpreter) evalWhileStatement(nd *ast.WhileStatement) object.Object {
 				continue
 			case object.BREAK_OBJ:
 				// break out of the loop
-				break
+				return nil
 			case object.ERROR_OBJ:
 				return res
 			}
