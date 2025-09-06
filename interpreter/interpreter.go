@@ -411,7 +411,7 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 				if object.IsTruthy(left) {
 					return object.TRUE // short-circuit
 				}
-				r := i.Eval(nd.Left) // Only evaluate right side if left is falsy
+				r := i.Eval(nd.Right) // Only evaluate right side if left is falsy
 				return nativeBooleanObject(object.IsTruthy(r))
 			}
 		}
@@ -1512,7 +1512,7 @@ func (i *Interpreter) evalMembershipExpression(owner object.Object, obj, propert
 			// a given constant in a module
 			identifier, ok := owner.Fields[ownerProperty.Value]
 			if !ok {
-				return newError(ERROR, "identifier doesn't exist on the struct %v", obj)
+				return newError(ERROR, "identifier doesn't exist on the struct %v %s", obj, ownerProperty)
 			}
 
 			// responsible to detect if the current accessed method is private or not

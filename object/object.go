@@ -975,6 +975,11 @@ func (b *StructInstance) Inspect() string {
 	out.WriteString("}")
 	return out.String()
 }
+func (i *StructInstance) HashKey() HashKey {
+	h := fnv.New64a()
+	h.Write([]byte(i.Inspect()))
+	return HashKey{Type: i.Type(), Value: float64(h.Sum64())}
+}
 
 func (i *StructInstance) Copy() Object {
 	strct := &StructInstance{
