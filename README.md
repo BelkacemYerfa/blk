@@ -257,8 +257,10 @@ print(result(10, 20))  # 20
 Types are tracked at runtime via introspection:
 
 ```blk
-typeOf(x) == "int"
+typeOf(x) == types.INTEGER
 ```
+
+**Note:** types can be found in the [types](https://github.com/BelkacemYerfa/blk/blob/master/stdlib/type.go) module.
 
 ---
 
