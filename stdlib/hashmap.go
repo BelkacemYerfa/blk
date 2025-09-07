@@ -151,7 +151,7 @@ func INSERT(args ...object.Object) object.Object {
 			}
 
 			if value.Type() != newValue.Type() {
-				return newError("unusable as value key: %s, consider one of those types (boolean, integer, float, string)", newKey.Type())
+				return newError("unusable as value key: %s, consider one of those types (boolean, integer, float, string)", newValue.Type())
 			}
 
 			actualMap.Pairs[hashKey.HashKey()] = object.HashPair{

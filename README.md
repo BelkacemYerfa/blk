@@ -177,7 +177,11 @@ import "math"
 import "utils"
 ```
 
-No aliasing needed — always access via `utils.fn`.
+for aliasing use the as keyword:
+
+```blk
+import "custom.blk" as mod
+```
 
 ---
 
@@ -262,10 +266,10 @@ typeOf(x) == "int"
 
 - [x] Lexer and Tokenizer
 - [x] Parser and AST
-- [ ] Core Interpreter Engine
+- [x] Core Interpreter Engine
+- [x] REPL
+- [x] Built-in Modules (math, strings, hashmap, array, types)
 - [ ] Error System and Stack Traces
-- [ ] REPL and Debugger
-- [ ] Built-in Modules (math, io, time, etc.)
 
 ---
 
@@ -274,13 +278,9 @@ typeOf(x) == "int"
 ### Run
 
 ```bash
-blk run main.blk
+blk run -f ./main.blk
 ```
 
-### Build
+---
 
-```bash
-git clone https://github.com/yourname/blk
-cd blk
-go run cmd/main.go run examples/main.blk
-```
+**NOTE:** the project ins't finished yet. Expect bugs and breaking changes, don't use it for **production**.

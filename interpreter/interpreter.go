@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 )
 
@@ -471,7 +472,15 @@ func (i *Interpreter) Eval(node ast.Node) object.Object {
 		}
 
 		return i.evalMembershipExpression(obj, nd.Object, nd.Property)
+
+	case *ast.MatchExpression, *ast.EnumExpression:
+		// no support in the interpreter
+		return newError(WARNING, "no support currently for this feature")
+
 	default:
+		if reflect.TypeOf(node) != nil {
+			return newError(WARNING, "no support currently for this feature")
+		}
 	}
 	return nil
 }
