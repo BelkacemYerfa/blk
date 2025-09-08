@@ -7,16 +7,6 @@ import (
 	"strings"
 )
 
-type TYPE = string
-
-const (
-	IntType    TYPE = "int"
-	FloatType  TYPE = "float"
-	StringType TYPE = "string"
-	BoolType   TYPE = "bool"
-	VoidType   TYPE = "void"
-)
-
 type Node interface {
 	TokenLiteral() string
 	String() string
@@ -54,9 +44,101 @@ func (p *Program) String() string {
 	return out.String()
 }
 
+type TypeKind = int
+
+const (
+	zeroed TypeKind = iota
+	TypeInt8
+	TypeInt16
+	TypeInt32
+	TypeInt64
+	TypeUInt8
+	TypeUInt16
+	TypeUInt32
+	TypeUInt64
+	TypeFloat32
+	TypeFloat64
+	TypeBool
+	TypeChar
+	TypeString
+	TypeArray
+	TypeMap
+	TypePointer
+	TypeFunction
+)
+
+type Type interface {
+	Type() TypeKind
+	String() string
+}
+
+type PrimitiveType struct {
+	Token  lexer.Token // token type
+	Kind   TypeKind
+	Size   int  // optional
+	Signed bool // for ints
+}
+
+func (p *PrimitiveType) Type() TypeKind {
+	return p.Kind
+}
+func (p *PrimitiveType) String() string {
+	return p.Token.Kind
+}
+
+// represents arrays (fixed size arrays & dynamic ones) & hash maps
+// arrays:
+// - fixed size: array(<type>, size)
+// - dynamic: array(<type>)
+// maps: map(<key-type>, <value-type>)
+type CompositeType struct {
+	Token     lexer.Token
+	Kind      TypeKind
+	LeftType  Type // can represent any underline type
+	RightType Type
+	Size      Expression
+}
+
+func (ct *CompositeType) Type() TypeKind {
+	return ct.Kind
+}
+func (ct *CompositeType) String() string {
+	var out bytes.Buffer
+	out.WriteString(ct.Token.Kind)
+	out.WriteString("(")
+	out.WriteString(ct.LeftType.String())
+	if ct.RightType != nil {
+		out.WriteString("," + ct.RightType.String())
+	}
+	if ct.Size != nil {
+		if size, ok := ct.Size.(*IntegerLiteral); ok {
+			if size.Value <= 0 {
+				goto ret
+			}
+		}
+		out.WriteString("," + ct.Size.String())
+	}
+ret:
+	out.WriteString(")")
+	return out.String()
+}
+
+// represents function types such as fn(i8,i8)f32
+type FunctionType struct {
+	Token  lexer.Token
+	Kind   TypeKind
+	Args   []Type
+	Return []Type // support for multi return types
+}
+
+func (ft *FunctionType) Type() TypeKind {
+	return ft.Kind
+}
+
 type VarDeclaration struct {
 	Token   lexer.Token // the token.LET token
 	Mutable bool        // indicates if the vars are mutable or not
+	Type    Type
 	Name    []*Identifier
 	Value   Expression
 }

@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"blk/interpreter"
 	"blk/lexer"
 	"blk/parser"
-	"blk/repl"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -45,17 +43,7 @@ func init() {
 			Function:    Help,
 			Flags:       []FlagInfo{},
 		},
-		"repl": {
-			Description: "Opens the blk lang REPL",
-			Function:    Repl,
-			Flags:       []FlagInfo{},
-		},
 	}
-}
-
-func Repl(args []string) {
-	fmt.Println("REPL of blk lang is ready.")
-	repl.Start(os.Stdin, os.Stdout)
 }
 
 func Help(args []string) {
@@ -170,15 +158,7 @@ func Run(args []string) {
 		fmt.Printf("ERROR: failed to write AST to file: %v\n", err)
 		return
 	}
-	// fmt.Println(ast)
-	// errCollector := internals.NewErrorCollector(tokens)
-
-	i := interpreter.NewInterpreter(nil, targetFile)
-	evaluated := i.Eval(ast)
-
-	if evaluated != nil {
-		fmt.Println(evaluated.Inspect())
-	}
+	fmt.Println(ast.String())
 
 }
 

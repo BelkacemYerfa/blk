@@ -95,11 +95,25 @@ const (
 	TokenIdentifier TokenKind = "identifier"
 
 	// Var Types
-	TokenString TokenKind = "string"
-	TokenChar   TokenKind = "char" // represents a rune
-	TokenInt    TokenKind = "int"
-	TokenFloat  TokenKind = "float"
-	TokenBool   TokenKind = "bool"
+	TokenString  TokenKind = "string"
+	TokenChar    TokenKind = "char"
+	TokenBool    TokenKind = "bool"
+	TokenInt8    TokenKind = "i8"
+	TokenInt16   TokenKind = "i16"
+	TokenInt32   TokenKind = "i32"
+	TokenInt64   TokenKind = "i64"
+	TokenUInt8   TokenKind = "u8"
+	TokenUInt16  TokenKind = "u16"
+	TokenUInt32  TokenKind = "u32"
+	TokenUInt64  TokenKind = "u64"
+	TokenFloat32 TokenKind = "f32"
+	TokenFloat64 TokenKind = "f64"
+	TokenArray   TokenKind = "array"
+	TokenMap     TokenKind = "map"
+
+	// number type (used in the lexing phase)
+	TokenInt   TokenKind = "int"
+	TokenFloat TokenKind = "float"
 
 	// Error
 	TokenError TokenKind = "error"

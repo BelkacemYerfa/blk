@@ -307,6 +307,145 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	}
 }
 
+// parses explicit types
+func (p *Parser) parseType() (ast.Type, error) {
+	// current token
+	tok := p.nextToken()
+
+	switch tok.Kind {
+	case lexer.TokenArray, lexer.TokenMap:
+		// composite type
+		tp := &ast.CompositeType{Token: tok}
+		if tok.Kind == lexer.TokenArray {
+			tp.Kind = ast.TypeArray
+		} else {
+			tp.Kind = ast.TypeMap
+		}
+
+		tok = p.nextToken()
+		if tok.Kind != lexer.TokenBraceOpen {
+			return nil, p.error(tok, "expected ( after ", tok.Kind, " instead got ", tok.Text)
+		}
+
+		// consume the ( token
+		tok = p.currentToken()
+		if _, ok := lexer.TypeKeywords[tok.Kind]; !ok {
+			return nil, p.error(tok, "expected a type, but instead got ", tok.Text)
+		}
+
+		// call the parse type on the current token
+		nestedType, err := p.parseType()
+		if err != nil {
+			return nil, err
+		}
+		tp.LeftType = nestedType
+
+		//switch based on the current type
+		if tp.Kind == ast.TypeArray {
+			// parse the array size if it exists
+			tok = p.currentToken()
+			// check first if next token is ) or not
+			if tok.Kind != lexer.TokenBraceClose {
+				// expect first a comma
+
+				if tok.Kind != lexer.TokenComma {
+					return nil, p.error(tok, "expected a comma after the ", tp.LeftType, " instead got ", tok.Text)
+				}
+
+				p.nextToken()
+				tok = p.currentToken()
+				// it can be an identifier also
+				if tok.Kind != lexer.TokenIdentifier && tok.Kind != lexer.TokenInt {
+					return nil, p.error(tok, "expected an int literal | identifier after ", tp.LeftType, " instead got ", tok.Text)
+				}
+
+				// parse that token
+				expr := p.parseExpression(LOWEST)
+				tp.Size = expr
+
+				// consume the close bracket
+				if p.currentToken().Kind != lexer.TokenBraceClose {
+					return nil, p.error(tok, "after size in", tp, " a ) is expected, instead got ", tok.Text)
+				}
+
+			} else if tok.Kind == lexer.TokenBraceClose {
+				// set the size to be -1, means dynamic
+				tp.Size = &ast.IntegerLiteral{
+					Token: tok,
+					Value: -1,
+				}
+			}
+
+		} else {
+			// parse the second map type
+			tok = p.nextToken()
+			// first we expect the comma token
+			if tok.Kind != lexer.TokenComma {
+				return nil, p.error(tok, "expected a comma after the ", tp.LeftType, " instead got ", tok.Text)
+			}
+
+			// parse the second type
+			nestedType, err := p.parseType()
+			if err != nil {
+				return nil, err
+			}
+			tp.RightType = nestedType
+
+			tok = p.currentToken()
+			// check the end token is )
+			if tok.Kind != lexer.TokenBraceClose {
+				return nil, p.error(tok, "after value type ", tp.RightType, " a ) is expected, instead got ", tok.Text)
+			}
+		}
+
+		// consume the ) token
+		p.nextToken()
+
+		return tp, nil
+
+	case lexer.TokenFn:
+		// function type
+
+	case lexer.TokenAnd, lexer.TokenMultiply:
+		// pointer type
+
+	default:
+		// primitive type
+		primitive := &ast.PrimitiveType{
+			Token: tok,
+		}
+		// parse primitive type
+
+		switch tok.Kind {
+		case lexer.TokenBool, lexer.TokenString, lexer.TokenChar:
+			primitive.Size = -1
+
+		case lexer.TokenInt8, lexer.TokenInt16, lexer.TokenInt32, lexer.TokenInt64:
+			// signed int
+			size, _ := strconv.ParseInt(strings.Split(tok.Text, "i")[1], 10, 8)
+			primitive.Size = int(size)
+			primitive.Signed = true
+
+		case lexer.TokenUInt8, lexer.TokenUInt16, lexer.TokenUInt32, lexer.TokenUInt64, lexer.TokenFloat32, lexer.TokenFloat64:
+			// unsigned int & floats
+			separator := "u"
+			if tok.Kind == lexer.TokenFloat64 || tok.Kind == lexer.TokenFloat32 {
+				separator = "f"
+			}
+			size, _ := strconv.ParseInt(strings.Split(tok.Text, separator)[1], 10, 8)
+			primitive.Size = int(size)
+
+		default:
+			// unrecognized token
+			return nil, p.error(tok, "unrecognized type ", tok.Text)
+		}
+
+		return primitive, nil
+	}
+
+	return nil, nil
+}
+
 func (p *Parser) parseVarDeclaration() (*ast.VarDeclaration, error) {
 	stmt := &ast.VarDeclaration{Token: p.currentToken()}
 	stmt.Mutable = stmt.Token.Kind == lexer.TokenLet
@@ -317,8 +456,22 @@ func (p *Parser) parseVarDeclaration() (*ast.VarDeclaration, error) {
 
 	tok := p.nextToken()
 
+	if tok.Kind != lexer.TokenColon {
+		return nil, p.error(tok, "expected assign (=), got ", tok.Text)
+	}
+
+	// type
+	tp, err := p.parseType()
+	if err != nil {
+		return nil, err
+	}
+
+	stmt.Type = tp
+
+	tok = p.nextToken()
 	if tok.Kind != lexer.TokenAssign {
-		return nil, p.error(tok, "expected assign (=), got shit")
+		// fmt.Println(p.currentToken(), tok)
+		return nil, p.error(tok, "expected assign (=), got ", tok.Text)
 	}
 
 	stmt.Value = p.parseExpression(LOWEST)
@@ -1410,6 +1563,32 @@ func (p *Parser) parseBindExpression() (ast.Statement, error) {
 		// fall through
 	case lexer.TokenWalrus:
 		// fall through
+	case lexer.TokenColon:
+		// consume the :
+
+		tp, err := p.parseType()
+		if err != nil {
+			return nil, err
+		}
+
+		stmt.Type = tp
+
+		tok = p.nextToken()
+
+		if tok.Kind != lexer.TokenAssign && tok.Kind != lexer.TokenColon {
+			return nil, p.error(tok, "expected assign (= | :) after", tp, " token got ", tok.Text)
+		}
+
+		if tok.Kind == lexer.TokenColon {
+			stmt.Token = lexer.Token{
+				LiteralToken: lexer.LiteralToken{
+					Text: "const",
+					Kind: lexer.TokenConst,
+				},
+			}
+			stmt.Mutable = false
+		}
+
 	default:
 		return nil, p.error(tok, "expected (:= or ::) operators, got shit")
 	}
