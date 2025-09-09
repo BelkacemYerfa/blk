@@ -492,7 +492,16 @@ func (l *Lexer) readIdentifier() Token {
 
 	text := strings.TrimSpace(string(l.Content[startPos:l.Cur]))
 
-	if tokenKind, isKeyword := Keywords[text]; isKeyword {
+	tokenKind, isKeyword := Keywords[text]
+	if isKeyword {
+		return Token{LiteralToken: LiteralToken{
+			Kind: tokenKind,
+			Text: text,
+		}, Row: row, Col: col}
+	}
+
+	tokenKind, isKeyword = TypeKeywords[text]
+	if isKeyword {
 		return Token{LiteralToken: LiteralToken{
 			Kind: tokenKind,
 			Text: text,

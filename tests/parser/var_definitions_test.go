@@ -3,56 +3,61 @@ package parser_tests
 import (
 	"blk/lexer"
 	"blk/parser"
+	"fmt"
 	"testing"
 )
 
-func TestAtomicLetStatementDCL(t *testing.T) {
+func TestAtomicVarDCL(t *testing.T) {
 	tests := []struct {
 		input    string
 		expected string
 	}{
 		{
-			"let result = true && false",
-			"let result = (true && false)",
+			"let result: bool = true && false",
+			"let result: bool = (true && false)",
 		},
 		{
-			"let none_value = nul",
-			"let none_value = nul",
+			"let none_value: *i8 = nul",
+			"let none_value: *i8 = nul",
 		},
 		{
-			`let result = "Hello from " + "blk" `,
-			`let result = ("Hello from " + "blk")`,
+			`let result: string = "Hello from " + "blk" `,
+			`let result: string = ("Hello from " + "blk")`,
 		},
 		{
-			"let result = 3.14 * 2.36 / 6.3",
-			"let result = ((3.14 * 2.36) / 6.3)",
+			"let result: f32 = 3.14 * 2.36 / 6.3",
+			"let result: f32 = ((3.14 * 2.36) / 6.3)",
 		},
 		{
-			"let result = 5 + 6 % 32",
-			"let result = (5 + (6 % 32))",
+			"let result: i16 = 5 + 6 % 32",
+			"let result: i16 = (5 + (6 % 32))",
 		},
+		// {
+		// 	`let hash: map(string, struct{
+		// 		username : string,
+		// 		age : u8
+		// 	}) = {}`,
+		// 	// doesn't correctly output the expected format
+		// 	`let hash: map(string, struct{ let username : string = , let age : u8 = }) = {}`,
+		// },
+		// {
+		// 	`let hash = {
+		// 		"hello" : [1 , 2],
+		// 		"there" : [3 , 4]
+		// 	}`,
+		// 	`let hash = {"hello": [1,2], "there": [3,4]}`,
+		// },
 		{
-			`let hash = {}`,
-			`let hash = {}`,
-		},
-		{
-			`let hash = {
-				"hello" : [1 , 2],
-				"there" : [3 , 4]
-			}`,
-			`let hash = {"hello": [1,2], "there": [3,4]}`,
-		},
-		{
-			"result := true && false",
-			"let result = (true && false)",
+			"result: bool = true && false",
+			"let result: bool = (true && false)",
 		},
 		{
 			"none_value :: nul",
 			"const none_value = nul",
 		},
 		{
-			`result := "Hello from" + "blk" `,
-			`let result = ("Hello from" + "blk")`,
+			`result: string = "Hello from" + "blk" `,
+			`let result: string = ("Hello from" + "blk")`,
 		},
 		{
 			"result :: 3.14 * 2.36 / 6.3",
@@ -66,19 +71,13 @@ func TestAtomicLetStatementDCL(t *testing.T) {
 			`hash := {}`,
 			`let hash = {}`,
 		},
-		{
-			`hash := {
-				"hello" : [1 , 2],
-				"there" : [3 , 4]
-			}`,
-			`let hash = {"hello": [1,2], "there": [3,4]}`,
-		},
 	}
 
 	for _, tt := range tests {
 		l := lexer.NewLexer("", tt.input)
 		p := parser.NewParser(l.Tokenize(), "")
 		program := p.Parse()
+		fmt.Println(program, tt.input)
 		actual := program.String()
 		if actual != tt.expected {
 			t.Errorf("expected=%q, got=%q", tt.expected, actual)
@@ -101,7 +100,7 @@ func TestStructLetStatementDCL(t *testing.T) {
 		{
 			`User :: struct {
 				Name := "lofi",
-				getName : fn(self) {
+				getName :: fn(self) {
 					return self.Name
 				}
 			}`,

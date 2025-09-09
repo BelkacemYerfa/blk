@@ -76,8 +76,9 @@ greet :: fn(name) {
 Vec2 :: struct {
     x := 0.0,
     y := 0.0,
-    len: fn() {
-        sqrt(x * x + y * y)
+
+    len :: fn(self) {
+        sqrt(self.x * self.x + self.y * self.y)
     }
 }
 

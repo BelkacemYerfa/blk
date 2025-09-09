@@ -10,6 +10,7 @@ import (
 	"strings"
 )
 
+// ? link for precedence operator https://www.tutorialspoint.com/go/go_operators_precedence.htm
 const (
 	_ int = iota
 	LOWEST
@@ -112,6 +113,8 @@ func NewParser(tokens []lexer.Token, filepath string) *Parser {
 	p.registerPrefix(lexer.TokenExclamation, p.parsePrefixExpression)
 	p.registerPrefix(lexer.TokenBitNot, p.parsePrefixExpression)
 	p.registerPrefix(lexer.TokenMinus, p.parsePrefixExpression)
+	p.registerPrefix(lexer.TokenMultiply, p.parsePrefixExpression)
+	p.registerPrefix(lexer.TokenBitAnd, p.parsePrefixExpression)
 	p.registerPrefix(lexer.TokenBool, p.parseBooleanLiteral)
 	p.registerPrefix(lexer.TokenBraceOpen, p.parseGroupedExpression)
 	p.registerPrefix(lexer.TokenIf, p.parseIfExpression)
@@ -307,6 +310,237 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	}
 }
 
+func (p *Parser) parseCompositeType(prev lexer.Token) (*ast.CompositeType, error) {
+	// composite type
+	tp := &ast.CompositeType{Token: prev}
+	if prev.Kind == lexer.TokenArray {
+		tp.Kind = ast.TypeArray
+	} else {
+		tp.Kind = ast.TypeMap
+	}
+
+	tok := p.nextToken()
+	if tok.Kind != lexer.TokenBraceOpen {
+		return nil, p.error(tok, "expected ( after ", tok.Kind, " instead got ", tok.Text)
+	}
+
+	// consume the ( token
+	tok = p.currentToken()
+	if _, ok := lexer.TypeKeywords[tok.Kind]; !ok {
+		return nil, p.error(tok, "expected a type, but instead got ", tok.Text)
+	}
+
+	// call the parse type on the current token
+	nestedType, err := p.parseType()
+	if err != nil {
+		return nil, err
+	}
+	tp.LeftType = nestedType
+
+	//switch based on the current type
+	if tp.Kind == ast.TypeArray {
+		// parse the array size if it exists
+		tok = p.currentToken()
+		// check first if next token is ) or not
+		if tok.Kind != lexer.TokenBraceClose {
+			// expect first a comma
+
+			if tok.Kind != lexer.TokenComma {
+				return nil, p.error(tok, "expected a comma after the ", tp.LeftType, " instead got ", tok.Text)
+			}
+
+			p.nextToken()
+			tok = p.currentToken()
+			// it can be an identifier also
+			if tok.Kind != lexer.TokenIdentifier && tok.Kind != lexer.TokenInt {
+				return nil, p.error(tok, "expected an int literal | identifier after ", tp.LeftType, " instead got ", tok.Text)
+			}
+
+			// parse that token
+			expr := p.parseExpression(LOWEST)
+			tp.Size = expr
+
+			// consume the close bracket
+			if p.currentToken().Kind != lexer.TokenBraceClose {
+				return nil, p.error(tok, "after size in", tp, " a ) is expected, instead got ", tok.Text)
+			}
+
+		} else if tok.Kind == lexer.TokenBraceClose {
+			// set the size to be -1, means dynamic
+			tp.Size = &ast.IntegerLiteral{
+				Token: tok,
+				Value: -1,
+			}
+		}
+
+	} else {
+		// parse the second map type
+		tok = p.nextToken()
+		// first we expect the comma token
+		if tok.Kind != lexer.TokenComma {
+			return nil, p.error(tok, "expected a comma after the ", tp.LeftType, " instead got ", tok.Text)
+		}
+
+		// parse the second type
+		nestedType, err := p.parseType()
+		if err != nil {
+			return nil, err
+		}
+		tp.RightType = nestedType
+
+		tok = p.currentToken()
+		// check the end token is )
+		if tok.Kind != lexer.TokenBraceClose {
+			return nil, p.error(tok, "after value type ", tp.RightType, " a ) is expected, instead got ", tok.Text)
+		}
+	}
+
+	// consume the ) token
+	p.nextToken()
+
+	return tp, nil
+}
+
+func (p *Parser) parseFunctionType(prev lexer.Token) (ast.Type, error) {
+	tp := &ast.FunctionType{Token: prev, Kind: ast.TypeFunction}
+
+	tok := p.nextToken()
+	if tok.Kind != lexer.TokenBraceOpen {
+		return nil, p.error(tok, "expected ( after ", tp.Token.Kind, " instead got ", tok.Text)
+	}
+
+	args := make([]ast.Type, 0)
+
+	// check if ) is after (, means no arguments
+	if p.currentToken().Kind == lexer.TokenBraceClose {
+		tp.Args = args
+	} else {
+		args, err := p.parseParamType()
+
+		if err != nil {
+			return nil, err
+		}
+
+		tp.Args = args
+	}
+
+	// consume ) token
+	p.nextToken()
+	tok = p.currentToken()
+
+	if tok.Kind != lexer.TokenColon {
+		return nil, p.error(tok, "expected : after ) instead got ", tok.Text)
+	}
+
+	// consume the : token
+	p.nextToken()
+
+	tok = p.currentToken()
+	if tok.Kind != lexer.TokenBraceOpen {
+		return nil, p.error(tok, "expected ( after ", tp.Token.Kind, " instead got ", tok.Text)
+	}
+
+	// consume the ( token
+	p.nextToken()
+
+	rets := make([]ast.Type, 0)
+
+	if p.currentToken().Kind == lexer.TokenBraceClose {
+		tp.Return = rets
+	} else {
+		rets, err := p.parseParamType()
+
+		if err != nil {
+			return nil, err
+		}
+
+		tp.Return = rets
+	}
+
+	// consume ) token
+	p.nextToken()
+
+	return tp, nil
+}
+
+func (p *Parser) parseParamType() ([]ast.Type, error) {
+	pmType := make([]ast.Type, 0)
+
+	fRet, err := p.parseType()
+	if err != nil {
+		return nil, err
+	}
+	pmType = append(pmType, fRet)
+
+	for p.currentToken().Kind == lexer.TokenComma {
+		p.nextToken()
+		fRet, err := p.parseType()
+		if err != nil {
+			return nil, err
+		}
+		pmType = append(pmType, fRet)
+	}
+
+	// check close brace
+	tok := p.currentToken()
+
+	if tok.Kind != lexer.TokenBraceClose {
+		return nil, p.error(tok, "expected ) after last argument type instead got ", tok.Text)
+	}
+
+	return pmType, nil
+}
+
+func (p *Parser) parsePointerType(tok lexer.Token) (ast.Type, error) {
+	ptr := &ast.PointerType{Token: tok, Kind: ast.TypePointer}
+
+	rht, err := p.parseType()
+	if err != nil {
+		return nil, err
+	}
+
+	ptr.Right = rht
+
+	return ptr, nil
+}
+
+func (p *Parser) parsePrimitiveType(tok lexer.Token) (ast.Type, error) {
+	primitive := &ast.PrimitiveType{
+		Token: tok,
+	}
+	// parse primitive type
+
+	switch tok.Kind {
+	case lexer.TokenBool, lexer.TokenString, lexer.TokenChar:
+		primitive.Size = -1
+
+	case lexer.TokenInt8, lexer.TokenInt16, lexer.TokenInt32, lexer.TokenInt64:
+		// signed int
+		size, _ := strconv.ParseInt(strings.Split(tok.Text, "i")[1], 10, 8)
+		primitive.Size = int(size)
+		primitive.Signed = true
+
+	case lexer.TokenUInt8, lexer.TokenUInt16, lexer.TokenUInt32, lexer.TokenUInt64, lexer.TokenFloat32, lexer.TokenFloat64:
+		// unsigned int & floats
+		separator := "u"
+		if tok.Kind == lexer.TokenFloat64 || tok.Kind == lexer.TokenFloat32 {
+			separator = "f"
+		}
+		size, _ := strconv.ParseInt(strings.Split(tok.Text, separator)[1], 10, 8)
+		primitive.Size = int(size)
+
+	default:
+		// unsupported way for type
+		if tok.Kind == lexer.TokenEnum {
+			return nil, p.error(tok, "enums must be named")
+		}
+		// unrecognized token
+		return nil, p.error(tok, "unrecognized type ", tok.Text)
+	}
+
+	return primitive, nil
+}
+
 // parses explicit types
 func (p *Parser) parseType() (ast.Type, error) {
 	// current token
@@ -315,132 +549,32 @@ func (p *Parser) parseType() (ast.Type, error) {
 	switch tok.Kind {
 	case lexer.TokenArray, lexer.TokenMap:
 		// composite type
-		tp := &ast.CompositeType{Token: tok}
-		if tok.Kind == lexer.TokenArray {
-			tp.Kind = ast.TypeArray
-		} else {
-			tp.Kind = ast.TypeMap
-		}
-
-		tok = p.nextToken()
-		if tok.Kind != lexer.TokenBraceOpen {
-			return nil, p.error(tok, "expected ( after ", tok.Kind, " instead got ", tok.Text)
-		}
-
-		// consume the ( token
-		tok = p.currentToken()
-		if _, ok := lexer.TypeKeywords[tok.Kind]; !ok {
-			return nil, p.error(tok, "expected a type, but instead got ", tok.Text)
-		}
-
-		// call the parse type on the current token
-		nestedType, err := p.parseType()
-		if err != nil {
-			return nil, err
-		}
-		tp.LeftType = nestedType
-
-		//switch based on the current type
-		if tp.Kind == ast.TypeArray {
-			// parse the array size if it exists
-			tok = p.currentToken()
-			// check first if next token is ) or not
-			if tok.Kind != lexer.TokenBraceClose {
-				// expect first a comma
-
-				if tok.Kind != lexer.TokenComma {
-					return nil, p.error(tok, "expected a comma after the ", tp.LeftType, " instead got ", tok.Text)
-				}
-
-				p.nextToken()
-				tok = p.currentToken()
-				// it can be an identifier also
-				if tok.Kind != lexer.TokenIdentifier && tok.Kind != lexer.TokenInt {
-					return nil, p.error(tok, "expected an int literal | identifier after ", tp.LeftType, " instead got ", tok.Text)
-				}
-
-				// parse that token
-				expr := p.parseExpression(LOWEST)
-				tp.Size = expr
-
-				// consume the close bracket
-				if p.currentToken().Kind != lexer.TokenBraceClose {
-					return nil, p.error(tok, "after size in", tp, " a ) is expected, instead got ", tok.Text)
-				}
-
-			} else if tok.Kind == lexer.TokenBraceClose {
-				// set the size to be -1, means dynamic
-				tp.Size = &ast.IntegerLiteral{
-					Token: tok,
-					Value: -1,
-				}
-			}
-
-		} else {
-			// parse the second map type
-			tok = p.nextToken()
-			// first we expect the comma token
-			if tok.Kind != lexer.TokenComma {
-				return nil, p.error(tok, "expected a comma after the ", tp.LeftType, " instead got ", tok.Text)
-			}
-
-			// parse the second type
-			nestedType, err := p.parseType()
-			if err != nil {
-				return nil, err
-			}
-			tp.RightType = nestedType
-
-			tok = p.currentToken()
-			// check the end token is )
-			if tok.Kind != lexer.TokenBraceClose {
-				return nil, p.error(tok, "after value type ", tp.RightType, " a ) is expected, instead got ", tok.Text)
-			}
-		}
-
-		// consume the ) token
-		p.nextToken()
-
-		return tp, nil
+		return p.parseCompositeType(tok)
 
 	case lexer.TokenFn:
 		// function type
+		return p.parseFunctionType(tok)
 
-	case lexer.TokenAnd, lexer.TokenMultiply:
+	case lexer.TokenMultiply:
 		// pointer type
+		return p.parsePointerType(tok)
+
+	case lexer.TokenStruct:
+		// anonymous struct
+		p.Pos--
+		exp := p.parseStructExpression()
+
+		if exp == nil {
+			return nil, nil
+		}
+		return exp.(*ast.StructExpression), nil
+
+	case lexer.TokenIdentifier:
+		// TODO: think about identifier for type aliases
 
 	default:
 		// primitive type
-		primitive := &ast.PrimitiveType{
-			Token: tok,
-		}
-		// parse primitive type
-
-		switch tok.Kind {
-		case lexer.TokenBool, lexer.TokenString, lexer.TokenChar:
-			primitive.Size = -1
-
-		case lexer.TokenInt8, lexer.TokenInt16, lexer.TokenInt32, lexer.TokenInt64:
-			// signed int
-			size, _ := strconv.ParseInt(strings.Split(tok.Text, "i")[1], 10, 8)
-			primitive.Size = int(size)
-			primitive.Signed = true
-
-		case lexer.TokenUInt8, lexer.TokenUInt16, lexer.TokenUInt32, lexer.TokenUInt64, lexer.TokenFloat32, lexer.TokenFloat64:
-			// unsigned int & floats
-			separator := "u"
-			if tok.Kind == lexer.TokenFloat64 || tok.Kind == lexer.TokenFloat32 {
-				separator = "f"
-			}
-			size, _ := strconv.ParseInt(strings.Split(tok.Text, separator)[1], 10, 8)
-			primitive.Size = int(size)
-
-		default:
-			// unrecognized token
-			return nil, p.error(tok, "unrecognized type ", tok.Text)
-		}
-
-		return primitive, nil
+		return p.parsePrimitiveType(tok)
 	}
 
 	return nil, nil
@@ -470,10 +604,10 @@ func (p *Parser) parseVarDeclaration() (*ast.VarDeclaration, error) {
 
 	tok = p.nextToken()
 	if tok.Kind != lexer.TokenAssign {
-		// fmt.Println(p.currentToken(), tok)
 		return nil, p.error(tok, "expected assign (=), got ", tok.Text)
 	}
 
+	// TODO: change this later to support multi value
 	stmt.Value = p.parseExpression(LOWEST)
 	return stmt, nil
 }
@@ -487,6 +621,9 @@ func (p *Parser) parseReturnStatement() (*ast.ReturnStatement, error) {
 		stmt.ReturnValues = returnValues
 		return stmt, nil
 	}
+
+	// TODO: problem here with ++ & -- parsing also for <op>= exp
+	// ? Suggested fix: register the ++ && -- & other precedence operation to deal with this, resulting in change in the ast.AssignmentStatement to ast.AssignmentExpression
 
 	returnValues = append(returnValues, p.parseExpression(LOWEST))
 
@@ -575,22 +712,63 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method) {
 	operatorToken := p.lookToken(1)
 
 	switch operatorToken.Kind {
-	case lexer.TokenColon:
+	case lexer.TokenBind:
 		// parse it as method
+		// means it is a function
 		method, ok := p.parseIdentifier().(*ast.Identifier)
-
 		if !ok {
 			p.Errors = append(p.Errors, p.error(p.lookToken(-1), "expected an identifier, got shit"))
 			return nil, nil
 		}
 
-		// this to consume the : token
+		// this to consume the :: token
 		p.nextToken()
 
 		methods = append(methods, &ast.Method{
 			Key:   method,
 			Value: p.parseFunctionExpression().(*ast.FunctionExpression),
 		})
+
+	case lexer.TokenColon:
+		// parse type
+		field := &ast.VarDeclaration{Token: operatorToken, Mutable: true}
+
+		ident, ok := p.parseIdentifier().(*ast.Identifier)
+
+		if !ok {
+			return nil, nil
+		}
+
+		field.Name = append(field.Name, ident)
+
+		// consume the :
+		p.nextToken()
+
+		tp, err := p.parseType()
+
+		if err != nil {
+			p.Errors = append(p.Errors, err)
+			return nil, nil
+		}
+
+		field.Type = tp
+
+		// check if there is a default value or not
+		tok := p.currentToken()
+
+		if tok.Kind == lexer.TokenAssign {
+			p.nextToken() // consume = token
+
+			val := p.parseExpression(LOWEST)
+
+			if val == nil {
+				return nil, nil
+			}
+			field.Value = val
+		}
+
+		fields = append(fields, field)
+
 	case lexer.TokenWalrus:
 		// parse it as var declaration
 		field, err := p.parseBindExpression()
@@ -611,23 +789,62 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method) {
 		operatorToken := p.lookToken(1)
 
 		switch operatorToken.Kind {
-		case lexer.TokenColon:
+		case lexer.TokenBind:
 			// parse it as method
 			method, ok := p.parseIdentifier().(*ast.Identifier)
-
 			if !ok {
 				p.Errors = append(p.Errors, p.error(p.lookToken(-1), "expected an identifier, got shit"))
 				return nil, nil
 			}
 
-			// consume the : token
+			// this to consume the :: token
 			p.nextToken()
 
 			methods = append(methods, &ast.Method{
-				Key: method,
-				// better handling in this case
+				Key:   method,
 				Value: p.parseFunctionExpression().(*ast.FunctionExpression),
 			})
+
+		case lexer.TokenColon:
+			// parse type
+			field := &ast.VarDeclaration{Token: operatorToken, Mutable: true}
+
+			ident, ok := p.parseIdentifier().(*ast.Identifier)
+
+			if !ok {
+				return nil, nil
+			}
+
+			field.Name = append(field.Name, ident)
+
+			// consume the :
+			p.nextToken()
+
+			tp, err := p.parseType()
+
+			if err != nil {
+				p.Errors = append(p.Errors, err)
+				return nil, nil
+			}
+
+			field.Type = tp
+
+			// check if there is a default value or not
+			tok := p.currentToken()
+
+			if tok.Kind == lexer.TokenAssign {
+				p.nextToken() // consume = token
+
+				val := p.parseExpression(LOWEST)
+
+				if val == nil {
+					return nil, nil
+				}
+				field.Value = val
+			}
+
+			fields = append(fields, field)
+
 		case lexer.TokenWalrus:
 			// parse it as var declaration
 			field, err := p.parseBindExpression()

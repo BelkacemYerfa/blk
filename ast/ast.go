@@ -38,8 +38,11 @@ func (p *Program) TokenLiteral() string {
 
 func (p *Program) String() string {
 	var out bytes.Buffer
-	for _, s := range p.Statements {
+	for idx, s := range p.Statements {
 		out.WriteString(s.String())
+		if idx < len(p.Statements)-1 {
+			out.WriteString("\n")
+		}
 	}
 	return out.String()
 }
@@ -64,6 +67,8 @@ const (
 	TypeArray
 	TypeMap
 	TypePointer
+	TypeEnum
+	TypeStruct
 	TypeFunction
 )
 
@@ -108,7 +113,7 @@ func (ct *CompositeType) String() string {
 	out.WriteString("(")
 	out.WriteString(ct.LeftType.String())
 	if ct.RightType != nil {
-		out.WriteString("," + ct.RightType.String())
+		out.WriteString(", " + ct.RightType.String())
 	}
 	if ct.Size != nil {
 		if size, ok := ct.Size.(*IntegerLiteral); ok {
@@ -123,7 +128,7 @@ ret:
 	return out.String()
 }
 
-// represents function types such as fn(i8,i8)f32
+// represents function types such as fn(i8,i8): f32
 type FunctionType struct {
 	Token  lexer.Token
 	Kind   TypeKind
@@ -133,6 +138,45 @@ type FunctionType struct {
 
 func (ft *FunctionType) Type() TypeKind {
 	return ft.Kind
+}
+func (ft *FunctionType) String() string {
+	var out bytes.Buffer
+	out.WriteString(ft.Token.Kind)
+	out.WriteString("(")
+
+	for id, v := range ft.Args {
+		out.WriteString(v.String())
+		if id+1 <= len(ft.Args)-1 {
+			out.WriteString(",")
+		}
+	}
+	out.WriteString("): ")
+	out.WriteString("(")
+	for id, v := range ft.Return {
+		out.WriteString(v.String())
+		if id+1 <= len(ft.Return)-1 {
+			out.WriteString(",")
+		}
+	}
+
+	out.WriteString(")")
+	return out.String()
+}
+
+type PointerType struct {
+	Token lexer.Token
+	Kind  TypeKind
+	Right Type
+}
+
+func (ptr *PointerType) Type() TypeKind {
+	return ptr.Kind
+}
+func (ptr *PointerType) String() string {
+	var out bytes.Buffer
+	out.WriteString(ptr.Token.Kind)
+	out.WriteString(ptr.Right.String())
+	return out.String()
 }
 
 type VarDeclaration struct {
@@ -154,6 +198,9 @@ func (ls *VarDeclaration) String() string {
 		if idx+1 <= len(ls.Name)-1 {
 			out.WriteString(", ")
 		}
+	}
+	if ls.Type != nil {
+		out.WriteString(": " + ls.Type.String())
 	}
 	out.WriteString(" = ")
 	if ls.Value != nil {
@@ -192,7 +239,10 @@ type StructExpression struct {
 	Methods []*Method
 }
 
-func (ss *StructExpression) expressionNode()       {}
+func (ss *StructExpression) expressionNode() {}
+func (ss *StructExpression) Type() TypeKind {
+	return TypeStruct
+}
 func (ss *StructExpression) TokenLiteral() string  { return ss.Token.Text }
 func (nt *StructExpression) GetToken() lexer.Token { return nt.Token }
 func (ss *StructExpression) String() string {
@@ -227,7 +277,10 @@ type EnumExpression struct {
 	Body  []*Identifier
 }
 
-func (ss *EnumExpression) expressionNode()       {}
+func (ss *EnumExpression) expressionNode() {}
+func (ss *EnumExpression) Type() TypeKind {
+	return TypeEnum
+}
 func (ss *EnumExpression) TokenLiteral() string  { return ss.Token.Text }
 func (nt *EnumExpression) GetToken() lexer.Token { return nt.Token }
 func (ss *EnumExpression) String() string {

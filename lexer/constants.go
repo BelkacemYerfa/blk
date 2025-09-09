@@ -25,19 +25,6 @@ var (
 		"true":   TokenBool,
 		"false":  TokenBool,
 		"nul":    TokenNul,
-		"string": TokenString,
-		"char":   TokenChar,
-		"bool":   TokenBool,
-		"i8":     TokenInt8,
-		"i16":    TokenInt16,
-		"i32":    TokenInt32,
-		"i64":    TokenInt64,
-		"u8":     TokenUInt8,
-		"u16":    TokenUInt16,
-		"u32":    TokenUInt32,
-		"u64":    TokenUInt64,
-		"array":  TokenArray,
-		"map":    TokenMap,
 	}
 
 	TypeKeywords = map[string]TokenKind{
@@ -52,6 +39,8 @@ var (
 		"u16":    TokenUInt16,
 		"u32":    TokenUInt32,
 		"u64":    TokenUInt64,
+		"f32":    TokenFloat32,
+		"f64":    TokenFloat64,
 		"array":  TokenArray,
 		"map":    TokenMap,
 	}
@@ -95,5 +84,7 @@ var (
 		TokenExclamation: "!",
 		TokenMinus:       "-",
 		TokenBitNot:      "~",
+		TokenBitAnd:      "&",
+		TokenMultiply:    "*",
 	}
 )
