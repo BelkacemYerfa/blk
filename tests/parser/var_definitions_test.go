@@ -75,7 +75,7 @@ func TestAtomicVarDCL(t *testing.T) {
 
 	for _, tt := range tests {
 		l := lexer.NewLexer("", tt.input)
-		p := parser.NewParser(l.Tokenize(), "")
+		p := parser.NewParser(l, "")
 		program := p.Parse()
 		fmt.Println(program, tt.input)
 		actual := program.String()
@@ -110,7 +110,7 @@ func TestStructLetStatementDCL(t *testing.T) {
 
 	for _, tt := range tests {
 		l := lexer.NewLexer("", tt.input)
-		p := parser.NewParser(l.Tokenize(), "")
+		p := parser.NewParser(l, "")
 		program := p.Parse()
 		actual := program.String()
 		if actual != tt.expected {
@@ -145,7 +145,7 @@ func TestEnumDeclStatementDCL(t *testing.T) {
 
 	for _, tt := range tests {
 		l := lexer.NewLexer("", tt.input)
-		p := parser.NewParser(l.Tokenize(), "")
+		p := parser.NewParser(l, "")
 		program := p.Parse()
 		actual := program.String()
 		if actual != tt.expected {
@@ -175,7 +175,7 @@ func TestMemberShipAccessStatementDCL(t *testing.T) {
 
 	for _, tt := range tests {
 		l := lexer.NewLexer("", tt.input)
-		p := parser.NewParser(l.Tokenize(), "")
+		p := parser.NewParser(l, "")
 		program := p.Parse()
 		actual := program.String()
 		if actual != tt.expected {

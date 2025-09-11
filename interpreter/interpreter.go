@@ -539,7 +539,7 @@ func (i *Interpreter) evalModuleImport(nd *ast.ImportStatement) object.Object {
 			return newError(ERROR, err.Error())
 		}
 		l := lexer.NewLexer(cwd, string(content))
-		p := parser.NewParser(l.Tokenize(), cwd)
+		p := parser.NewParser(l, cwd)
 		program := p.Parse()
 
 		tempEnv := object.NewEnvironment(nil)

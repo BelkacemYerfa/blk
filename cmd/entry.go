@@ -133,12 +133,9 @@ func Run(args []string) {
 	content := string(byteContent)
 
 	l := lexer.NewLexer(targetFile, content)
-	tokens := l.Tokenize()
-
-	// fmt.Println(tokens)
 
 	filename, _ := os.Stat(targetFile)
-	p := parser.NewParser(tokens, filename.Name())
+	p := parser.NewParser(l, filename.Name())
 	ast := p.Parse()
 
 	if len(p.Errors) > 0 {

@@ -459,10 +459,16 @@ func (fs *BreakStatement) TokenLiteral() string  { return fs.Token.Text }
 func (nt *BreakStatement) GetToken() lexer.Token { return nt.Token }
 func (fs *BreakStatement) String() string        { return fs.TokenLiteral() }
 
+type Arg struct {
+	Token lexer.Token
+	Name  *Identifier
+	Type  Type
+}
+
 type FunctionExpression struct {
 	Token lexer.Token
 	Self  *Identifier // this indicates the self key
-	Args  []*Identifier
+	Args  []*Arg
 	Body  *BlockStatement
 }
 
@@ -476,7 +482,8 @@ func (fn *FunctionExpression) String() string {
 		params = append(params, fn.Self.String())
 	}
 	for _, p := range fn.Args {
-		params = append(params, p.String())
+		formatParam := p.Name.String() + ":" + p.Type.String()
+		params = append(params, formatParam)
 	}
 	out.WriteString(fn.TokenLiteral())
 	out.WriteString("(")
@@ -490,7 +497,6 @@ func (fn *FunctionExpression) String() string {
 
 type ScopeStatement struct {
 	Token lexer.Token
-	Name  *Identifier
 	Body  *BlockStatement
 }
 
@@ -499,11 +505,9 @@ func (ss *ScopeStatement) TokenLiteral() string  { return ss.Token.Text }
 func (nt *ScopeStatement) GetToken() lexer.Token { return nt.Token }
 func (ss *ScopeStatement) String() string {
 	var out bytes.Buffer
-	out.WriteString("scope ")
-	out.WriteString(ss.Name.String())
-	out.WriteString(" { ")
+	out.WriteString("scope {\n")
 	out.WriteString(ss.Body.String())
-	out.WriteString(" }")
+	out.WriteString("}")
 	return out.String()
 }
 
@@ -708,7 +712,7 @@ func (nt *BlockStatement) GetToken() lexer.Token { return nt.Token }
 func (bs *BlockStatement) String() string {
 	var out bytes.Buffer
 	for _, s := range bs.Body {
-		out.WriteString(s.String())
+		out.WriteString("  " + s.String() + "\n")
 	}
 	return out.String()
 }

@@ -18,7 +18,7 @@ func TestFunctionParameterParsing(t *testing.T) {
 	}
 	for _, tt := range tests {
 		l := lexer.NewLexer("", tt.input)
-		p := parser.NewParser(l.Tokenize(), "")
+		p := parser.NewParser(l, "")
 		program := p.Parse()
 		functionStmt := program.Statements[0].(*ast.VarDeclaration).Value.(*ast.FunctionExpression)
 
