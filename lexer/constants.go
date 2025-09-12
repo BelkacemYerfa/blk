@@ -12,7 +12,6 @@ var (
 		"if":     TokenIf,
 		"else":   TokenElse,
 		"use":    TokenUse,
-		"match":  TokenMatch,
 		"fn":     TokenFn,
 		"for":    TokenFor,
 		"in":     TokenIn,
@@ -43,6 +42,27 @@ var (
 		"f64":    TokenFloat64,
 		"array":  TokenArray,
 		"map":    TokenMap,
+	}
+
+	AssignBinOps = []TokenKind{
+		TokenAssignSlash,
+		TokenAssignMultiply,
+		TokenAssignModule,
+		TokenAssignMinus,
+		TokenAssignPlus,
+		TokenAssignOr,
+		TokenAssignBitOr,
+		TokenAssignAnd,
+		TokenAssignBitAnd,
+		TokenAssignBitLeftShift,
+		TokenAssignBitRightShift,
+		TokenAssignBitXor,
+	}
+
+	AssignOp = []TokenKind{
+		TokenAssign,
+		TokenWalrus,
+		TokenBind,
 	}
 
 	BinOperators = map[TokenKind]Operator{

@@ -19,7 +19,6 @@ const (
 	TokenUse    TokenKind = "use"
 	TokenIf     TokenKind = "if"
 	TokenElse   TokenKind = "else"
-	TokenMatch  TokenKind = "match"
 	TokenReturn TokenKind = "return"
 	TokenImport TokenKind = "import"
 	TokenAs     TokenKind = "as"

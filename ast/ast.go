@@ -717,6 +717,27 @@ func (bs *BlockStatement) String() string {
 	return out.String()
 }
 
+type AssignExpression struct {
+	Token lexer.Token // the token.IDENT token
+	Left  []Expression
+	Right []Expression
+}
+
+func (b *AssignExpression) expressionNode()        {}
+func (b *AssignExpression) TokenLiteral() string   { return b.Token.Text }
+func (nt *AssignExpression) GetToken() lexer.Token { return nt.Token }
+func (b *AssignExpression) String() string {
+	var out bytes.Buffer
+	for _, elem := range b.Left {
+		out.WriteString(elem.String())
+	}
+	out.WriteString(" = ")
+	for _, elem := range b.Right {
+		out.WriteString(elem.String())
+	}
+	return out.String()
+}
+
 type IfExpression struct {
 	Token       lexer.Token
 	Condition   Expression

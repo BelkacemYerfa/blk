@@ -35,6 +35,7 @@ var precedences = map[lexer.TokenKind]int{
 	lexer.TokenCurlyBraceOpen:      ASSIGN,
 	lexer.TokenBind:                ASSIGN,
 	lexer.TokenWalrus:              ASSIGN,
+	lexer.TokenAssign:              ASSIGN,
 	lexer.TokenOr:                  OR,
 	lexer.TokenAssignOr:            OR,
 	lexer.TokenAnd:                 AND,
@@ -122,10 +123,9 @@ func NewParser(lex *lexer.Lexer, filepath string) *Parser {
 	p.registerPrefix(lexer.TokenBool, p.parseBooleanLiteral)
 	p.registerPrefix(lexer.TokenBraceOpen, p.parseGroupedExpression)
 	p.registerPrefix(lexer.TokenIf, p.parseIfExpression)
-	// p.registerPrefix(lexer.TokenMatch, p.parseMatchExpression)
 	p.registerPrefix(lexer.TokenFn, p.parseFunctionExpression)
 	p.registerPrefix(lexer.TokenStruct, p.parseStructExpression)
-	// p.registerPrefix(lexer.TokenEnum, p.parseEnumExpression)
+	p.registerPrefix(lexer.TokenEnum, p.parseEnumExpression)
 
 	// infix/binary operators
 	p.registerInfix(lexer.TokenPlus, p.parseInfixExpression)
@@ -150,8 +150,22 @@ func NewParser(lex *lexer.Lexer, filepath string) *Parser {
 	p.registerInfix(lexer.TokenBracketOpen, p.parseIndexExpression)
 	p.registerInfix(lexer.TokenCurlyBraceOpen, p.parseCurlyBraceOpen)
 	p.registerInfix(lexer.TokenDot, p.parseMemberShipAccess)
-
 	// TODO: add ++ & -- tokens to be sort of expression
+	p.registerInfix(lexer.TokenAssignPlusOne, p.parseDoubleOperatorExpression)
+	p.registerInfix(lexer.TokenAssignMinusOne, p.parseDoubleOperatorExpression)
+	// TODO : add +=, -=, *=, /=, %=, &=, |=, ^=, <<=, >>=, &&=, ||=
+	p.registerInfix(lexer.TokenAssignSlash, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignMultiply, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignModule, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignMinus, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignPlus, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignOr, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignBitOr, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignAnd, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignBitAnd, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignBitLeftShift, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignBitRightShift, p.parseAssignOperatorExpression)
+	p.registerInfix(lexer.TokenAssignBitXor, p.parseAssignOperatorExpression)
 
 	// set the tok position
 	p.nextToken()
@@ -174,14 +188,21 @@ func (p *Parser) nextToken() {
 	p.peekToken = p.lexer.NextToken()
 }
 
-// func (p *Parser) lookToken(move int) lexer.Token {
-// 	peekPos := p.Pos + move
-// 	size := len(p.lexer.Content)
-// 	if peekPos >= size {
-// 		return lexer.Token{LiteralToken: lexer.LiteralToken{Kind: lexer.TokenEOF}}
-// 	}
-// 	return p.lexer.Content[peekPos]
-// }
+func (p *Parser) sync() {
+	for p.curToken.Row == p.prevToken.Row {
+		p.nextToken()
+	}
+}
+
+func mapExprToIdentifiers(exprs []ast.Expression) []*ast.Identifier {
+	res := make([]*ast.Identifier, 0, len(exprs))
+	for _, e := range exprs {
+		if ident, ok := e.(*ast.Identifier); ok {
+			res = append(res, ident)
+		}
+	}
+	return res
+}
 
 func (p *Parser) curTokenKindIs(kind lexer.TokenKind) bool {
 	return p.curToken.Kind == kind
@@ -211,9 +232,10 @@ func (p *Parser) Parse() *ast.Program {
 
 	for !p.curTokenKindIs(lexer.TokenEOF) {
 		stmt, err := p.parseStatement()
+
 		if err != nil {
 			p.Errors = append(p.Errors, err)
-			return nil
+			p.sync()
 		} else {
 			ast.Statements = append(ast.Statements, stmt)
 		}
@@ -250,30 +272,21 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 			return p.parseBindExpression()
 		}
 
-		// go through the current tokens in the same line until u find :: or :=, if found go to parseBindExpression, otherwise parseExpression statement
+		if p.peekTokenKindIs(lexer.TokenBraceOpen) {
+			return p.parseExpressionStatement()
+		}
 
-		// TODO: add all of other operators
-		// ? assign statement
-		// ? list : ++, --, +=, -=, *=, /=, %=, &=, |=, ^=, <<=, >>=, &&=, ||=
+		// go through the current tokens in the same line until u find :: or :=, if found go to parseBindExpression, otherwise parseExpression statement
 
 		idents := make([]ast.Expression, 0)
 
-		lexerAssignOperator := []lexer.TokenKind{
-			lexer.TokenAssignSlash, lexer.TokenAssignMultiply, lexer.TokenAssignModule, lexer.TokenAssignMinus, lexer.TokenAssignPlus, lexer.TokenAssignOr, lexer.TokenAssignPlus, lexer.TokenAssignBitAnd, lexer.TokenAssignBitLeftShift, lexer.TokenAssignBitRightShift, lexer.TokenAssignBitOr, lexer.TokenAssignBitXor,
-		}
-
-		lexerAssignPlusOperator := []lexer.TokenKind{
-			lexer.TokenAssignPlusOne, lexer.TokenAssignMinusOne,
-		}
-
-		lexerBindOperators := []lexer.TokenKind{
-			lexer.TokenAssign, lexer.TokenWalrus, lexer.TokenBind,
-		}
-
-		breakToken := slices.Concat(lexerAssignOperator, lexerAssignPlusOperator, lexerBindOperators)
+		breakOperators := slices.Concat(lexer.AssignBinOps, lexer.AssignOp)
 
 		// parse until one of those token
-		for !slices.Contains(breakToken, p.curToken.Kind) {
+		for !slices.Contains(breakOperators, p.curToken.Kind) {
+			if p.curTokenKindIs(lexer.TokenComma) {
+				p.nextToken() // consume token comma
+			}
 			if !p.curTokenKindIs(lexer.TokenIdentifier) {
 				return nil, p.error(p.curToken, "with assignments operators, left side expects only identifier, instead got ", p.curToken.Text)
 			}
@@ -282,76 +295,26 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		}
 
 		switch {
-		case slices.Contains(lexerAssignOperator, p.curToken.Kind):
+		case slices.Contains(lexer.AssignBinOps, p.curToken.Kind):
 			if len(idents) > 1 {
-				// error
-				return nil, p.error(p.curToken, p.curToken.Text, " operator, support only one lhs expression")
+				return nil, p.error(p.curToken, p.curToken.Text, " operators, can't have more than one lhs expression, got ", len(idents), "  expressions")
 			}
 
-			expr := &ast.AssignStatement{Token: idents[0].GetToken(), Left: idents}
+			expr := p.parseAssignOperatorExpression(idents[0])
 
-			operator := strings.Split(p.curToken.Text, "=")[0]
+			return &ast.ExpressionStatement{
+				Token:      idents[0].GetToken(),
+				Expression: expr,
+			}, nil
 
-			p.nextToken()
-
-			expr.Right = []ast.Expression{
-				&ast.BinaryExpression{
-					Token:    p.curToken,
-					Operator: operator,
-					Left:     expr.Left[0],
-					Right:    p.parseExpression(LOWEST),
-				},
-			}
-
-			fmt.Println(expr.Left)
-			return expr, nil
-
-		case slices.Contains(lexerAssignPlusOperator, p.curToken.Kind):
-			if len(idents) > 1 {
-				// error
-				return nil, p.error(p.curToken, p.curToken.Text, " operator, support only one lhs expression")
-			}
-
-			expr := &ast.AssignStatement{Token: idents[0].GetToken(), Left: idents}
-
-			operator := string(p.curToken.Text[0])
-			p.nextToken()
-
-			// parse the operator
-			expr.Right = []ast.Expression{
-				&ast.BinaryExpression{
-					Token:    p.curToken,
-					Operator: operator,
-					Left:     expr.Left[0],
-					// default of it this
-					Right: &ast.IntegerLiteral{
-						Value: 1,
-					},
-				},
-			}
-
-			// skips the operator
-			p.nextToken()
-			return expr, nil
-
-		case slices.Contains(lexerBindOperators, p.curToken.Kind):
+		case slices.Contains(lexer.AssignOp, p.curToken.Kind):
 			if p.curTokenKindIs(lexer.TokenAssign) {
 				stmt := &ast.AssignStatement{Token: p.curToken, Left: idents}
 				p.nextToken()
 
-				fmt.Println(stmt.Left)
 				stmt.Right = p.parsePrefixExpressionWrapper()
 				return stmt, nil
 			} else {
-				mapToIdentifiers := func(exprs []ast.Expression) []*ast.Identifier {
-					res := make([]*ast.Identifier, 0, len(exprs))
-					for _, e := range exprs {
-						if ident, ok := e.(*ast.Identifier); ok {
-							res = append(res, ident)
-						}
-					}
-					return res
-				}
 
 				stmt := &ast.VarDeclaration{
 					Token: lexer.Token{
@@ -363,42 +326,29 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 						Row: p.curToken.Row,
 					},
 					Mutable: p.curTokenKindIs(lexer.TokenWalrus),
-					Name:    mapToIdentifiers(idents)}
+					Name:    mapExprToIdentifiers(idents)}
+
+				if p.curTokenKindIs(lexer.TokenBind) {
+					stmt.Token.LiteralToken = lexer.LiteralToken{
+						Text: "const",
+						Kind: lexer.TokenConst,
+					}
+				}
 
 				// consume cur tok
 				p.nextToken()
 
-				value := p.parseExpression(LOWEST)
-
-				if value == nil {
-					return nil, p.error(p.curToken, "expected an expression, got nil value")
-				}
-
-				stmt.Value = value
+				stmt.Value = p.parseExpression(LOWEST)
 
 				return stmt, nil
 			}
 
 		default:
-			// error
 			return p.parseExpressionStatement()
 		}
 
-		// if p.lookToken(idx).Kind == lexer.TokenBind || p.lookToken(idx).Kind == lexer.TokenWalrus {
-		// 	return p.parseBindExpression()
-		// }
-
-		// if p.lookToken(idx).Kind == lexer.TokenAssign {
-		// 	return p.parseAssignStatement()
-		// }
-
-		// if slices.Contains(lexerAssignOperator, p.lookToken(idx).Kind) {
-		// 	return p.parseAssignOperatorExpression()
-		// }
-
-		// if slices.Contains(lexerAssignPlusOperator, p.lookToken(idx).Kind) {
-		// 	return p.parseDoubleOperatorExpression()
-		// }
+	case lexer.TokenError:
+		return nil, p.error(p.curToken, p.curToken.Text)
 
 	default:
 		return p.parseExpressionStatement()
@@ -821,7 +771,7 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method) {
 			p.Errors = append(p.Errors, p.error(p.prevToken, "expected an identifier, got ", p.prevToken.Text))
 			return nil, nil
 		}
-		fmt.Println(p.curToken)
+
 		// this to consume the :: token
 		p.nextToken()
 
@@ -969,63 +919,65 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method) {
 	return fields, methods
 }
 
-// func (p *Parser) parseEnumExpression() ast.Expression {
-// 	expr := &ast.EnumExpression{Token: p.currentToken()}
+func (p *Parser) parseEnumExpression() ast.Expression {
+	expr := &ast.EnumExpression{Token: p.curToken}
 
-// 	// consume the enum lexer.token
-// 	p.nextToken()
+	// consume the enum lexer.token
+	p.nextToken()
 
-// 	if !p.expect([]lexer.TokenKind{lexer.TokenCurlyBraceOpen}) {
-// 		p.Errors = append(p.Errors, p.error(p.currentToken(), "expected curl, got shit"))
-// 		return nil
-// 	}
+	if !p.curTokenKindIs(lexer.TokenCurlyBraceOpen) {
+		p.Errors = append(p.Errors, p.error(p.curToken, "expected curly brace open {, instead got ", p.curToken.Text))
+		return nil
+	}
 
-// 	tok := p.currentToken()
+	p.nextToken()
 
-// 	if tok.Kind == lexer.TokenBracketClose {
-// 		p.nextToken()
-// 		return &ast.EnumExpression{
-// 			Token: expr.Token,
-// 			Body:  []*ast.Identifier{},
-// 		}
-// 	}
+	if p.curTokenKindIs(lexer.TokenBracketClose) {
+		p.nextToken()
+		return &ast.EnumExpression{
+			Token: expr.Token,
+			Body:  []*ast.Identifier{},
+		}
+	}
 
-// 	expr.Body = p.parseEnumFields()
-// 	return expr
+	expr.Body = p.parseEnumFields()
+	return expr
 
-// }
+}
 
-// func (p *Parser) parseEnumFields() []*ast.Identifier {
-// 	fields := make([]*ast.Identifier, 0)
+func (p *Parser) parseEnumFields() []*ast.Identifier {
+	fields := make([]*ast.Identifier, 0)
 
-// 	field, ok := p.parseIdentifier().(*ast.Identifier)
+	field, ok := p.parseIdentifier().(*ast.Identifier)
 
-// 	if !ok {
-// 		p.Errors = append(p.Errors, p.error(p.lookToken(-1), "expected an identifier, got shit"))
-// 		return nil
-// 	}
+	if !ok {
+		p.Errors = append(p.Errors, p.error(p.curToken, "expected an identifier, instead got ", p.curToken.Text))
+		return nil
+	}
 
-// 	fields = append(fields, field)
+	fields = append(fields, field)
 
-// 	for p.currentToken().Kind == lexer.TokenComma {
-// 		p.nextToken()
-// 		field, ok := p.parseIdentifier().(*ast.Identifier)
+	for p.curTokenKindIs(lexer.TokenComma) {
+		p.nextToken()
+		field, ok := p.parseIdentifier().(*ast.Identifier)
 
-// 		if !ok {
-// 			p.Errors = append(p.Errors, p.error(p.lookToken(-1), "expected an identifier, got shit"))
-// 			return nil
-// 		}
+		if !ok {
+			p.Errors = append(p.Errors, p.error(p.curToken, "expected an identifier, instead got ", p.curToken.Text))
+			return nil
+		}
 
-// 		fields = append(fields, field)
-// 	}
+		fields = append(fields, field)
+	}
 
-// 	if !p.expect([]lexer.TokenKind{lexer.TokenCurlyBraceClose}) {
-// 		p.Errors = append(p.Errors, p.error(p.currentToken(), "expected close curly brace ( } ), got shit"))
-// 		return nil
-// 	}
+	if !p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
+		p.Errors = append(p.Errors, p.error(p.curToken, "expected close curly brace ( } ), instead got ", p.curToken.Text))
+		return nil
+	}
 
-// 	return fields
-// }
+	p.nextToken()
+
+	return fields
+}
 
 func (p *Parser) parseWhileStatement() (*ast.WhileStatement, error) {
 	stmt := &ast.WhileStatement{Token: p.curToken}
@@ -1438,94 +1390,6 @@ func (p *Parser) parseIfExpression() ast.Expression {
 	return expr
 }
 
-// func (p *Parser) parseMatchExpression() ast.Expression {
-// 	expr := &ast.MatchExpression{Token: p.currentToken()}
-// 	// consume math keyword
-// 	p.nextToken()
-
-// 	expr.MatchKey = p.parseExpression(ASSIGN)
-
-// 	if !p.expect([]lexer.TokenKind{lexer.TokenCurlyBraceOpen}) {
-// 		p.Errors = append(p.Errors, p.error(p.currentToken(), "expected close curly brace '{', got shit"))
-// 		return nil
-// 	}
-
-// 	matchArms := make([]ast.MatchArm, 0)
-// 	tok := p.currentToken()
-
-// 	if tok.Kind == lexer.TokenCurlyBraceClose {
-// 		p.nextToken()
-// 		expr.Arms = matchArms
-// 		return expr
-// 	}
-
-// 	pattern := p.parseExpression(LOWEST)
-
-// 	tok = p.nextToken()
-
-// 	if !p.curTokenKindIs(lexer.TokenMatch) {
-// 		p.Errors = append(p.Errors, p.error(tok, "expected colon (match), got shit"))
-// 		return nil
-// 	}
-
-// 	if !p.expect([]lexer.TokenKind{lexer.TokenCurlyBraceOpen}) {
-// 		p.Errors = append(p.Errors, p.error(p.currentToken(), "expected close curly brace '{', got shit"))
-// 		return nil
-// 	}
-
-// 	value := p.parseBlockStatement().(*ast.BlockStatement)
-
-// 	matchArms = append(matchArms, ast.MatchArm{
-// 		Token:   pattern.GetToken(),
-// 		Pattern: pattern,
-// 		Body:    value,
-// 	})
-
-// 	for p.currentToken().Kind == lexer.TokenComma {
-// 		p.nextToken()
-
-// 		patterCase := p.currentToken()
-
-// 		pattern := p.parseExpression(LOWEST)
-// 		tok = p.nextToken()
-
-// 		if !p.curTokenKindIs(lexer.TokenMatch) {
-// 			p.Errors = append(p.Errors, p.error(tok, "expected colon ( : ), got shit"))
-// 			return nil
-// 		}
-
-// 		if !p.expect([]lexer.TokenKind{lexer.TokenCurlyBraceOpen}) {
-// 			p.Errors = append(p.Errors, p.error(p.currentToken(), "expected close curly brace '{', got shit"))
-// 			return nil
-// 		}
-
-// 		value := p.parseBlockStatement().(*ast.BlockStatement)
-
-// 		if patterCase.Text == "_" {
-// 			// default case
-// 			expr.Default = &ast.MatchArm{
-// 				Token:   pattern.GetToken(),
-// 				Pattern: pattern,
-// 				Body:    value,
-// 			}
-// 		} else {
-// 			matchArms = append(matchArms, ast.MatchArm{
-// 				Token:   pattern.GetToken(),
-// 				Pattern: pattern,
-// 				Body:    value,
-// 			})
-// 		}
-// 	}
-// 	expr.Arms = matchArms
-
-// 	if !p.expect([]lexer.TokenKind{lexer.TokenCurlyBraceClose}) {
-// 		p.Errors = append(p.Errors, p.error(p.currentToken(), "expected close curly brace '}', got shit"))
-// 		return nil
-// 	}
-
-// 	return expr
-// }
-
 func (p *Parser) parseFunctionExpression() ast.Expression {
 	expr := &ast.FunctionExpression{Token: p.curToken}
 	p.nextToken()
@@ -1664,12 +1528,14 @@ func (p *Parser) parseBlockStatement() ast.Expression {
 
 		if err != nil {
 			p.Errors = append(p.Errors, err)
+			p.sync()
 		} else {
 			block.Body = append(block.Body, stmt)
 		}
 	}
 
 	if !p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
+		p.error(p.curToken, "end of block expression expects }, instead got ", p.curToken.Text)
 		return nil
 	}
 
@@ -1765,32 +1631,38 @@ func (p *Parser) parseCurlyBraceOpen(left ast.Expression) ast.Expression {
 
 func (p *Parser) parseStructInstanceExpression(left ast.Expression) ast.Expression {
 	expr := &ast.StructInstanceExpression{Token: left.GetToken(), Left: left}
-	expr.Body = p.parseFieldValues()
+	fields, err := p.parseFieldValues()
+
+	if err != nil {
+		p.Errors = append(p.Errors, err)
+		return nil
+	}
+
+	expr.Body = fields
 
 	return expr
 }
 
-func (p *Parser) parseFieldValues() []ast.FieldInstance {
+func (p *Parser) parseFieldValues() ([]ast.FieldInstance, error) {
 	fields := make([]ast.FieldInstance, 0)
 	p.nextToken()
 
 	if p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
 		p.nextToken()
-		return fields
+		return fields, nil
 	}
 
 	identifier, ok := p.parseIdentifier().(*ast.Identifier)
 
 	if !ok {
-		p.Errors = append(p.Errors, p.error(p.curToken, "expected an identifier, got ", p.curToken))
-		return []ast.FieldInstance{}
+		return []ast.FieldInstance{}, p.error(p.curToken, "expected an identifier, got ", p.curToken.Text)
+	}
+
+	if !p.curTokenKindIs(lexer.TokenColon) {
+		return []ast.FieldInstance{}, p.error(p.curToken, "expected : after identifier, instead got ", p.curToken.Text)
 	}
 
 	p.nextToken()
-
-	if !p.curTokenKindIs(lexer.TokenColon) {
-		return []ast.FieldInstance{}
-	}
 
 	value := p.parseExpression(LOWEST)
 
@@ -1804,14 +1676,14 @@ func (p *Parser) parseFieldValues() []ast.FieldInstance {
 		identifier, ok := p.parseIdentifier().(*ast.Identifier)
 
 		if !ok {
-			return fields
+			return fields, p.error(p.curToken, "expected an identifier, got ", p.curToken)
+		}
+
+		if !p.curTokenKindIs(lexer.TokenColon) {
+			return fields, p.error(p.curToken, "expected : after identifier, instead got ", p.curToken.Text)
 		}
 
 		p.nextToken()
-
-		if !p.curTokenKindIs(lexer.TokenColon) {
-			return fields
-		}
 
 		value := p.parseExpression(LOWEST)
 
@@ -1821,21 +1693,18 @@ func (p *Parser) parseFieldValues() []ast.FieldInstance {
 		})
 	}
 
-	p.nextToken()
-
 	if !p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
-		p.Errors = append(p.Errors, p.error(p.curToken, "expect curly brace close }, instead got ", p.curToken.Text))
-		return fields
+		return fields, p.error(p.curToken, "expect curly brace close }, instead got ", p.curToken.Text)
 	}
 
 	p.nextToken()
 
-	return fields
+	return fields, nil
 }
 
 func (p *Parser) parseMemberShipAccess(left ast.Expression) ast.Expression {
 	expr := &ast.MemberShipExpression{Token: left.GetToken(), Object: left}
-	fmt.Println(p.curToken)
+
 	if !p.curTokenKindIs(lexer.TokenDot) {
 		p.Errors = append(p.Errors, p.error(p.curToken, "expect dot token (.), instead got ", p.curToken.Text))
 		return nil
@@ -1853,10 +1722,9 @@ func (p *Parser) parseMemberShipAccess(left ast.Expression) ast.Expression {
 
 // this function is responsible to parsing the assign operator syntax
 // an example of this: index += 1 <=> index = index + 1
-func (p *Parser) parseAssignOperatorExpression() (*ast.AssignStatement, error) {
-	expr := &ast.AssignStatement{Token: p.curToken}
+func (p *Parser) parseAssignOperatorExpression(left ast.Expression) ast.Expression {
+	expr := &ast.AssignExpression{Token: left.GetToken(), Left: []ast.Expression{left}}
 
-	expr.Left = p.parsePrefixExpressionWrapper()
 	// get the operator, from the current op which can be something (+=,%=,..etc)
 	operator := strings.Split(p.curToken.Text, "=")[0]
 	// consume the operator token
@@ -1871,37 +1739,35 @@ func (p *Parser) parseAssignOperatorExpression() (*ast.AssignStatement, error) {
 		},
 	}
 
-	return expr, nil
+	return expr
 }
 
-// // this function is responsible of parsing the double operator assign
-// // an example of this : index++, index-- <=> index = index + 1
-// // only support for (+,-) operators
-// func (p *Parser) parseDoubleOperatorExpression() (*ast.AssignStatement, error) {
-// 	expr := &ast.AssignStatement{Token: p.currentToken()}
+// this function is responsible of parsing the double operator assign
+// an example of this : index++, index-- <=> index = index + 1
+// only support for (+,-) operators
+func (p *Parser) parseDoubleOperatorExpression(left ast.Expression) ast.Expression {
+	expr := &ast.AssignExpression{Token: left.GetToken(), Left: []ast.Expression{left}}
 
-// 	expr.Left = p.parsePrefixExpressionWrapper()
-// 	// get the operator, from the current op which can be something (+=,%=,..etc)
-// 	operator := string(p.currentToken().Text[0])
+	operator := string(p.curToken.Text[0])
 
-// 	// parse the operator
-// 	expr.Right = []ast.Expression{
-// 		&ast.BinaryExpression{
-// 			Token:    p.currentToken(),
-// 			Operator: operator,
-// 			Left:     expr.Left[0],
-// 			// default of it this
-// 			Right: &ast.IntegerLiteral{
-// 				Value: 1,
-// 			},
-// 		},
-// 	}
+	// parse the operator
+	expr.Right = []ast.Expression{
+		&ast.BinaryExpression{
+			Token:    p.curToken,
+			Operator: operator,
+			Left:     expr.Left[0],
+			// default of it this
+			Right: &ast.IntegerLiteral{
+				Value: 1,
+			},
+		},
+	}
 
-// 	// consume the operator token (++, --)
-// 	p.nextToken()
+	// consume the operator token (++, --)
+	p.nextToken()
 
-// 	return expr, nil
-// }
+	return expr
+}
 
 func (p *Parser) parseBindExpression() (ast.Statement, error) {
 	stmt := &ast.VarDeclaration{Token: lexer.Token{
@@ -1957,13 +1823,7 @@ func (p *Parser) parseBindExpression() (ast.Statement, error) {
 		return nil, p.error(p.curToken, "expected (:= or ::) operators, instead got ", p.curToken.Text)
 	}
 
-	value := p.parseExpression(LOWEST)
-
-	if value == nil {
-		return nil, p.error(p.curToken, "expected an expression, got nil value")
-	}
-
-	stmt.Value = value
+	stmt.Value = p.parseExpression(LOWEST)
 
 	return stmt, nil
 }

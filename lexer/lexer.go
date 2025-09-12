@@ -265,12 +265,6 @@ func (l *Lexer) NextToken() Token {
 				Kind: TokenEquals,
 				Text: "==",
 			}
-		case TokenGreater:
-			l.readChar()
-			token.LiteralToken = LiteralToken{
-				Kind: TokenMatch,
-				Text: "=>",
-			}
 		default:
 			token.LiteralToken = LiteralToken{
 				Kind: TokenAssign,
