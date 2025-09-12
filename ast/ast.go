@@ -274,7 +274,7 @@ func (ss *StructExpression) String() string {
 
 type EnumExpression struct {
 	Token lexer.Token // the token.LET token
-	Body  []*Identifier
+	Body  []*AssignExpression
 }
 
 func (ss *EnumExpression) expressionNode() {}
@@ -288,8 +288,8 @@ func (ss *EnumExpression) String() string {
 	out.WriteString(ss.TokenLiteral())
 	out.WriteString(" { ")
 	if ss.Body != nil {
-		for idx, field := range ss.Body {
-			out.WriteString(field.String())
+		for idx, expr := range ss.Body {
+			out.WriteString(expr.String())
 			if idx+1 <= len(ss.Body)-1 {
 				out.WriteString(", ")
 			}

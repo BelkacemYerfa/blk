@@ -188,10 +188,22 @@ func (p *Parser) nextToken() {
 	p.peekToken = p.lexer.NextToken()
 }
 
+// sync the token position by consuming all the current tokens in the current row, stop in the next row
 func (p *Parser) sync() {
 	for p.curToken.Row == p.prevToken.Row {
 		p.nextToken()
 	}
+}
+
+// syncs until reaching the given token kind and then consuming that last token
+// useful with complex body parsing in custom bodies, such as enums, and structs, since those don't use the parseBlockExpression function
+func (p *Parser) syncUntilTokenIs(kind lexer.TokenKind) {
+	for !p.curTokenKindIs(kind) {
+		p.nextToken()
+	}
+
+	// consume that token
+	p.nextToken()
 }
 
 func mapExprToIdentifiers(exprs []ast.Expression) []*ast.Identifier {
@@ -247,7 +259,7 @@ func (p *Parser) Parse() *ast.Program {
 // TODO: better error handling and targeting
 
 func (p *Parser) parseStatement() (ast.Statement, error) {
-
+	fmt.Println(p.curToken)
 	switch p.curToken.Kind {
 	case lexer.TokenLet, lexer.TokenConst:
 		return p.parseVarDeclaration()
@@ -297,7 +309,7 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		switch {
 		case slices.Contains(lexer.AssignBinOps, p.curToken.Kind):
 			if len(idents) > 1 {
-				return nil, p.error(p.curToken, p.curToken.Text, " operators, can't have more than one lhs expression, got ", len(idents), "  expressions")
+				return nil, p.error(p.curToken, p.curToken.Text, " operators, can't have more than one lhs expression, got ", len(idents), " expressions")
 			}
 
 			expr := p.parseAssignOperatorExpression(idents[0])
@@ -753,24 +765,32 @@ func (p *Parser) parseStructExpression() ast.Expression {
 		}
 	}
 
-	expr.Fields, expr.Methods = p.parseFields()
+	fields, methods, err := p.parseFields()
+
+	if err != nil {
+		p.Errors = append(p.Errors, err)
+		return nil
+	}
+
+	expr.Fields = fields
+	expr.Methods = methods
 
 	return expr
 }
 
-func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method) {
+func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method, error) {
 	fields := make([]*ast.VarDeclaration, 0)
 	methods := make([]*ast.Method, 0)
 
 	switch p.peekToken.Kind {
 	case lexer.TokenBind:
 		// parse it as method
-		// means it is a function
-		method, ok := p.parseIdentifier().(*ast.Identifier)
-		if !ok {
-			p.Errors = append(p.Errors, p.error(p.prevToken, "expected an identifier, got ", p.prevToken.Text))
-			return nil, nil
+		if !p.curTokenKindIs(lexer.TokenIdentifier) {
+			err := p.error(p.prevToken, "expected an identifier, got ", p.prevToken.Text)
+			return nil, nil, err
 		}
+
+		method := p.parseIdentifier().(*ast.Identifier)
 
 		// this to consume the :: token
 		p.nextToken()
@@ -784,11 +804,12 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method) {
 		// parse type
 		field := &ast.VarDeclaration{Token: p.peekToken, Mutable: true}
 
-		ident, ok := p.parseIdentifier().(*ast.Identifier)
-
-		if !ok {
-			return nil, nil
+		if !p.curTokenKindIs(lexer.TokenIdentifier) {
+			err := p.error(p.prevToken, "expected an identifier, got ", p.prevToken.Text)
+			return nil, nil, err
 		}
+
+		ident := p.parseIdentifier().(*ast.Identifier)
 
 		field.Name = append(field.Name, ident)
 
@@ -798,8 +819,7 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method) {
 		tp, err := p.parseType()
 
 		if err != nil {
-			p.Errors = append(p.Errors, err)
-			return nil, nil
+			return nil, nil, err
 		}
 
 		field.Type = tp
@@ -811,8 +831,9 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method) {
 			val := p.parseExpression(LOWEST)
 
 			if val == nil {
-				return nil, nil
+				return nil, nil, fmt.Errorf("")
 			}
+
 			field.Value = val
 		}
 
@@ -822,15 +843,13 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method) {
 		// parse it as var declaration
 		field, err := p.parseBindExpression()
 		if err != nil {
-			p.Errors = append(p.Errors, err)
-			return nil, nil
+			return nil, nil, err
 		}
 		fields = append(fields, field.(*ast.VarDeclaration))
 	default:
 		// throw an error here
 		errMsg := fmt.Sprintf("expected either := or : got %s", p.peekToken.Kind)
-		p.Errors = append(p.Errors, p.error(p.peekToken, errMsg))
-		return nil, nil
+		return nil, nil, p.error(p.peekToken, errMsg)
 	}
 
 	for p.curTokenKindIs(lexer.TokenComma) {
@@ -839,12 +858,13 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method) {
 		switch p.peekToken.Kind {
 		case lexer.TokenBind:
 			// parse it as method
-			// means it is a function
-			method, ok := p.parseIdentifier().(*ast.Identifier)
-			if !ok {
-				p.Errors = append(p.Errors, p.error(p.prevToken, "expected an identifier, got ", p.prevToken.Text))
-				return nil, nil
+
+			if !p.curTokenKindIs(lexer.TokenIdentifier) {
+				err := p.error(p.prevToken, "expected an identifier, got ", p.prevToken.Text)
+				return nil, nil, err
 			}
+
+			method := p.parseIdentifier().(*ast.Identifier)
 
 			// this to consume the :: token
 			p.nextToken()
@@ -858,11 +878,12 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method) {
 			// parse type
 			field := &ast.VarDeclaration{Token: p.peekToken, Mutable: true}
 
-			ident, ok := p.parseIdentifier().(*ast.Identifier)
-
-			if !ok {
-				return nil, nil
+			if !p.curTokenKindIs(lexer.TokenIdentifier) {
+				err := p.error(p.prevToken, "expected an identifier, got ", p.prevToken.Text)
+				return nil, nil, err
 			}
+
+			ident := p.parseIdentifier().(*ast.Identifier)
 
 			field.Name = append(field.Name, ident)
 
@@ -872,8 +893,7 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method) {
 			tp, err := p.parseType()
 
 			if err != nil {
-				p.Errors = append(p.Errors, err)
-				return nil, nil
+				return nil, nil, err
 			}
 
 			field.Type = tp
@@ -885,7 +905,7 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method) {
 				val := p.parseExpression(LOWEST)
 
 				if val == nil {
-					return nil, nil
+					return nil, nil, fmt.Errorf("")
 				}
 				field.Value = val
 			}
@@ -896,27 +916,25 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method) {
 			// parse it as var declaration
 			field, err := p.parseBindExpression()
 			if err != nil {
-				p.Errors = append(p.Errors, err)
-				return nil, nil
+				return nil, nil, err
 			}
 			fields = append(fields, field.(*ast.VarDeclaration))
 
 		default:
 			// throw an error here
-			errMsg := fmt.Sprintf("expected either (:= | :: | :) got %s", p.peekToken.Kind)
-			p.Errors = append(p.Errors, p.error(p.peekToken, errMsg))
-			return nil, nil
+			errMsg := fmt.Sprintf("expected either (:= | :: | :), instead got %v", p.curToken.Text)
+			fmt.Println(errMsg, p.curToken, p.peekToken)
+			return nil, nil, p.error(p.peekToken, errMsg)
 		}
 	}
 
 	if !p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
-		p.Errors = append(p.Errors, p.error(p.curToken, "expected close curly brace ( } ), got ", p.curToken.Text))
-		return nil, nil
+		return nil, nil, p.error(p.curToken, "expected close curly brace ( } ), got ", p.curToken.Text)
 	}
 
 	p.nextToken()
 
-	return fields, methods
+	return fields, methods, nil
 }
 
 func (p *Parser) parseEnumExpression() ast.Expression {
@@ -936,47 +954,94 @@ func (p *Parser) parseEnumExpression() ast.Expression {
 		p.nextToken()
 		return &ast.EnumExpression{
 			Token: expr.Token,
-			Body:  []*ast.Identifier{},
+			Body:  []*ast.AssignExpression{},
 		}
 	}
 
-	expr.Body = p.parseEnumFields()
-	return expr
+	body, err := p.parseEnumFields()
 
-}
-
-func (p *Parser) parseEnumFields() []*ast.Identifier {
-	fields := make([]*ast.Identifier, 0)
-
-	field, ok := p.parseIdentifier().(*ast.Identifier)
-
-	if !ok {
-		p.Errors = append(p.Errors, p.error(p.curToken, "expected an identifier, instead got ", p.curToken.Text))
+	if err != nil {
+		p.Errors = append(p.Errors, err)
 		return nil
 	}
 
-	fields = append(fields, field)
+	expr.Body = body
+
+	return expr
+}
+
+func (p *Parser) parseEnumFields() ([]*ast.AssignExpression, error) {
+	fields := make([]*ast.AssignExpression, 0)
+
+	assignExpr := &ast.AssignExpression{Token: p.curToken}
+
+	if !p.curTokenKindIs(lexer.TokenIdentifier) {
+		err := p.error(p.curToken, "expected an identifier, instead got ", p.curToken.Text)
+		p.syncUntilTokenIs(lexer.TokenCurlyBraceClose)
+		return nil, err
+	}
+
+	field := p.parseIdentifier()
+
+	assignExpr.Left = append(assignExpr.Left, field)
+
+	// support for custom associated value
+	if p.curTokenKindIs(lexer.TokenAssign) {
+		// consume =
+		p.nextToken()
+
+		if !p.curTokenKindIs(lexer.TokenInt) {
+			err := p.error(p.curToken, "expected an int literal, instead got ", p.curToken.Text)
+			p.syncUntilTokenIs(lexer.TokenCurlyBraceClose)
+			return nil, err
+		}
+
+		// associated value
+		assignExpr.Right = append(assignExpr.Right, p.parseIntLiteral())
+	}
+
+	fields = append(fields, assignExpr)
 
 	for p.curTokenKindIs(lexer.TokenComma) {
 		p.nextToken()
-		field, ok := p.parseIdentifier().(*ast.Identifier)
 
-		if !ok {
-			p.Errors = append(p.Errors, p.error(p.curToken, "expected an identifier, instead got ", p.curToken.Text))
-			return nil
+		assignExpr := &ast.AssignExpression{Token: p.curToken}
+
+		if !p.curTokenKindIs(lexer.TokenIdentifier) {
+			err := p.error(p.curToken, "expected an identifier, instead got ", p.curToken.Text)
+			p.syncUntilTokenIs(lexer.TokenCurlyBraceClose)
+			return nil, err
 		}
 
-		fields = append(fields, field)
+		field := p.parseIdentifier()
+
+		assignExpr.Left = append(assignExpr.Left, field)
+
+		// support for custom associated value
+		if p.curTokenKindIs(lexer.TokenAssign) {
+			// consume =
+			p.nextToken()
+
+			if !p.curTokenKindIs(lexer.TokenInt) {
+				err := p.error(p.curToken, "expected an identifier, instead got ", p.curToken.Text)
+				p.syncUntilTokenIs(lexer.TokenCurlyBraceClose)
+				return nil, err
+			}
+
+			// associated value
+			assignExpr.Right = append(assignExpr.Right, p.parseIntLiteral())
+		}
+
+		fields = append(fields, assignExpr)
 	}
 
 	if !p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
-		p.Errors = append(p.Errors, p.error(p.curToken, "expected close curly brace ( } ), instead got ", p.curToken.Text))
-		return nil
+		return nil, p.error(p.curToken, "expected close curly brace ( } ), instead got ", p.curToken.Text)
 	}
 
 	p.nextToken()
 
-	return fields
+	return fields, nil
 }
 
 func (p *Parser) parseWhileStatement() (*ast.WhileStatement, error) {
