@@ -150,8 +150,7 @@ func (ft *FunctionType) String() string {
 			out.WriteString(",")
 		}
 	}
-	out.WriteString("): ")
-	out.WriteString("(")
+	out.WriteString(") -> (")
 	for id, v := range ft.Return {
 		out.WriteString(v.String())
 		if id+1 <= len(ft.Return)-1 {
@@ -466,10 +465,11 @@ type Arg struct {
 }
 
 type FunctionExpression struct {
-	Token lexer.Token
-	Self  *Identifier // this indicates the self key
-	Args  []*Arg
-	Body  *BlockStatement
+	Token  lexer.Token
+	Self   *Identifier // this indicates the self key
+	Args   []*Arg
+	Return []Type // support for multi return types
+	Body   *BlockStatement
 }
 
 func (fn *FunctionExpression) expressionNode()       {}
@@ -478,6 +478,7 @@ func (nt *FunctionExpression) GetToken() lexer.Token { return nt.Token }
 func (fn *FunctionExpression) String() string {
 	var out bytes.Buffer
 	params := []string{}
+	returnTypes := []string{}
 	if fn.Self != nil {
 		params = append(params, fn.Self.String())
 	}
@@ -485,11 +486,15 @@ func (fn *FunctionExpression) String() string {
 		formatParam := p.Name.String() + ":" + p.Type.String()
 		params = append(params, formatParam)
 	}
+	for _, p := range fn.Return {
+		returnTypes = append(params, p.String())
+	}
 	out.WriteString(fn.TokenLiteral())
 	out.WriteString("(")
 	out.WriteString(strings.Join(params, ", "))
-	out.WriteString(")")
-	out.WriteString("{ ")
+	out.WriteString(") -> (")
+	out.WriteString(strings.Join(returnTypes, ", "))
+	out.WriteString(") {\n")
 	out.WriteString(fn.Body.String())
 	out.WriteString(" }")
 	return out.String()

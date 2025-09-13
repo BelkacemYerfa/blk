@@ -161,6 +161,12 @@ func (l *Lexer) NextToken() Token {
 				Kind: TokenAssignMinusOne,
 				Text: "--",
 			}
+		case ">":
+			l.readChar()
+			token.LiteralToken = LiteralToken{
+				Kind: TokenArrow,
+				Text: "->",
+			}
 		default:
 			token.LiteralToken = LiteralToken{
 				Kind: TokenMinus,

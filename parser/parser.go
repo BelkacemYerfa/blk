@@ -501,8 +501,8 @@ func (p *Parser) parseFunctionType(prev lexer.Token) (ast.Type, error) {
 	// consume ) token
 	p.nextToken()
 
-	if !p.curTokenKindIs(lexer.TokenColon) {
-		return nil, p.error(p.curToken, "expected : after ) instead got ", p.curToken.Text)
+	if !p.curTokenKindIs(lexer.TokenArrow) {
+		return nil, p.error(p.curToken, "expected -> after ) instead got ", p.curToken.Text)
 	}
 
 	// consume the : token
@@ -1421,6 +1421,43 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 	// isn't required to exist
 	expr.Self = self
 	expr.Args = args
+
+	if !p.curTokenKindIs(lexer.TokenArrow) {
+		p.add(p.error(p.curToken, "expected -> token after ), instead got ", p.curToken.Text))
+		return nil
+	}
+
+	p.nextToken()
+
+	if !p.curTokenKindIs(lexer.TokenBraceOpen) {
+		p.add(p.error(p.curToken, "expected curly brace open (, instead got ", p.curToken.Text))
+		return nil
+	}
+
+	p.nextToken()
+
+	retTp := make([]ast.Type, 0)
+
+	// check if ) is after (, means no arguments
+	if p.curTokenKindIs(lexer.TokenBraceClose) {
+		expr.Return = retTp
+	} else {
+		retTp, err := p.parseParamType()
+
+		if err != nil {
+			p.add(err)
+			return nil
+		}
+
+		expr.Return = retTp
+	}
+
+	if !p.curTokenKindIs(lexer.TokenBraceClose) {
+		p.add(p.error(p.curToken, "expected curly brace close ), instead got ", p.curToken.Text))
+		return nil
+	}
+
+	p.nextToken()
 
 	if !p.curTokenKindIs(lexer.TokenCurlyBraceOpen) {
 		p.add(p.error(p.curToken, "expected curly brace open ( { ), instead got ", p.curToken.Text))

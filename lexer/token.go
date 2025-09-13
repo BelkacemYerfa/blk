@@ -90,6 +90,9 @@ const (
 	// Comment
 	TokenComment TokenKind = "#"
 
+	// Arrow
+	TokenArrow TokenKind = "->"
+
 	// Var Naming
 	TokenIdentifier TokenKind = "identifier"
 
