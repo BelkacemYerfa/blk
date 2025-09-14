@@ -793,11 +793,11 @@ func (l *Lexer) collectMultiComment() Token {
 	stack := []bool{true}
 
 	for l.Cur < len(l.Content) {
-		if l.Content[l.Cur] != '*' && l.Content[l.Cur+1] != '/' {
-			stack = stack[:len(stack)-1]
-		}
-		if l.Content[l.Cur] != '/' && l.Content[l.Cur+1] != '*' {
+		if l.Content[l.Cur] == '/' && l.Content[l.Cur+1] == '*' {
 			stack = append(stack, true)
+		}
+		if l.Content[l.Cur] == '*' && l.Content[l.Cur+1] == '/' {
+			stack = stack[:len(stack)-1]
 		}
 		if len(stack) == 0 {
 			break
@@ -809,7 +809,7 @@ func (l *Lexer) collectMultiComment() Token {
 	end := l.Cur
 	l.readChar()
 	l.readChar()
-
+	fmt.Println(string(l.Content[start+1 : end]))
 	return Token{
 		LiteralToken: LiteralToken{
 			Kind: TokenComment,
