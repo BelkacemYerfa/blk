@@ -151,6 +151,8 @@ func NewParser(lex *lexer.Lexer, filepath string) *Parser {
 	p.registerInfix(lexer.TokenBracketOpen, p.parseIndexExpression)
 	p.registerInfix(lexer.TokenCurlyBraceOpen, p.parseCurlyBraceOpen)
 	p.registerInfix(lexer.TokenDot, p.parseMemberShipAccess)
+	// ? Assign operator
+	p.registerInfix(lexer.TokenAssign, p.parseAssignExpression)
 	// ? Double operators: ++, --
 	p.registerInfix(lexer.TokenAssignPlusOne, p.parseDoubleOperatorExpression)
 	p.registerInfix(lexer.TokenAssignMinusOne, p.parseDoubleOperatorExpression)
@@ -250,6 +252,7 @@ func (p *Parser) error(tok lexer.Token, msg ...interface{}) error {
 func (p *Parser) registerPrefix(tokenType lexer.TokenKind, fn prefixParseFn) {
 	p.prefixParseFns[tokenType] = fn
 }
+
 func (p *Parser) registerInfix(tokenType lexer.TokenKind, fn infixParseFn) {
 	p.infixParseFns[tokenType] = fn
 }
@@ -297,86 +300,16 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		return p.parseScope()
 	case lexer.TokenIdentifier, lexer.TokenSelf:
 
+		if p.peekTokenKindIs(lexer.TokenComma) {
+			return p.parseMultiAssignStatement()
+		}
+
 		// for the bind operations, either :: or := or : (: is for struct )
 		if p.peekTokenKindIs(lexer.TokenBind) || p.peekTokenKindIs(lexer.TokenWalrus) || p.peekTokenKindIs(lexer.TokenColon) {
-			return p.parseBindExpression()
+			return p.parseBindStmt()
 		}
 
-		// for call expressions
-		if p.peekTokenKindIs(lexer.TokenBraceOpen) {
-			return p.parseExpressionStatement()
-		}
-
-		// go through the current tokens in the same line until u find :: or :=, if found go to parseBindExpression, otherwise parseExpression statement
-
-		idents := make([]ast.Expression, 0)
-
-		breakOperators := slices.Concat(lexer.AssignBinOps, lexer.AssignOp)
-
-		// parse until one of those token
-		for !slices.Contains(breakOperators, p.curToken.Kind) {
-			if p.curTokenKindIs(lexer.TokenComma) {
-				p.nextToken() // consume token comma
-			}
-			if !p.curTokenKindIs(lexer.TokenIdentifier) {
-				return nil, p.error(p.curToken, "with assignments operators, left side expects only identifier, instead got ", p.curToken.Text)
-			}
-
-			idents = append(idents, p.parseIdentifier())
-		}
-
-		switch {
-		case slices.Contains(lexer.AssignBinOps, p.curToken.Kind):
-			if len(idents) > 1 {
-				return nil, p.error(p.curToken, p.curToken.Text, " operators, can't have more than one lhs expression, got ", len(idents), " expressions")
-			}
-
-			expr := p.parseAssignOperatorExpression(idents[0])
-
-			return &ast.ExpressionStatement{
-				Token:      idents[0].GetToken(),
-				Expression: expr,
-			}, nil
-
-		case slices.Contains(lexer.AssignOp, p.curToken.Kind):
-			if p.curTokenKindIs(lexer.TokenAssign) {
-				stmt := &ast.AssignStatement{Token: p.curToken, Left: idents}
-				p.nextToken()
-
-				stmt.Right = p.parsePrefixExpressionWrapper()
-				return stmt, nil
-			} else {
-
-				stmt := &ast.VarDeclaration{
-					Token: lexer.Token{
-						LiteralToken: lexer.LiteralToken{
-							Text: "let",
-							Kind: lexer.TokenLet,
-						},
-						Col: p.curToken.Col,
-						Row: p.curToken.Row,
-					},
-					Mutable: p.curTokenKindIs(lexer.TokenWalrus),
-					Name:    mapExprToIdentifiers(idents)}
-
-				if p.curTokenKindIs(lexer.TokenBind) {
-					stmt.Token.LiteralToken = lexer.LiteralToken{
-						Text: "const",
-						Kind: lexer.TokenConst,
-					}
-				}
-
-				// consume cur tok
-				p.nextToken()
-
-				stmt.Value = p.parseExpression(LOWEST)
-
-				return stmt, nil
-			}
-
-		default:
-			return p.parseExpressionStatement()
-		}
+		return p.parseExpressionStatement()
 
 	case lexer.TokenError:
 		return nil, p.error(p.curToken, p.curToken.Text)
@@ -726,8 +659,14 @@ func (p *Parser) parseVarDeclaration() (*ast.VarDeclaration, error) {
 
 	p.addDirective(stmt)
 
-	// TODO: change this later to support multi value
-	stmt.Value = p.parseExpression(LOWEST)
+	exprs := append([]ast.Expression{}, p.parseExpression(LOWEST))
+
+	for p.curTokenKindIs(lexer.TokenComma) {
+		p.nextToken() // eat comma
+		exprs = append(exprs, p.parseExpression(LOWEST))
+	}
+
+	stmt.Value = exprs
 	return stmt, nil
 }
 
@@ -839,9 +778,11 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method, error) {
 			// this to consume the :: token
 			p.nextToken()
 
+			fn := p.parseFunctionExpression().(*ast.FunctionExpression)
+
 			methods = append(methods, &ast.Method{
 				Key:   method,
-				Value: p.parseFunctionExpression().(*ast.FunctionExpression),
+				Value: fn,
 			})
 
 			// check if there is a comma
@@ -886,7 +827,7 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method, error) {
 					return nil, nil, fmt.Errorf("")
 				}
 
-				field.Value = val
+				field.Value = []ast.Expression{val}
 			}
 
 			fields = append(fields, field)
@@ -899,25 +840,9 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method, error) {
 
 			p.nextToken()
 
-		case lexer.TokenWalrus:
-			// parse it as var declaration
-			field, err := p.parseBindExpression()
-			if err != nil {
-				return nil, nil, err
-			}
-			fields = append(fields, field.(*ast.VarDeclaration))
-
-			// check if there is a comma
-			if !p.curTokenKindIs(lexer.TokenComma) {
-				err := p.error(p.curToken, "expected an comma (,) at the end of each field, instead got ", p.prevToken.Text)
-				p.add(err)
-			}
-
-			p.nextToken()
-
 		default:
 			// throw an error here
-			err := p.error(p.curToken, "expected either (:= | :: | :), instead got ", p.curToken.Text)
+			err := p.error(p.curToken, "expected either (:: or :), instead got ", p.curToken.Text)
 			p.add(err)
 			p.nextToken()
 		}
@@ -1197,20 +1122,18 @@ func (p *Parser) parseBreakStatement() (*ast.BreakStatement, error) {
 	return stmt, nil
 }
 
-func (p *Parser) parseAssignStatement() (*ast.AssignStatement, error) {
-	stmt := &ast.AssignStatement{Token: p.curToken}
+func (p *Parser) parseAssignExpression(left ast.Expression) ast.Expression {
+	expr := &ast.AssignExpression{Token: p.curToken, Left: []ast.Expression{left}}
 	p.nextToken()
 
-	stmt.Left = p.parsePrefixExpressionWrapper()
+	// // check for the token assign
+	// if !p.curTokenKindIs(lexer.TokenAssign) {
+	// 	return nil, p.error(p.curToken, "expected assign token (=), got shit")
+	// }
 
-	// check for the token assign
-	if !p.curTokenKindIs(lexer.TokenAssign) {
-		return nil, p.error(p.curToken, "expected assign token (=), got shit")
-	}
+	expr.Right = p.parsePrefixExpressionWrapper()
 
-	stmt.Right = p.parsePrefixExpressionWrapper()
-
-	return stmt, nil
+	return expr
 }
 
 func (p *Parser) parsePrefixExpressionWrapper() []ast.Expression {
@@ -1965,7 +1888,70 @@ func (p *Parser) parseDoubleOperatorExpression(left ast.Expression) ast.Expressi
 	return expr
 }
 
-func (p *Parser) parseBindExpression() (ast.Statement, error) {
+func (p *Parser) parseMultiAssignStatement() (ast.Statement, error) {
+	prev := p.curToken
+	idents := []*ast.Identifier{p.parseIdentifier().(*ast.Identifier)}
+
+	// collect lhs identifiers
+	for p.curTokenKindIs(lexer.TokenComma) {
+		p.nextToken() // eat comma
+		if !p.curTokenKindIs(lexer.TokenIdentifier) {
+			return nil, p.error(p.curToken, "expected identifier in multi-assign")
+		}
+		idents = append(idents, p.parseIdentifier().(*ast.Identifier))
+	}
+
+	// expect one of
+	switch p.curToken.Kind {
+	case lexer.TokenAssign:
+	case lexer.TokenWalrus:
+	case lexer.TokenBind:
+	default:
+		return nil, p.error(p.curToken, "expected (:= , :: or =) operators, instead got ", p.curToken.Text)
+	}
+
+	kind := p.curToken.Kind
+
+	p.nextToken() // move to first rhs expression
+
+	exprs := []ast.Expression{p.parseExpression(LOWEST)}
+	for p.curTokenKindIs(lexer.TokenComma) {
+		p.nextToken() // eat comma
+		exprs = append(exprs, p.parseExpression(LOWEST))
+	}
+
+	switch kind {
+	case lexer.TokenWalrus:
+		return &ast.VarDeclaration{Token: lexer.Token{
+			LiteralToken: lexer.LiteralToken{
+				Text: "let",
+				Kind: lexer.TokenLet,
+			},
+			Col: p.curToken.Col,
+			Row: p.curToken.Row,
+		}, Mutable: true, Name: idents, Value: exprs}, nil
+
+	case lexer.TokenBind:
+		return &ast.VarDeclaration{Token: lexer.Token{
+			LiteralToken: lexer.LiteralToken{
+				Text: "const",
+				Kind: lexer.TokenConst,
+			},
+			Col: p.curToken.Col,
+			Row: p.curToken.Row,
+		}, Mutable: false, Name: idents, Value: exprs}, nil
+
+	default:
+		return &ast.AssignStatement{
+			Token: prev,
+			Left:  idents,
+			Right: exprs,
+		}, nil
+	}
+
+}
+
+func (p *Parser) parseBindStmt() (ast.Statement, error) {
 	stmt := &ast.VarDeclaration{Token: lexer.Token{
 		LiteralToken: lexer.LiteralToken{
 			Text: "let",
@@ -2022,7 +2008,14 @@ func (p *Parser) parseBindExpression() (ast.Statement, error) {
 	// add directives if there is any
 	p.addDirective(stmt)
 
-	stmt.Value = p.parseExpression(LOWEST)
+	exprs := append([]ast.Expression{}, p.parseExpression(LOWEST))
+
+	for p.curTokenKindIs(lexer.TokenComma) {
+		p.nextToken() // eat comma
+		exprs = append(exprs, p.parseExpression(LOWEST))
+	}
+
+	stmt.Value = exprs
 
 	return stmt, nil
 }
@@ -2096,9 +2089,11 @@ func (p *Parser) parseExpression(precedence int) ast.Expression {
 
 	for p.curToken.Row <= cur.Row && p.curToken.Kind != lexer.TokenEOF && precedence < p.peekPrecedence() && p.prevToken.Row == cur.Row {
 		infix := p.infixParseFns[p.curToken.Kind]
+
 		if infix == nil {
 			return leftExp
 		}
+
 		leftExp = infix(leftExp)
 	}
 

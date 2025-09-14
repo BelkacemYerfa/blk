@@ -196,7 +196,7 @@ type VarDeclaration struct {
 	Directive []DirectiveExpression
 	Type      Type
 	Name      []*Identifier
-	Value     Expression
+	Value     []Expression
 }
 
 func (ls *VarDeclaration) statementNode()        {}
@@ -215,8 +215,8 @@ func (ls *VarDeclaration) String() string {
 		out.WriteString(": " + ls.Type.String())
 	}
 	out.WriteString(" = ")
-	if ls.Value != nil {
-		out.WriteString(ls.Value.String())
+	for _, v := range ls.Value {
+		out.WriteString(v.String())
 	}
 	return out.String()
 }
@@ -731,7 +731,7 @@ func (b *BinaryExpression) String() string {
 
 type AssignStatement struct {
 	Token lexer.Token // the token.IDENT token
-	Left  []Expression
+	Left  []*Identifier
 	Right []Expression
 }
 
