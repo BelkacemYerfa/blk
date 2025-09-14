@@ -178,6 +178,18 @@ func (ptr *PointerType) String() string {
 	return out.String()
 }
 
+type Comment struct {
+	Token lexer.Token // the token.LET token
+	Value string
+}
+
+func (c *Comment) statementNode()        {}
+func (c *Comment) TokenLiteral() string  { return c.Token.Text }
+func (c *Comment) GetToken() lexer.Token { return c.Token }
+func (c *Comment) String() string {
+	return "/*" + c.Value + "*/"
+}
+
 type VarDeclaration struct {
 	Token   lexer.Token // the token.LET token
 	Mutable bool        // indicates if the vars are mutable or not

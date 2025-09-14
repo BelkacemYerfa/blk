@@ -21,10 +21,17 @@ const (
 	TokenElse   TokenKind = "else"
 	TokenReturn TokenKind = "return"
 	TokenImport TokenKind = "import"
-	TokenAs     TokenKind = "as"
 
 	// nul values
 	TokenNul TokenKind = "nul"
+
+	// Directives
+	TokenDistinct    TokenKind = "#distinct"
+	TokenInline      TokenKind = "#inline"
+	TokenDeprecated  TokenKind = "#deprecated"
+	TokenMustUse     TokenKind = "#must_use"
+	TokenFallthrough TokenKind = "#fallthrough"
+	TokenPartial     TokenKind = "#partial"
 
 	// Units
 	TokenCurlyBraceOpen  TokenKind = "{"
@@ -88,7 +95,8 @@ const (
 	TokenExclamation TokenKind = "!"
 
 	// Comment
-	TokenComment TokenKind = "#"
+	TokenComment   TokenKind = "//"
+	TokenDirective TokenKind = "#"
 
 	// Arrow
 	TokenArrow TokenKind = "->"

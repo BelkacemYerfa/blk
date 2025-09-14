@@ -48,7 +48,6 @@ type Token struct {
 
 func (l *Lexer) NextToken() Token {
 	l.skipWhiteSpace()
-	l.skipComment()
 
 	token := Token{
 		Row: l.Row,
@@ -66,6 +65,8 @@ func (l *Lexer) NextToken() Token {
 	char := l.Content[l.Cur]
 
 	switch string(char) {
+	case TokenDirective:
+		return l.readDirective()
 	case TokenCurlyBraceOpen:
 		l.readChar()
 		token.LiteralToken = LiteralToken{
@@ -228,13 +229,20 @@ func (l *Lexer) NextToken() Token {
 	case TokenSlash:
 		l.readChar()
 		equalsChar := string(l.Content[l.Cur])
-		if equalsChar == TokenAssign {
+		switch equalsChar {
+		case TokenAssign:
 			l.readChar()
 			token.LiteralToken = LiteralToken{
 				Kind: TokenAssignSlash,
 				Text: "/=",
 			}
-		} else {
+		case TokenSlash:
+			return l.collectSingleComment()
+
+		case TokenMultiply:
+			return l.collectMultiComment()
+
+		default:
 			token.LiteralToken = LiteralToken{
 				Kind: TokenSlash,
 				Text: "/",
@@ -474,12 +482,47 @@ func isDigit(char rune) bool {
 	return unicode.IsDigit(char)
 }
 
+func (l *Lexer) readDirective() Token {
+	start := l.Cur
+
+	row, col := l.Row, l.Col
+
+	l.Cur++
+
+	for l.Cur < len(l.Content) {
+		char := l.Content[l.Cur]
+		if isLetter(char) {
+			l.readChar()
+		} else {
+			break
+		}
+	}
+
+	text := string(l.Content[start:l.Cur])
+
+	tokenKind, isDirective := Directives[text]
+	if isDirective {
+		return Token{LiteralToken: LiteralToken{
+			Kind: tokenKind,
+			Text: text,
+		}, Row: row, Col: col}
+	}
+
+	return Token{
+		LiteralToken: LiteralToken{
+			Kind: TokenError,
+			Text: "unrecognized directive",
+		},
+		Row: row,
+		Col: col,
+	}
+}
+
 func (l *Lexer) readIdentifier() Token {
 	startPos := l.Cur
 
 	// save them to return
-	row := l.Row
-	col := l.Col
+	row, col := l.Row, l.Col
 
 	for l.Cur < len(l.Content) {
 		char := l.Content[l.Cur]
@@ -725,12 +768,55 @@ func (l *Lexer) readNumber() Token {
 	}
 }
 
-func (l *Lexer) skipComment() {
-	for l.Cur < len(l.Content) && l.Content[l.Cur] == '#' {
-		for l.Cur < len(l.Content) && l.Content[l.Cur] != '\n' {
-			l.readChar()
+func (l *Lexer) collectSingleComment() Token {
+	start := l.Cur // mark where the comment starts
+
+	// consume '#' and the rest of the line until newline or EOF
+	for l.Cur < len(l.Content) && l.Content[l.Cur] != '\n' {
+		l.readChar()
+	}
+
+	return Token{
+		LiteralToken: LiteralToken{
+			Kind: TokenComment,
+			Text: string(l.Content[start:l.Cur]),
+		},
+		Row: l.Row,
+		Col: l.Col,
+	}
+}
+
+func (l *Lexer) collectMultiComment() Token {
+	start := l.Cur // mark where the comment starts
+	l.Cur++
+
+	stack := []bool{true}
+
+	for l.Cur < len(l.Content) {
+		if l.Content[l.Cur] != '*' && l.Content[l.Cur+1] != '/' {
+			stack = stack[:len(stack)-1]
 		}
-		l.skipWhiteSpace()
+		if l.Content[l.Cur] != '/' && l.Content[l.Cur+1] != '*' {
+			stack = append(stack, true)
+		}
+		if len(stack) == 0 {
+			break
+		}
+		l.readChar()
+	}
+
+	l.skipWhiteSpace()
+	end := l.Cur
+	l.readChar()
+	l.readChar()
+
+	return Token{
+		LiteralToken: LiteralToken{
+			Kind: TokenComment,
+			Text: string(l.Content[start+1 : end]),
+		},
+		Row: l.Row,
+		Col: l.Col,
 	}
 }
 

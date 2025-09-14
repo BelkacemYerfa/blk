@@ -17,7 +17,6 @@ var (
 		"in":     TokenIn,
 		"while":  TokenWhile,
 		"import": TokenImport,
-		"as":     TokenAs,
 		"return": TokenReturn,
 		"next":   TokenNext,
 		"break":  TokenBreak,
@@ -42,6 +41,15 @@ var (
 		"f64":    TokenFloat64,
 		"array":  TokenArray,
 		"map":    TokenMap,
+	}
+
+	Directives = map[string]TokenKind{
+		"#distinct":    TokenDistinct,
+		"#inline":      TokenInline,
+		"#deprecated":  TokenDeprecated,
+		"#must_use":    TokenMustUse,
+		"#fallthrough": TokenFallthrough,
+		"#partial":     TokenPartial,
 	}
 
 	AssignBinOps = []TokenKind{

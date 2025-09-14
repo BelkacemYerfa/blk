@@ -150,10 +150,10 @@ func NewParser(lex *lexer.Lexer, filepath string) *Parser {
 	p.registerInfix(lexer.TokenBracketOpen, p.parseIndexExpression)
 	p.registerInfix(lexer.TokenCurlyBraceOpen, p.parseCurlyBraceOpen)
 	p.registerInfix(lexer.TokenDot, p.parseMemberShipAccess)
-	// TODO: add ++ & -- tokens to be sort of expression
+	// ? Double operators: ++, --
 	p.registerInfix(lexer.TokenAssignPlusOne, p.parseDoubleOperatorExpression)
 	p.registerInfix(lexer.TokenAssignMinusOne, p.parseDoubleOperatorExpression)
-	// TODO : add +=, -=, *=, /=, %=, &=, |=, ^=, <<=, >>=, &&=, ||=
+	// ? Arithmetic assign operator : add +=, -=, *=, /=, %=, &=, |=, ^=, <<=, >>=, &&=, ||=
 	p.registerInfix(lexer.TokenAssignSlash, p.parseAssignOperatorExpression)
 	p.registerInfix(lexer.TokenAssignMultiply, p.parseAssignOperatorExpression)
 	p.registerInfix(lexer.TokenAssignModule, p.parseAssignOperatorExpression)
@@ -186,6 +186,11 @@ func (p *Parser) nextToken() {
 	p.prevToken = p.curToken
 	p.curToken = p.peekToken
 	p.peekToken = p.lexer.NextToken()
+
+	// consume comment tokens
+	for p.curTokenKindIs(lexer.TokenComment) {
+		p.nextToken()
+	}
 }
 
 func (p *Parser) add(err error) {
@@ -272,6 +277,8 @@ func (p *Parser) Parse() *ast.Program {
 func (p *Parser) parseStatement() (ast.Statement, error) {
 
 	switch p.curToken.Kind {
+	case lexer.TokenComment:
+		return p.parseCommentStatement()
 	case lexer.TokenLet, lexer.TokenConst:
 		return p.parseVarDeclaration()
 	case lexer.TokenReturn:
@@ -714,31 +721,16 @@ func (p *Parser) parseImportStatement() (*ast.ImportStatement, error) {
 	// skip import
 	p.nextToken()
 
+	if p.curTokenKindIs(lexer.TokenIdentifier) {
+		// means this is an alias
+		stmt.Alias = p.parseIdentifier().(*ast.Identifier)
+	}
+
 	if !p.curTokenKindIs(lexer.TokenString) {
-		return nil, p.error(p.curToken, "expected a string as module name, instead got ", p.curToken)
+		return nil, p.error(p.curToken, "expected a string as module path, instead got ", p.curToken.Text)
 	}
 
-	p.nextToken()
-
-	val := p.parseStringLiteral()
-
-	if val == nil {
-		return nil, fmt.Errorf("")
-	}
-
-	stmt.ModuleName = val.(*ast.StringLiteral)
-
-	if p.curTokenKindIs(lexer.TokenAs) {
-		// alias for the namespace
-		p.nextToken()
-		// bind the alias to it
-		ident := p.parseIdentifier()
-		if ident == nil {
-			return nil, p.Errors[len(p.Errors)-1]
-		}
-
-		stmt.Alias = ident.(*ast.Identifier)
-	}
+	stmt.ModuleName = p.parseStringLiteral().(*ast.StringLiteral)
 
 	return stmt, nil
 }
@@ -1328,6 +1320,12 @@ round:
 		Token: prev,
 		Pairs: pairs,
 	}
+}
+
+func (p *Parser) parseCommentStatement() (*ast.Comment, error) {
+	tok := p.curToken
+	p.nextToken()
+	return &ast.Comment{Token: tok, Value: tok.Text}, nil
 }
 
 func (p *Parser) parseGroupedExpression() ast.Expression {
