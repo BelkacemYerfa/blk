@@ -47,10 +47,10 @@ func (p *Program) String() string {
 	return out.String()
 }
 
-type TypeKind = int
+type TypeKind int
 
 const (
-	zeroed TypeKind = iota
+	_ TypeKind = iota
 	TypeInt8
 	TypeInt16
 	TypeInt32
@@ -187,15 +187,16 @@ func (c *Comment) statementNode()        {}
 func (c *Comment) TokenLiteral() string  { return c.Token.Text }
 func (c *Comment) GetToken() lexer.Token { return c.Token }
 func (c *Comment) String() string {
-	return "/*" + c.Value + "*/"
+	return "/* " + c.Value + " */"
 }
 
 type VarDeclaration struct {
-	Token   lexer.Token // the token.LET token
-	Mutable bool        // indicates if the vars are mutable or not
-	Type    Type
-	Name    []*Identifier
-	Value   Expression
+	Token     lexer.Token // the token.LET token
+	Mutable   bool        // indicates if the vars are mutable or not
+	Directive []DirectiveExpression
+	Type      Type
+	Name      []*Identifier
+	Value     Expression
 }
 
 func (ls *VarDeclaration) statementNode()        {}
@@ -218,6 +219,32 @@ func (ls *VarDeclaration) String() string {
 		out.WriteString(ls.Value.String())
 	}
 	return out.String()
+}
+
+type DirectiveType int
+
+const (
+	_ DirectiveType = iota
+	DistinctDirective
+	InlineDirective
+	DeprecatedDirective
+	MutUseDirective
+	FallthroughDirective
+	PartialDirective
+	AsmDirective
+)
+
+type DirectiveExpression struct {
+	Token lexer.Token
+	Kind  DirectiveType
+	Value Expression
+}
+
+func (de *DirectiveExpression) expressionNode()       {}
+func (de *DirectiveExpression) TokenLiteral() string  { return de.Token.Text }
+func (de *DirectiveExpression) GetToken() lexer.Token { return de.Token }
+func (de *DirectiveExpression) String() string {
+	return de.GetToken().Text + " " + de.Value.String()
 }
 
 type ImportStatement struct {
@@ -476,11 +503,16 @@ type Arg struct {
 	Type  Type
 }
 
+type ReturnType struct {
+	RtTypes   []Type // support for multi return types
+	Directive []DirectiveExpression
+}
+
 type FunctionExpression struct {
 	Token  lexer.Token
 	Self   *Identifier // this indicates the self key
 	Args   []*Arg
-	Return []Type // support for multi return types
+	Return ReturnType
 	Body   *BlockStatement
 }
 
@@ -498,7 +530,7 @@ func (fn *FunctionExpression) String() string {
 		formatParam := p.Name.String() + ":" + p.Type.String()
 		params = append(params, formatParam)
 	}
-	for _, p := range fn.Return {
+	for _, p := range fn.Return.RtTypes {
 		returnTypes = append(params, p.String())
 	}
 	out.WriteString(fn.TokenLiteral())
@@ -787,6 +819,43 @@ func (ie *IfExpression) String() string {
 			out.WriteString(" }")
 		}
 	}
+	return out.String()
+}
+
+type Case struct {
+	Token      lexer.Token
+	ArmPattern []Expression
+	Body       *BlockStatement
+	Break      bool
+}
+
+type SwitchExpression struct {
+	Token     lexer.Token
+	Condition Expression
+	Cases     []*Case
+}
+
+func (ie *SwitchExpression) expressionNode()       {}
+func (ie *SwitchExpression) TokenLiteral() string  { return ie.Token.Text }
+func (nt *SwitchExpression) GetToken() lexer.Token { return nt.Token }
+func (ie *SwitchExpression) String() string {
+	var out bytes.Buffer
+	out.WriteString("switch ")
+	out.WriteString(ie.Condition.String())
+	out.WriteString(" {\n")
+	for i, cs := range ie.Cases {
+		out.WriteString("case ")
+		arms := []string{}
+		for _, arm := range cs.ArmPattern {
+			arms = append(arms, arm.String())
+		}
+		out.WriteString(strings.Join(arms, ", ") + ":\n")
+		out.WriteString(cs.Body.String())
+		if i+1 <= len(ie.Cases)-1 {
+			out.WriteString("\n")
+		}
+	}
+	out.WriteString("} ")
 	return out.String()
 }
 

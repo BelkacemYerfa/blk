@@ -17,6 +17,8 @@ const (
 	TokenNext   TokenKind = "next"
 	TokenBreak  TokenKind = "break"
 	TokenUse    TokenKind = "use"
+	TokenSwitch TokenKind = "switch"
+	TokenCase   TokenKind = "case"
 	TokenIf     TokenKind = "if"
 	TokenElse   TokenKind = "else"
 	TokenReturn TokenKind = "return"

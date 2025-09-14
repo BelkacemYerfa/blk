@@ -9,6 +9,8 @@ var (
 		"struct": TokenStruct,
 		"self":   TokenSelf,
 		"enum":   TokenEnum,
+		"switch": TokenSwitch,
+		"case":   TokenCase,
 		"if":     TokenIf,
 		"else":   TokenElse,
 		"use":    TokenUse,

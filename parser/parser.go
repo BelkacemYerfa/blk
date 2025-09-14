@@ -126,6 +126,7 @@ func NewParser(lex *lexer.Lexer, filepath string) *Parser {
 	p.registerPrefix(lexer.TokenFn, p.parseFunctionExpression)
 	p.registerPrefix(lexer.TokenStruct, p.parseStructExpression)
 	p.registerPrefix(lexer.TokenEnum, p.parseEnumExpression)
+	p.registerPrefix(lexer.TokenSwitch, p.parseSwitchExpression)
 
 	// infix/binary operators
 	p.registerInfix(lexer.TokenPlus, p.parseInfixExpression)
@@ -275,7 +276,6 @@ func (p *Parser) Parse() *ast.Program {
 // TODO: better error handling and targeting
 
 func (p *Parser) parseStatement() (ast.Statement, error) {
-
 	switch p.curToken.Kind {
 	case lexer.TokenComment:
 		return p.parseCommentStatement()
@@ -660,6 +660,41 @@ func (p *Parser) parseType() (ast.Type, error) {
 	return nil, nil
 }
 
+func (p *Parser) addDirective(stmt *ast.VarDeclaration) {
+	// for function
+	if p.curTokenKindIs(lexer.TokenInline) && p.peekTokenKindIs(lexer.TokenFn) {
+		drctv := ast.DirectiveExpression{
+			Token: p.curToken,
+			Kind:  ast.InlineDirective,
+		}
+
+		p.nextToken()
+		stmt.Directive = append(stmt.Directive, drctv)
+	}
+
+	// for types
+	if p.curTokenKindIs(lexer.TokenDistinct) {
+		drctv := ast.DirectiveExpression{
+			Token: p.curToken,
+			Kind:  ast.DistinctDirective,
+		}
+
+		p.nextToken()
+		stmt.Directive = append(stmt.Directive, drctv)
+	}
+
+	// for switch
+	if p.curTokenKindIs(lexer.TokenPartial) && p.peekTokenKindIs(lexer.TokenSwitch) {
+		drctv := ast.DirectiveExpression{
+			Token: p.curToken,
+			Kind:  ast.PartialDirective,
+		}
+
+		p.nextToken()
+		stmt.Directive = append(stmt.Directive, drctv)
+	}
+}
+
 func (p *Parser) parseVarDeclaration() (*ast.VarDeclaration, error) {
 	stmt := &ast.VarDeclaration{Token: p.curToken}
 	stmt.Mutable = stmt.Token.Kind == lexer.TokenLet
@@ -688,6 +723,8 @@ func (p *Parser) parseVarDeclaration() (*ast.VarDeclaration, error) {
 	}
 	// consume =
 	p.nextToken()
+
+	p.addDirective(stmt)
 
 	// TODO: change this later to support multi value
 	stmt.Value = p.parseExpression(LOWEST)
@@ -968,6 +1005,105 @@ func (p *Parser) parseEnumFields() ([]*ast.AssignExpression, error) {
 	p.nextToken()
 
 	return fields, nil
+}
+
+func (p *Parser) parseSwitchExpression() ast.Expression {
+	expr := &ast.SwitchExpression{Token: p.curToken}
+	p.nextToken()
+
+	p.internalFlags = append(p.internalFlags, "if-mode")
+	value := p.parseExpression(ASSIGN)
+	p.internalFlags = slices.DeleteFunc(p.internalFlags, func(elem string) bool {
+		return elem == "if-mode"
+	})
+
+	if value == nil {
+		return nil
+	}
+
+	expr.Condition = value
+
+	if !p.curTokenKindIs(lexer.TokenCurlyBraceOpen) {
+		p.add(p.error(p.curToken, "expected curly brace open {, instead got ", p.curToken.Text))
+		return nil
+	}
+
+	p.nextToken()
+
+	cases, err := p.parseCases()
+
+	if err != nil {
+		p.add(err)
+		return nil
+	}
+
+	expr.Cases = cases
+
+	return expr
+}
+
+func (p *Parser) parseCases() ([]*ast.Case, error) {
+	cases := make([]*ast.Case, 0)
+
+round:
+	for !p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
+		if !p.curTokenKindIs(lexer.TokenCase) {
+			return cases, p.error(p.curToken, "expected case token, instead got ", p.curToken.Text)
+		}
+
+		cs := &ast.Case{Token: p.curToken, Break: true}
+		p.nextToken()
+
+		for !p.curTokenKindIs(lexer.TokenColon) {
+			value := p.parseExpression(LOWEST)
+
+			if value == nil {
+				p.syncUntilTokenIs(lexer.TokenCase, false)
+				goto round
+			}
+
+			cs.ArmPattern = append(cs.ArmPattern, value)
+
+			if p.curTokenKindIs(lexer.TokenComma) && p.peekTokenKindIs(lexer.TokenColon) {
+				return cases, p.error(p.curToken, "issue after last colo, probably u forgot to add another case, if no remove it")
+			}
+
+			if p.curTokenKindIs(lexer.TokenComma) {
+				p.nextToken()
+			}
+		}
+
+		p.nextToken()
+		// here enter the body
+
+		block := ast.BlockStatement{Token: p.curToken}
+		block.Body = make([]ast.Statement, 0)
+
+		for !p.curTokenKindIs(lexer.TokenCase) && !p.curTokenKindIs(lexer.TokenEOF) && !p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
+			if p.curTokenKindIs(lexer.TokenFallthrough) && p.peekTokenKindIs(lexer.TokenCase) {
+				cs.Break = false
+				p.nextToken()
+			} else {
+				// parse body expressions and statements
+				stmt, err := p.parseStatement()
+
+				if err != nil {
+					p.add(err)
+					p.sync(false)
+				} else {
+					block.Body = append(block.Body, stmt)
+				}
+			}
+		}
+
+		cs.Body = &block
+
+		cases = append(cases, cs)
+	}
+
+	p.nextToken()
+
+	return cases, nil
 }
 
 func (p *Parser) parseWhileStatement() (*ast.WhileStatement, error) {
@@ -1438,7 +1574,7 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 
 	// check if ) is after (, means no arguments
 	if p.curTokenKindIs(lexer.TokenBraceClose) {
-		expr.Return = retTp
+		expr.Return.RtTypes = retTp
 	} else {
 		retTp, err := p.parseParamType()
 
@@ -1447,7 +1583,7 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 			return nil
 		}
 
-		expr.Return = retTp
+		expr.Return.RtTypes = retTp
 	}
 
 	if !p.curTokenKindIs(lexer.TokenBraceClose) {
@@ -1456,6 +1592,16 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 	}
 
 	p.nextToken()
+
+	if p.curTokenKindIs(lexer.TokenMustUse) {
+		drctv := ast.DirectiveExpression{
+			Token: p.curToken,
+			Kind:  ast.InlineDirective,
+		}
+
+		p.nextToken()
+		expr.Return.Directive = append(expr.Return.Directive, drctv)
+	}
 
 	if !p.curTokenKindIs(lexer.TokenCurlyBraceOpen) {
 		p.add(p.error(p.curToken, "expected curly brace open ( { ), instead got ", p.curToken.Text))
@@ -1872,6 +2018,9 @@ func (p *Parser) parseBindExpression() (ast.Statement, error) {
 	default:
 		return nil, p.error(p.curToken, "expected (:= or ::) operators, instead got ", p.curToken.Text)
 	}
+
+	// add directives if there is any
+	p.addDirective(stmt)
 
 	stmt.Value = p.parseExpression(LOWEST)
 
