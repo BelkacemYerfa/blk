@@ -111,7 +111,9 @@ func (ct *CompositeType) String() string {
 	var out bytes.Buffer
 	out.WriteString(ct.Token.Kind)
 	out.WriteString("(")
-	out.WriteString(ct.LeftType.String())
+	if ct.LeftType != nil {
+		out.WriteString(ct.LeftType.String())
+	}
 	if ct.RightType != nil {
 		out.WriteString(", " + ct.RightType.String())
 	}
@@ -696,6 +698,7 @@ func (bl *BooleanLiteral) String() string        { return bl.Token.Text }
 
 type ArrayLiteral struct {
 	Token    lexer.Token
+	Type     Type
 	Size     Expression // indicates the size of the array if it a fixed size array
 	Elements []Expression
 }
@@ -722,6 +725,7 @@ func (al *ArrayLiteral) String() string {
 
 type MapLiteral struct {
 	Token lexer.Token
+	Type  Type
 	Pairs map[Expression]Expression
 }
 

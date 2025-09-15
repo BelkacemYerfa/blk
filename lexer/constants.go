@@ -6,7 +6,6 @@ var (
 	Keywords = map[string]TokenKind{
 		"let":    TokenLet,
 		"const":  TokenConst,
-		"struct": TokenStruct,
 		"self":   TokenSelf,
 		"enum":   TokenEnum,
 		"switch": TokenSwitch,
@@ -40,8 +39,8 @@ var (
 		"u64":    TokenUInt64,
 		"f32":    TokenFloat32,
 		"f64":    TokenFloat64,
-		"array":  TokenArray,
 		"map":    TokenMap,
+		"struct": TokenStruct,
 	}
 
 	Directives = map[string]TokenKind{

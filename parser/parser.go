@@ -112,7 +112,7 @@ func NewParser(lex *lexer.Lexer, filepath string) *Parser {
 	p.registerPrefix(lexer.TokenChar, p.parseCharLiteral)
 	p.registerPrefix(lexer.TokenNul, p.parseNulLiteral)
 	p.registerPrefix(lexer.TokenBracketOpen, p.parseArrayLiteral)
-	p.registerPrefix(lexer.TokenCurlyBraceOpen, p.parseMapLiteral)
+	p.registerPrefix(lexer.TokenMap, p.parseMapLiteral)
 	p.registerPrefix(lexer.TokenExclamation, p.parsePrefixExpression)
 	p.registerPrefix(lexer.TokenBitNot, p.parsePrefixExpression)
 	p.registerPrefix(lexer.TokenMinus, p.parsePrefixExpression)
@@ -305,92 +305,75 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 func (p *Parser) parseCompositeType(prev lexer.Token) (*ast.CompositeType, error) {
 	// composite type
 	tp := &ast.CompositeType{Token: prev}
-	if prev.Kind == lexer.TokenArray {
+	if prev.Kind == lexer.TokenBracketOpen {
 		tp.Kind = ast.TypeArray
 	} else {
 		tp.Kind = ast.TypeMap
+		p.nextToken()
 	}
 
-	p.nextToken()
-
-	if !p.curTokenKindIs(lexer.TokenBraceOpen) {
-		return nil, p.error(p.curToken, "expected ( after ", p.curToken.Kind, " instead got ", p.curToken.Text)
+	if !p.curTokenKindIs(lexer.TokenBracketOpen) {
+		return nil, p.error(p.curToken, "expected [ after ", p.curToken.Kind, " instead got ", p.curToken.Text)
 	}
 
 	// consume the ( token
 	p.nextToken()
 
-	if _, ok := lexer.TypeKeywords[p.curToken.Kind]; !ok {
-		return nil, p.error(p.curToken, "expected a type, but instead got ", p.curToken.Text)
-	}
-
-	// call the parse type on the current token
-	nestedType, err := p.parseType()
-	if err != nil {
-		return nil, err
-	}
-	tp.LeftType = nestedType
-
-	//switch based on the current type
 	if tp.Kind == ast.TypeArray {
-		// parse the array size if it exists
-		// check first if next token is ) or not
-		if !p.curTokenKindIs(lexer.TokenBraceClose) {
-			// expect first a comma
+		// parse the size
+		if p.curTokenKindIs(lexer.TokenRange) {
 
-			if !p.curTokenKindIs(lexer.TokenComma) {
-				return nil, p.error(p.curToken, "expected a comma after the ", tp.LeftType, " instead got ", p.curToken.Text)
-			}
-
-			p.nextToken()
-
-			// it can be an identifier also
-			if !p.curTokenKindIs(lexer.TokenIdentifier) && !p.curTokenKindIs(lexer.TokenInt) {
-				return nil, p.error(p.curToken, "expected an int literal | identifier after ", tp.LeftType, " instead got ", p.curToken.Text)
-			}
-
-			// parse that token
-			expr := p.parseExpression(LOWEST)
-			tp.Size = expr
-
-			// consume the close bracket
-			if !p.curTokenKindIs(lexer.TokenBraceClose) {
-				return nil, p.error(p.curToken, "after size in", tp, " a ) is expected, instead got ", p.curToken.Text)
-			}
-
-		} else if p.curTokenKindIs(lexer.TokenBraceClose) {
-			// set the size to be -1, means dynamic
 			tp.Size = &ast.IntegerLiteral{
 				Token: p.curToken,
 				Value: -1,
 			}
-		}
 
+			p.nextToken()
+
+		} else {
+			if !p.curTokenKindIs(lexer.TokenIdentifier) && !p.curTokenKindIs(lexer.TokenInt) {
+				return nil, p.error(p.curToken, "expected an int literal | identifier after ", tp.LeftType, " instead got ", p.curToken.Text)
+			}
+
+			tp.Size = p.parseExpression(PREFIX)
+		}
 	} else {
-		// parse the second map type
-		// first we expect the comma token
-		if !p.curTokenKindIs(lexer.TokenComma) {
-			return nil, p.error(p.curToken, "expected a comma after the ", tp.LeftType, " instead got ", p.curToken.Text)
+
+		if _, ok := lexer.TypeKeywords[p.curToken.Kind]; !ok && !p.curTokenKindIs(lexer.TokenBracketOpen) {
+			return nil, p.error(p.curToken, "expected a type, but instead got ", p.curToken.Text)
 		}
 
-		// consume the ,
-		p.nextToken()
-
-		// parse the second type
+		// call the parse type on the current token
 		nestedType, err := p.parseType()
 		if err != nil {
 			return nil, err
 		}
-		tp.RightType = nestedType
-
-		// check the end token is )
-		if !p.curTokenKindIs(lexer.TokenBraceClose) {
-			return nil, p.error(p.curToken, "after value type ", tp.RightType, " a ) is expected, instead got ", p.curToken.Text)
-		}
+		tp.LeftType = nestedType
 	}
 
-	// consume the ) token
+	// check the end token is )
+	if !p.curTokenKindIs(lexer.TokenBracketClose) {
+		return nil, p.error(p.curToken, "after value type ", tp.RightType, " a ) is expected, instead got ", p.curToken.Text)
+	}
+
+	// consume ]
 	p.nextToken()
+
+	if _, ok := lexer.TypeKeywords[p.curToken.Kind]; !ok && !p.curTokenKindIs(lexer.TokenBracketOpen) {
+		return nil, p.error(p.curToken, "expected a type, but instead got ", p.curToken.Text)
+	}
+
+	// parse the second type
+	nestedType, err := p.parseType()
+	if err != nil {
+		return nil, err
+	}
+
+	if tp.Kind == ast.TypeMap {
+		tp.RightType = nestedType
+	} else {
+		tp.LeftType = nestedType
+	}
 
 	return tp, nil
 }
@@ -544,7 +527,7 @@ func (p *Parser) parseType() (ast.Type, error) {
 	// current token
 
 	switch p.curToken.Kind {
-	case lexer.TokenArray, lexer.TokenMap:
+	case lexer.TokenBracketOpen, lexer.TokenMap:
 		// composite type
 		return p.parseCompositeType(p.curToken)
 
@@ -565,15 +548,11 @@ func (p *Parser) parseType() (ast.Type, error) {
 		}
 		return exp.(*ast.StructExpression), nil
 
-	case lexer.TokenIdentifier:
-		// TODO: think about identifier for type aliases
-
 	default:
 		// primitive type
 		return p.parsePrimitiveType(p.curToken)
 	}
 
-	return nil, nil
 }
 
 func (p *Parser) addDirective(stmt *ast.VarDeclaration) {
@@ -617,6 +596,7 @@ func (p *Parser) parseVarDeclaration() (*ast.VarDeclaration, error) {
 
 	// type
 	tp, err := p.parseType()
+
 	if err != nil {
 		return nil, err
 	}
@@ -1115,8 +1095,6 @@ func (p *Parser) parseIterationPattern() (*ast.IterationPattern, error) {
 
 	expr.End = p.parseExpression(OR)
 
-	fmt.Println(p.curToken)
-
 	return expr, nil
 }
 
@@ -1289,8 +1267,17 @@ func (p *Parser) parseBooleanLiteral() ast.Expression {
 func (p *Parser) parseArrayLiteral() ast.Expression {
 	expr := &ast.ArrayLiteral{Token: p.curToken}
 
-	if !p.curTokenKindIs(lexer.TokenBracketOpen) {
-		p.add(p.error(expr.Token, "expected open bracket [, instead got ", p.curToken.Text))
+	tp, err := p.parseType()
+
+	if err != nil {
+		p.add(err)
+		return nil
+	}
+
+	expr.Type = tp
+
+	if !p.curTokenKindIs(lexer.TokenCurlyBraceOpen) {
+		p.add(p.error(expr.Token, "expected open curly brace {, instead got ", p.curToken.Text))
 		return nil
 	}
 
@@ -1299,7 +1286,7 @@ func (p *Parser) parseArrayLiteral() ast.Expression {
 
 	elements := make([]ast.Expression, 0)
 
-	if p.curTokenKindIs(lexer.TokenBracketClose) {
+	if p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
 		p.nextToken()
 		return &ast.ArrayLiteral{
 			Token:    expr.Token,
@@ -1332,8 +1319,8 @@ round:
 
 	expr.Elements = elements
 
-	if !p.curTokenKindIs(lexer.TokenBracketClose) {
-		p.add(p.error(p.curToken, "expected close bracket ( ] ), instead got ", p.curToken.Text))
+	if !p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
+		p.add(p.error(p.curToken, "expected close curly brace }, instead got ", p.curToken.Text))
 		return nil
 	}
 
@@ -1354,6 +1341,13 @@ func (p *Parser) parseScope() (*ast.ScopeStatement, error) {
 
 func (p *Parser) parseMapLiteral() ast.Expression {
 	prev := p.curToken
+
+	tp, err := p.parseType()
+
+	if err != nil {
+		p.add(err)
+		return nil
+	}
 
 	if !p.curTokenKindIs(lexer.TokenCurlyBraceOpen) {
 		p.add(p.error(prev, "expected open curly brace {, instead got ", p.curToken.Text))
@@ -1408,6 +1402,7 @@ round:
 
 	return &ast.MapLiteral{
 		Token: prev,
+		Type:  tp,
 		Pairs: pairs,
 	}
 }
