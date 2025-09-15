@@ -58,10 +58,8 @@ var precedences = map[lexer.TokenKind]int{
 	lexer.TokenAssignBitLeftShift:  BitShift,
 	lexer.TokenPlus:                SUM,
 	lexer.TokenAssignPlus:          SUM,
-	lexer.TokenAssignPlusOne:       SUM,
-	lexer.TokenMinus:               SUM,
 	lexer.TokenAssignMinus:         SUM,
-	lexer.TokenAssignMinusOne:      SUM,
+	lexer.TokenMinus:               SUM,
 	lexer.TokenSlash:               PRODUCT,
 	lexer.TokenAssignSlash:         PRODUCT,
 	lexer.TokenMultiply:            PRODUCT,
@@ -70,6 +68,8 @@ var precedences = map[lexer.TokenKind]int{
 	lexer.TokenAssignModule:        PRODUCT,
 	lexer.TokenExclamation:         PREFIX,
 	lexer.TokenBitNot:              PREFIX,
+	lexer.TokenAssignPlusOne:       PREFIX,
+	lexer.TokenAssignMinusOne:      PREFIX,
 	lexer.TokenBraceOpen:           CALL,
 	lexer.TokenBracketOpen:         INDEX,
 	lexer.TokenDot:                 STRUCT,
@@ -490,6 +490,7 @@ func (p *Parser) parsePrimitiveType(tok lexer.Token) (ast.Type, error) {
 	// parse primitive type
 
 	switch tok.Kind {
+	case lexer.TokenAny:
 	case lexer.TokenBool, lexer.TokenString, lexer.TokenChar:
 		primitive.Size = -1
 
@@ -516,6 +517,8 @@ func (p *Parser) parsePrimitiveType(tok lexer.Token) (ast.Type, error) {
 		// unrecognized token
 		return nil, p.error(tok, "unrecognized type ", tok.Text)
 	}
+
+	primitive.Kind = ast.PrimitiveTypes[primitive.Token.Kind]
 
 	p.nextToken()
 
@@ -603,22 +606,26 @@ func (p *Parser) parseVarDeclaration() (*ast.VarDeclaration, error) {
 
 	stmt.Type = tp
 
-	if !p.curTokenKindIs(lexer.TokenAssign) {
+	if !p.curTokenKindIs(lexer.TokenAssign) && p.curToken.Row == p.prevToken.Row {
 		return nil, p.error(p.curToken, "expected assign (=), got ", p.curToken.Text)
 	}
-	// consume =
-	p.nextToken()
 
-	p.addDirective(stmt)
+	if p.curTokenKindIs(lexer.TokenAssign) {
+		// consume =
+		p.nextToken()
 
-	exprs := append([]ast.Expression{}, p.parseExpression(LOWEST))
+		p.addDirective(stmt)
 
-	for p.curTokenKindIs(lexer.TokenComma) {
-		p.nextToken() // eat comma
-		exprs = append(exprs, p.parseExpression(LOWEST))
+		exprs := append([]ast.Expression{}, p.parseExpression(LOWEST))
+
+		for p.curTokenKindIs(lexer.TokenComma) {
+			p.nextToken() // eat comma
+			exprs = append(exprs, p.parseExpression(LOWEST))
+		}
+
+		stmt.Value = exprs
 	}
 
-	stmt.Value = exprs
 	return stmt, nil
 }
 
@@ -1908,6 +1915,14 @@ func (p *Parser) parseDoubleOperatorExpression(left ast.Expression) ast.Expressi
 			Left:     expr.Left[0],
 			// default of it this
 			Right: &ast.IntegerLiteral{
+				Token: lexer.Token{
+					LiteralToken: lexer.LiteralToken{
+						Kind: lexer.TokenInt,
+						Text: "1",
+					},
+					Row: expr.Left[0].GetToken().Row + 1,
+					Col: expr.Left[0].GetToken().Row + 1,
+				},
 				Value: 1,
 			},
 		},

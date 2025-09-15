@@ -7,9 +7,7 @@ const (
 	// Keywords
 	TokenLet    TokenKind = "let"
 	TokenConst  TokenKind = "const"
-	TokenStruct TokenKind = "struct"
 	TokenSelf   TokenKind = "self"
-	TokenEnum   TokenKind = "enum"
 	TokenFn     TokenKind = "fn"
 	TokenFor    TokenKind = "for"
 	TokenIn     TokenKind = "in"
@@ -119,8 +117,12 @@ const (
 	TokenUInt64  TokenKind = "u64"
 	TokenFloat32 TokenKind = "f32"
 	TokenFloat64 TokenKind = "f64"
-	TokenArray   TokenKind = "array"
 	TokenMap     TokenKind = "map"
+	TokenAny     TokenKind = "any"
+
+	// Record types
+	TokenStruct TokenKind = "struct"
+	TokenEnum   TokenKind = "enum"
 
 	// number type (used in the lexing phase)
 	TokenInt   TokenKind = "int"

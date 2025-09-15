@@ -39,6 +39,7 @@ var (
 		"u64":    TokenUInt64,
 		"f32":    TokenFloat32,
 		"f64":    TokenFloat64,
+		"any":    TokenAny,
 		"map":    TokenMap,
 		"struct": TokenStruct,
 	}

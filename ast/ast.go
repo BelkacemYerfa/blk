@@ -64,6 +64,7 @@ const (
 	TypeBool
 	TypeChar
 	TypeString
+	TypeAny
 	TypeArray
 	TypeMap
 	TypePointer
@@ -71,6 +72,23 @@ const (
 	TypeStruct
 	TypeFunction
 )
+
+var PrimitiveTypes = map[lexer.TokenKind]TypeKind{
+	lexer.TokenString:  TypeString,
+	lexer.TokenChar:    TypeChar,
+	lexer.TokenBool:    TypeBool,
+	lexer.TokenInt8:    TypeInt8,
+	lexer.TokenInt16:   TypeInt16,
+	lexer.TokenInt32:   TypeInt32,
+	lexer.TokenInt64:   TypeInt64,
+	lexer.TokenUInt8:   TypeUInt8,
+	lexer.TokenUInt16:  TypeUInt16,
+	lexer.TokenUInt32:  TypeUInt32,
+	lexer.TokenUInt64:  TypeUInt64,
+	lexer.TokenFloat32: TypeFloat32,
+	lexer.TokenFloat64: TypeFloat64,
+	lexer.TokenAny:     TypeAny,
+}
 
 type Type interface {
 	Type() TypeKind
