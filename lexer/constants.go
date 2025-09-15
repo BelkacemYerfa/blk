@@ -17,7 +17,6 @@ var (
 		"fn":     TokenFn,
 		"for":    TokenFor,
 		"in":     TokenIn,
-		"while":  TokenWhile,
 		"import": TokenImport,
 		"return": TokenReturn,
 		"next":   TokenNext,

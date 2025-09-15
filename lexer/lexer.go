@@ -146,6 +146,12 @@ func (l *Lexer) NextToken() Token {
 			Kind: TokenComma,
 			Text: ",",
 		}
+	case TokenSemiColon:
+		l.readChar()
+		token.LiteralToken = LiteralToken{
+			Kind: TokenSemiColon,
+			Text: ";",
+		}
 	case TokenMinus:
 		l.readChar()
 		nextChar := string(l.Content[l.Cur])

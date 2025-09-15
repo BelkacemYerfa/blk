@@ -434,6 +434,11 @@ func (ws *WhileStatement) String() string {
 	return out.String()
 }
 
+type Pattern interface {
+	pattern()
+	String() string
+}
+
 type RangePattern struct {
 	Token lexer.Token
 	Op    string
@@ -441,6 +446,7 @@ type RangePattern struct {
 	End   Expression
 }
 
+func (fs *RangePattern) pattern()              {}
 func (fs *RangePattern) expressionNode()       {}
 func (fs *RangePattern) TokenLiteral() string  { return fs.Token.Text }
 func (nt *RangePattern) GetToken() lexer.Token { return nt.Token }
@@ -452,17 +458,40 @@ func (fs *RangePattern) String() string {
 	return out.String()
 }
 
-type ForStatement struct {
+type IterationPattern struct {
+	Token     lexer.Token
+	Start     Statement
+	Condition Expression
+	End       Expression
+}
+
+func (fs *IterationPattern) pattern()              {}
+func (fs *IterationPattern) TokenLiteral() string  { return fs.Token.Text }
+func (nt *IterationPattern) GetToken() lexer.Token { return nt.Token }
+func (fs *IterationPattern) String() string {
+	var out bytes.Buffer
+	if fs.Start != nil {
+		out.WriteString(fs.Start.String() + "; ")
+	}
+	if fs.Condition != nil {
+		out.WriteString(fs.Condition.String())
+	}
+	if fs.End != nil {
+		out.WriteString("; " + fs.End.String())
+	}
+	return out.String()
+}
+
+type IteratorIn struct {
 	Token       lexer.Token
 	Identifiers []*Identifier // mostly the variable
 	Target      Expression    // target, either a map or an array
-	Body        *BlockStatement
 }
 
-func (fs *ForStatement) statementNode()        {}
-func (fs *ForStatement) TokenLiteral() string  { return fs.Token.Text }
-func (nt *ForStatement) GetToken() lexer.Token { return nt.Token }
-func (fs *ForStatement) String() string {
+func (fs *IteratorIn) pattern()              {}
+func (fs *IteratorIn) TokenLiteral() string  { return fs.Token.Text }
+func (nt *IteratorIn) GetToken() lexer.Token { return nt.Token }
+func (fs *IteratorIn) String() string {
 	var out bytes.Buffer
 	out.WriteString("for ")
 	for idx, iden := range fs.Identifiers {
@@ -473,9 +502,29 @@ func (fs *ForStatement) String() string {
 	}
 	out.WriteString(" in ")
 	out.WriteString(fs.Target.String())
-	out.WriteString(" { ")
-	out.WriteString(fs.Body.String())
-	out.WriteString(" }")
+	return out.String()
+}
+
+type ForStatement struct {
+	Token   lexer.Token
+	Pattern Pattern
+	Body    *BlockStatement
+}
+
+func (fs *ForStatement) statementNode()        {}
+func (fs *ForStatement) TokenLiteral() string  { return fs.Token.Text }
+func (nt *ForStatement) GetToken() lexer.Token { return nt.Token }
+func (fs *ForStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString("for ")
+	if fs.Pattern != nil {
+		out.WriteString(fs.Pattern.String())
+	}
+	out.WriteString(" {\n")
+	if fs.Body != nil {
+		out.WriteString(fs.Body.String())
+	}
+	out.WriteString("}")
 	return out.String()
 }
 
@@ -801,9 +850,9 @@ func (ie *IfExpression) String() string {
 	var out bytes.Buffer
 	out.WriteString("if ")
 	out.WriteString(ie.Condition.String())
-	out.WriteString(" { ")
+	out.WriteString(" {\n")
 	out.WriteString(ie.Consequence.String())
-	out.WriteString(" }")
+	out.WriteString("}")
 	if ie.Alternative != nil {
 		out.WriteString(" else ")
 		alternative, ok := ie.Alternative.(*IfExpression)
@@ -833,6 +882,7 @@ type SwitchExpression struct {
 	Token     lexer.Token
 	Condition Expression
 	Cases     []*Case
+	Directive []DirectiveExpression
 }
 
 func (ie *SwitchExpression) expressionNode()       {}
@@ -900,7 +950,7 @@ func (ie *IndexExpression) String() string {
 		out.WriteString(ie.Start.String())
 	}
 	if ie.Range {
-		out.WriteString(":")
+		out.WriteString("..")
 	}
 	if ie.End != nil {
 		out.WriteString(ie.End.String())
