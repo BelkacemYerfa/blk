@@ -61,9 +61,9 @@ const (
 	TypeUInt64
 	TypeFloat32
 	TypeFloat64
-	TypeBool
 	TypeChar
 	TypeString
+	TypeBool
 	TypeAny
 	TypeArray
 	TypeMap
@@ -106,7 +106,21 @@ func (p *PrimitiveType) Type() TypeKind {
 	return p.Kind
 }
 func (p *PrimitiveType) String() string {
-	return p.Token.Kind
+	var out bytes.Buffer
+	if p.Size > 0 {
+		if p.Kind == TypeFloat32 || p.Kind == TypeFloat64 {
+			out.WriteString("f" + fmt.Sprint(p.Size))
+		} else {
+			if p.Signed {
+				out.WriteString("i" + fmt.Sprint(p.Size))
+			} else {
+				out.WriteString("u" + fmt.Sprint(p.Size))
+			}
+		}
+	} else {
+		out.WriteString(p.Token.Kind)
+	}
+	return out.String()
 }
 
 // represents arrays (fixed size arrays & dynamic ones) & hash maps
@@ -119,7 +133,7 @@ type CompositeType struct {
 	Kind      TypeKind
 	LeftType  Type // can represent any underline type
 	RightType Type
-	Size      Expression
+	Size      *IntegerLiteral
 }
 
 func (ct *CompositeType) Type() TypeKind {
@@ -136,10 +150,8 @@ func (ct *CompositeType) String() string {
 		out.WriteString(", " + ct.RightType.String())
 	}
 	if ct.Size != nil {
-		if size, ok := ct.Size.(*IntegerLiteral); ok {
-			if size.Value <= 0 {
-				goto ret
-			}
+		if ct.Size.Value <= 0 {
+			goto ret
 		}
 		out.WriteString("," + ct.Size.String())
 	}
@@ -933,8 +945,9 @@ func (ie *SwitchExpression) String() string {
 
 type CallExpression struct {
 	Token    lexer.Token // The '(' token
-	Function Identifier  // Identifier
+	Function *Identifier  // Identifier
 	Args     []Expression
+	Type     Type
 }
 
 func (ce *CallExpression) expressionNode()       {}

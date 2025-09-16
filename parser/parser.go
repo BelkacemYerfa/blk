@@ -82,8 +82,8 @@ type (
 
 type Parser struct {
 	lexer          *lexer.Lexer
-	FilePath       string
-	Errors         []error
+	filePath       string
+	errors         []error
 	prefixParseFns map[lexer.TokenKind]prefixParseFn
 	infixParseFns  map[lexer.TokenKind]infixParseFn
 	internalFlags  []string
@@ -96,8 +96,8 @@ type Parser struct {
 func NewParser(lex *lexer.Lexer, filepath string) *Parser {
 	p := Parser{
 		lexer:          lex,
-		FilePath:       filepath,
-		Errors:         []error{},
+		filePath:       filepath,
+		errors:         []error{},
 		prefixParseFns: make(map[lexer.TokenKind]prefixParseFn),
 		infixParseFns:  make(map[lexer.TokenKind]infixParseFn),
 		internalFlags:  []string{},
@@ -173,6 +173,10 @@ func NewParser(lex *lexer.Lexer, filepath string) *Parser {
 	return &p
 }
 
+func (p *Parser) GetErrors() []error {
+	return p.errors
+}
+
 func (p *Parser) peekPrecedence() int {
 	if p, ok := precedences[p.curToken.Kind]; ok {
 		return p
@@ -193,7 +197,7 @@ func (p *Parser) nextToken() {
 
 func (p *Parser) add(err error) {
 	if len(err.Error()) > 0 {
-		p.Errors = append(p.Errors, err)
+		p.errors = append(p.errors, err)
 	}
 }
 
@@ -229,7 +233,7 @@ func (p *Parser) peekTokenKindIs(kind lexer.TokenKind) bool {
 }
 
 func (p *Parser) error(tok lexer.Token, msg ...interface{}) error {
-	errMsg := fmt.Sprintf("\033[1;90m%s:%d:%d:\033[0m ERROR: %s", p.FilePath, tok.Row, tok.Col, fmt.Sprint(msg...))
+	errMsg := fmt.Sprintf("\033[1;90m%s:%d:%d:\033[0m ERROR: %s", p.filePath, tok.Row, tok.Col, fmt.Sprint(msg...))
 
 	return errors.New(errMsg)
 }
@@ -331,11 +335,11 @@ func (p *Parser) parseCompositeType(prev lexer.Token) (*ast.CompositeType, error
 			p.nextToken()
 
 		} else {
-			if !p.curTokenKindIs(lexer.TokenIdentifier) && !p.curTokenKindIs(lexer.TokenInt) {
+			if !p.curTokenKindIs(lexer.TokenInt) {
 				return nil, p.error(p.curToken, "expected an int literal | identifier after ", tp.LeftType, " instead got ", p.curToken.Text)
 			}
 
-			tp.Size = p.parseExpression(PREFIX)
+			tp.Size = p.parseIntLiteral().(*ast.IntegerLiteral)
 		}
 	} else {
 
@@ -492,7 +496,6 @@ func (p *Parser) parsePrimitiveType(tok lexer.Token) (ast.Type, error) {
 	switch tok.Kind {
 	case lexer.TokenAny:
 	case lexer.TokenBool, lexer.TokenString, lexer.TokenChar:
-		primitive.Size = -1
 
 	case lexer.TokenInt8, lexer.TokenInt16, lexer.TokenInt32, lexer.TokenInt64:
 		// signed int
@@ -1705,7 +1708,7 @@ func (p *Parser) parseCallExpression(left ast.Expression) ast.Expression {
 		return nil
 	}
 
-	exp := ast.CallExpression{Token: left.GetToken(), Function: *(left.(*ast.Identifier))}
+	exp := ast.CallExpression{Token: left.GetToken(), Function: left.(*ast.Identifier)}
 
 	exp.Args = p.parseCallArguments()
 

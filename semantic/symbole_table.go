@@ -1,18 +1,13 @@
 package semantic
 
-import "go/ast"
-
-type SymbolKind int
-
-const (
-	SymbolVar SymbolKind = iota
-	SymbolFunc
-	SymbolType
+import (
+	"blk/ast"
+	"fmt"
 )
 
 type Symbol struct {
 	Name       string
-	Kind       SymbolKind
+	Kind       ast.Type
 	IsMutable  bool
 	IsFunction bool
 	DeclNode   ast.Node
@@ -54,8 +49,23 @@ func (st *SymbolTable) ExitScope() {
 }
 
 // define a new symbol in the symbol store
-func (s *Scope) Define(name string, sym *Symbol) {
+func (s *Scope) Define(name string, sym *Symbol) error {
+	if _, ok := s.Symbols[name]; ok {
+		return fmt.Errorf("%s already exists in the scope, u can't redeclare it", name)
+	}
+
 	s.Symbols[name] = sym
+	return nil
+}
+
+func (s *Scope) Update(name string, sym *Symbol) error {
+	_, ok := s.Symbols[name]
+	if !ok {
+		return fmt.Errorf("symbol not found in the current scope")
+	}
+
+	s.Symbols[name] = sym
+	return nil
 }
 
 // recursive search on the symbol name

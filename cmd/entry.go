@@ -3,7 +3,7 @@ package cmd
 import (
 	"blk/lexer"
 	"blk/parser"
-	"encoding/json"
+	"blk/semantic"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -138,24 +138,27 @@ func Run(args []string) {
 	p := parser.NewParser(l, filename.Name())
 	ast := p.Parse()
 
-	if len(p.Errors) > 0 {
-		for _, err := range p.Errors {
+	errs := p.GetErrors()
+
+	if len(errs) > 0 {
+		for _, err := range errs {
 			fmt.Println(err)
 		}
 		return
 	}
 
-	jsonData, err := json.MarshalIndent(ast, " ", " ")
-	if err != nil {
-		fmt.Printf("ERROR: failed to marshal AST to JSON: %v\n", err)
-	}
+	tc := semantic.NewAnalyzer(filename.Name())
 
-	err = os.WriteFile(filepath.Join(osPath, "/internal_examples/main_ast.json"), jsonData, 0644)
-	if err != nil {
-		fmt.Printf("ERROR: failed to write AST to file: %v\n", err)
+	tc.Analyze(ast)
+
+	errs = tc.GetErrors()
+
+	if len(errs) > 0 {
+		for _, err := range errs {
+			fmt.Println(err)
+		}
 		return
 	}
-	fmt.Println(ast.String())
 
 }
 
