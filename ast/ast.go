@@ -118,7 +118,11 @@ func (p *PrimitiveType) String() string {
 			}
 		}
 	} else {
-		out.WriteString(p.Token.Kind)
+		if p.Token.Kind == "str" {
+			out.WriteString("string")
+		} else {
+			out.WriteString(p.Token.Kind)
+		}
 	}
 	return out.String()
 }
@@ -141,22 +145,22 @@ func (ct *CompositeType) Type() TypeKind {
 }
 func (ct *CompositeType) String() string {
 	var out bytes.Buffer
-	out.WriteString(ct.Token.Kind)
-	out.WriteString("(")
-	if ct.LeftType != nil {
-		out.WriteString(ct.LeftType.String())
-	}
-	if ct.RightType != nil {
-		out.WriteString(", " + ct.RightType.String())
-	}
-	if ct.Size != nil {
-		if ct.Size.Value <= 0 {
-			goto ret
+	if ct.Kind == TypeArray {
+		out.WriteString("[")
+		if ct.Size.Value > 0 {
+			out.WriteString(ct.Size.String())
+		} else {
+			out.WriteString("..")
 		}
-		out.WriteString("," + ct.Size.String())
+		out.WriteString("]")
+		out.WriteString(ct.LeftType.String())
+	} else {
+		out.WriteString("map[")
+		out.WriteString(ct.LeftType.String())
+		out.WriteString("]")
+		out.WriteString(ct.RightType.String())
 	}
-ret:
-	out.WriteString(")")
+
 	return out.String()
 }
 
@@ -262,7 +266,6 @@ const (
 	MutUseDirective
 	FallthroughDirective
 	PartialDirective
-	BakeDirective
 	ForceDirective
 )
 
@@ -282,6 +285,7 @@ type ImportStatement struct {
 	Token      lexer.Token // the token.LET token
 	Directive  []DirectiveExpression
 	Alias      *Identifier // alias for module name
+	IntoScope  bool
 	ModuleName *StringLiteral
 }
 
@@ -298,9 +302,24 @@ func (ls *ImportStatement) String() string {
 	return out.String()
 }
 
+type UsingStatement struct {
+	Token lexer.Token // the token.LET token
+	Alias *Identifier // alias for module name
+}
+
+func (ls *UsingStatement) statementNode()        {}
+func (ls *UsingStatement) TokenLiteral() string  { return ls.Token.Text }
+func (nt *UsingStatement) GetToken() lexer.Token { return nt.Token }
+func (ls *UsingStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString(ls.TokenLiteral() + " ")
+	out.WriteString(ls.Alias.Value)
+	return out.String()
+}
+
 type CastExpression struct {
 	Token            lexer.Token
-	Directives       []DirectiveExpression
+	Directives       DirectiveExpression
 	TargetType       Type
 	TargetExpression Expression
 }
@@ -320,7 +339,7 @@ type Method struct {
 
 type StructExpression struct {
 	Token   lexer.Token // the token.LET token
-	Fields  []*VarDeclaration
+	Fields  []Statement
 	Methods []*Method
 }
 
@@ -666,12 +685,17 @@ func (i *Identifier) TokenLiteral() string   { return i.Token.Text }
 func (nt *Identifier) GetToken() lexer.Token { return nt.Token }
 func (i *Identifier) String() string         { return i.Value }
 
+type Literal interface {
+	lit()
+}
+
 type IntegerLiteral struct {
 	Token lexer.Token
 	Value int64
 }
 
 func (il *IntegerLiteral) expressionNode()       {}
+func (il *IntegerLiteral) lit()                  {}
 func (il *IntegerLiteral) TokenLiteral() string  { return il.Token.Text }
 func (nt *IntegerLiteral) GetToken() lexer.Token { return nt.Token }
 func (il *IntegerLiteral) String() string        { return il.Token.Text }
@@ -682,6 +706,7 @@ type FloatLiteral struct {
 }
 
 func (fl *FloatLiteral) expressionNode()       {}
+func (fl *FloatLiteral) lit()                  {}
 func (fl *FloatLiteral) TokenLiteral() string  { return fl.Token.Text }
 func (nt *FloatLiteral) GetToken() lexer.Token { return nt.Token }
 func (fl *FloatLiteral) String() string        { return fl.Token.Text }
@@ -692,6 +717,7 @@ type StringLiteral struct {
 }
 
 func (sl *StringLiteral) expressionNode()       {}
+func (sl *StringLiteral) lit()                  {}
 func (sl *StringLiteral) TokenLiteral() string  { return sl.Token.Text }
 func (nt *StringLiteral) GetToken() lexer.Token { return nt.Token }
 func (sl *StringLiteral) String() string {
@@ -708,6 +734,7 @@ type CharLiteral struct {
 }
 
 func (sl *CharLiteral) expressionNode()       {}
+func (sl *CharLiteral) lit()                  {}
 func (sl *CharLiteral) TokenLiteral() string  { return sl.Token.Text }
 func (nt *CharLiteral) GetToken() lexer.Token { return nt.Token }
 func (sl *CharLiteral) String() string {
@@ -723,6 +750,7 @@ type NulLiteral struct {
 }
 
 func (sl *NulLiteral) expressionNode()       {}
+func (sl *NulLiteral) lit()                  {}
 func (sl *NulLiteral) TokenLiteral() string  { return sl.Token.Text }
 func (nt *NulLiteral) GetToken() lexer.Token { return nt.Token }
 func (sl *NulLiteral) String() string {
@@ -737,6 +765,7 @@ type BooleanLiteral struct {
 }
 
 func (bl *BooleanLiteral) expressionNode()       {}
+func (bl *BooleanLiteral) lit()                  {}
 func (bl *BooleanLiteral) TokenLiteral() string  { return bl.Token.Text }
 func (nt *BooleanLiteral) GetToken() lexer.Token { return nt.Token }
 func (bl *BooleanLiteral) String() string        { return bl.Token.Text }
@@ -749,6 +778,7 @@ type ArrayLiteral struct {
 }
 
 func (al *ArrayLiteral) expressionNode()       {}
+func (il *ArrayLiteral) lit()                  {}
 func (al *ArrayLiteral) TokenLiteral() string  { return al.Token.Text }
 func (nt *ArrayLiteral) GetToken() lexer.Token { return nt.Token }
 func (al *ArrayLiteral) String() string {
@@ -775,6 +805,7 @@ type MapLiteral struct {
 }
 
 func (ml *MapLiteral) expressionNode()       {}
+func (il *MapLiteral) lit()                  {}
 func (ml *MapLiteral) TokenLiteral() string  { return ml.Token.Text }
 func (nt *MapLiteral) GetToken() lexer.Token { return nt.Token }
 func (ml *MapLiteral) String() string {

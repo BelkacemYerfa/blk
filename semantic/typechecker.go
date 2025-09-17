@@ -30,6 +30,7 @@ func (tc *TypeChecker) add(err error) {
 }
 
 // TODO: make the error a single collector struct to use on each phase
+
 func (tc *TypeChecker) error(tok lexer.Token, msg ...interface{}) error {
 	errMsg := fmt.Sprintf("\033[1;90m%s:%d:%d:\033[0m ERROR: %s", tc.filePath, tok.Row, tok.Col, fmt.Sprint(msg...))
 
@@ -91,11 +92,20 @@ func (tc *TypeChecker) check(program *ast.Program) {
 }
 
 func (tc *TypeChecker) checkStmt(stmt ast.Statement) {
+
+	if tc.symtab.GlobalScope == tc.symtab.CurrentScope {
+		// only declaration and imports allowed
+		switch stmt.(type) {
+		case *ast.VarDeclaration, *ast.ImportStatement, *ast.UsingStatement:
+		default:
+			tc.add(tc.error(stmt.GetToken(), "the global scope only allows for declaration or or import statements, everything else if forbidden"))
+			return
+		}
+	}
+
 	switch s := stmt.(type) {
 	case *ast.VarDeclaration:
 		tc.checkVarDecl(s)
-	case *ast.ExpressionStatement:
-		tc.inferExpr(s.Expression) // side-effect: ensure expr is valid
 	}
 }
 
@@ -203,6 +213,19 @@ func (tc *TypeChecker) inferExpr(expr ast.Expression) ast.Type {
 
 	case *ast.ArrayLiteral:
 		return tc.inferArrayType(e)
+
+	case *ast.CastExpression:
+		// check if expression is supported first
+		switch e.TargetExpression.(type) {
+		case *ast.Identifier, ast.Literal, *ast.CallExpression, *ast.CastExpression, *ast.UnaryExpression:
+			exprType := tc.inferExpr(e.TargetExpression)
+			return tc.checkTypeAgainst(exprType, e)
+
+		default:
+			errMsg := fmt.Sprintf("%v expression isn't supported with cast expression, the only supported ones are literal (floats, ints, ...), identifiers, functions call and nested cast expression", tc.highlight(e.TargetExpression.String(), Red))
+			tc.add(tc.error(e.Token, errMsg))
+			return nil
+		}
 
 	default:
 		tc.add(tc.error(expr.GetToken(), "cannot infer type for expression"))
@@ -605,6 +628,171 @@ func (tc *TypeChecker) checkArrayType(etp, itp *ast.CompositeType) bool {
 	}
 
 	return tc.typesCompatible(etp.LeftType, itp.LeftType)
+}
+
+func (tc *TypeChecker) checkPrimitiveTypeCastAbility(ctt, exprPrimitive *ast.PrimitiveType) (*ast.PrimitiveType, error) {
+
+	switch {
+	case ctt.Kind == exprPrimitive.Kind:
+		// Same type
+		return exprPrimitive, nil
+
+	case ctt.Kind >= ast.TypeInt8 && ctt.Kind <= ast.TypeFloat64:
+		// Casting TO numeric
+		switch {
+		case exprPrimitive.Kind >= ast.TypeInt8 && exprPrimitive.Kind <= ast.TypeFloat64:
+			// Numeric -> Numeric
+			if exprPrimitive.Kind > ctt.Kind {
+				errMsg := fmt.Sprintf("Be careful, casting type %v into type %v will result in some information loss", tc.highlight(exprPrimitive, Red), tc.highlight(ctt, Yellow))
+				return nil, tc.error(exprPrimitive.Token, errMsg)
+			}
+			return exprPrimitive, nil
+
+		case exprPrimitive.Kind == ast.TypeBool:
+			// Bool -> Numeric (true=1, false=0)
+			return ctt, nil
+
+		case exprPrimitive.Kind == ast.TypeChar:
+			// Char -> Numeric ('A' -> 65)
+			return ctt, nil
+
+		case exprPrimitive.Kind == ast.TypeString:
+			errMsg := fmt.Sprintf("converting %v into %v, isn't allowed", tc.highlight(exprPrimitive, Red), tc.highlight(ctt, Yellow))
+			return nil, tc.error(exprPrimitive.Token, errMsg)
+		}
+
+	case ctt.Kind == ast.TypeChar:
+		switch exprPrimitive.Kind {
+
+		case ast.TypeInt8, ast.TypeInt16, ast.TypeInt32, ast.TypeInt64,
+			ast.TypeUInt8, ast.TypeUInt16, ast.TypeUInt32, ast.TypeUInt64:
+			// Numeric -> Char (runtime check: must fit in range)
+			return ctt, nil
+		case ast.TypeString:
+			// String -> Char (runtime check: must be len==1)
+			return ctt, nil
+
+		default:
+			errMsg := fmt.Sprintf("converting %v into %v, isn't allowed", tc.highlight(exprPrimitive, Red), tc.highlight(ctt, Yellow))
+			return nil, tc.error(exprPrimitive.Token, errMsg)
+		}
+
+	case ctt.Kind == ast.TypeBool:
+		switch exprPrimitive.Kind {
+
+		case ast.TypeInt8, ast.TypeInt16, ast.TypeInt32, ast.TypeInt64,
+			ast.TypeUInt8, ast.TypeUInt16, ast.TypeUInt32, ast.TypeUInt64,
+			ast.TypeFloat32, ast.TypeFloat64, ast.TypeChar:
+			// Numeric/Char -> Bool (0=false, else true)
+			return ctt, nil
+
+		default:
+			errMsg := fmt.Sprintf("converting %v into %v, isn't allowed", tc.highlight(exprPrimitive, Red), tc.highlight(ctt, Yellow))
+			return nil, tc.error(exprPrimitive.Token, errMsg)
+		}
+
+	case ctt.Kind == ast.TypeString:
+		// Everything -> String
+		return ctt, nil
+
+	default:
+		errMsg := fmt.Sprintf("converting %v into %v, isn't allowed", tc.highlight(exprPrimitive, Red), tc.highlight(ctt, Yellow))
+		return nil, tc.error(exprPrimitive.Token, errMsg)
+	}
+
+	errMsg := fmt.Sprintf("converting %v into %v, isn't allowed", tc.highlight(exprPrimitive, Red), tc.highlight(ctt, Yellow))
+	return nil, tc.error(exprPrimitive.Token, errMsg)
+
+}
+
+func (tc *TypeChecker) checkTypeAgainst(exprType ast.Type, cast *ast.CastExpression) ast.Type {
+
+	// force := cast.Directives.Kind == ast.ForceDirective
+	targetExpr := cast.TargetExpression
+	castToType := cast.TargetType
+
+	switch ctt := castToType.(type) {
+	case *ast.PrimitiveType:
+		// cast to the same type
+		exprPrimitive, ok := exprType.(*ast.PrimitiveType)
+		if !ok {
+			errMsg := fmt.Sprintf("types need to be of the same category constructor, meaning if the provided type is a primitive, the expr needs to give back a primitive, if it is a composite type, it needs to give back composite type, but we received %v as cast type, and expr gives back %v type", tc.highlight(castToType, Green), tc.highlight(exprType, Red))
+			tc.add(tc.error(targetExpr.GetToken(), errMsg))
+			return nil
+		}
+
+		res, err := tc.checkPrimitiveTypeCastAbility(ctt, exprPrimitive)
+
+		if err != nil {
+			tc.add(err)
+		}
+		return res
+
+	case *ast.CompositeType:
+
+		exprPrimitive, ok := exprType.(*ast.CompositeType)
+		if !ok {
+			errMsg := fmt.Sprintf("types need to be of the same category constructor, meaning if the provided type is a primitive, the expr needs to give back a primitive, if it is a composite type, it needs to give back composite type, but we received %v as cast type, and expr gives back %v type", tc.highlight(castToType, Green), tc.highlight(exprType, Red))
+			tc.add(tc.error(targetExpr.GetToken(), errMsg))
+			return nil
+		}
+
+		if ctt.Kind != exprPrimitive.Kind {
+			errMsg := fmt.Sprintf("trying to cast an expression of type %v into %v type isn't allowed", tc.highlight(exprType, Red), tc.highlight(castToType, Green))
+			tc.add(tc.error(targetExpr.GetToken(), errMsg))
+			return nil
+		}
+
+		if ctt.Kind == ast.TypeArray {
+			if ctt.Size.Value != exprPrimitive.Size.Value {
+				errMsg := fmt.Sprintf("array size are not equal, expression array size is %v and cast type size is %v, both of them need to be equal", tc.highlight(exprPrimitive.Size, Red), tc.highlight(ctt.Size, Green))
+				tc.add(tc.error(targetExpr.GetToken(), errMsg))
+				return nil
+			}
+
+			if !tc.typesCompatible(ctt.LeftType, exprPrimitive.LeftType) {
+				errMsg := fmt.Sprintf("trying to cast %v into %v isn't allowed", tc.highlight(exprPrimitive, Red), tc.highlight(ctt, Green))
+				tc.add(tc.error(targetExpr.GetToken(), errMsg))
+
+				return nil
+			}
+
+			return exprPrimitive
+
+		}
+
+		if ctt.Kind == ast.TypeMap {
+			if tp := tc.checkTypeAgainst(ctt.LeftType, &ast.CastExpression{
+				TargetType:       exprPrimitive.LeftType,
+				TargetExpression: targetExpr,
+			}); tp == nil {
+				errMsg := fmt.Sprintf("trying to cast %v into %v isn't allowed", tc.highlight(exprPrimitive.LeftType, Red), tc.highlight(ctt.LeftType, Green))
+				tc.add(tc.error(targetExpr.GetToken(), errMsg))
+
+				return nil
+			}
+
+			if tp := tc.checkTypeAgainst(ctt.RightType, &ast.CastExpression{
+				TargetType:       exprPrimitive.RightType,
+				TargetExpression: targetExpr,
+			}); tp == nil {
+				errMsg := fmt.Sprintf("trying to cast %v into %v isn't allowed", tc.highlight(exprPrimitive.RightType, Red), tc.highlight(ctt.RightType, Green))
+				tc.add(tc.error(targetExpr.GetToken(), errMsg))
+
+				return nil
+			}
+
+			return exprPrimitive
+		}
+
+	default:
+		errMsg := fmt.Sprintf("using %v as casting type isn't supported yet",
+			tc.highlight(cast.String(), Red))
+		tc.add(tc.error(cast.Token, errMsg))
+		return nil
+	}
+
+	return nil
 }
 
 func (tc *TypeChecker) typesCompatible(expected, inferred ast.Type) bool {

@@ -17,6 +17,7 @@ var (
 		"for":    TokenFor,
 		"in":     TokenIn,
 		"import": TokenImport,
+		"using":  TokenUsing,
 		"return": TokenReturn,
 		"next":   TokenNext,
 		"break":  TokenBreak,
@@ -51,7 +52,6 @@ var (
 		"#must_use":    TokenMustUse,
 		"#fallthrough": TokenFallthrough,
 		"#partial":     TokenPartial,
-		"#bake":        TokenBake,
 		"#force":       TokenForce,
 	}
 

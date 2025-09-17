@@ -635,7 +635,7 @@ func (l *Lexer) readString() Token {
 
 	return Token{
 		LiteralToken: LiteralToken{
-			Kind: TokenString,
+			Kind: TokenStr,
 			Text: text,
 		},
 		Row: row,

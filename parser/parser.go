@@ -108,7 +108,7 @@ func NewParser(lex *lexer.Lexer, filepath string) *Parser {
 	p.registerPrefix(lexer.TokenSelf, p.parseIdentifier)
 	p.registerPrefix(lexer.TokenInt, p.parseIntLiteral)
 	p.registerPrefix(lexer.TokenFloat, p.parseFloatLiteral)
-	p.registerPrefix(lexer.TokenString, p.parseStringLiteral)
+	p.registerPrefix(lexer.TokenStr, p.parseStringLiteral)
 	p.registerPrefix(lexer.TokenChar, p.parseCharLiteral)
 	p.registerPrefix(lexer.TokenNul, p.parseNulLiteral)
 	p.registerPrefix(lexer.TokenBracketOpen, p.parseArrayLiteral)
@@ -286,6 +286,8 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		return p.parseBreakStatement()
 	case lexer.TokenCurlyBraceOpen:
 		return p.parseScope()
+	case lexer.TokenUsing:
+		return p.parseUsingStatement()
 	case lexer.TokenIdentifier, lexer.TokenSelf:
 
 		if p.peekTokenKindIs(lexer.TokenComma) || p.peekTokenKindIs(lexer.TokenAssign) {
@@ -664,11 +666,9 @@ func (p *Parser) parseImportStatement() (*ast.ImportStatement, error) {
 	// skip import
 	p.nextToken()
 
-	if p.curTokenKindIs(lexer.TokenBake) {
-		stmt.Directive = append(stmt.Directive, ast.DirectiveExpression{
-			Token: p.curToken,
-			Kind:  ast.BakeDirective,
-		})
+	if p.curTokenKindIs(lexer.TokenDot) {
+		// means import to the current scope
+		stmt.IntoScope = true
 		p.nextToken()
 	}
 
@@ -677,7 +677,7 @@ func (p *Parser) parseImportStatement() (*ast.ImportStatement, error) {
 		stmt.Alias = p.parseIdentifier().(*ast.Identifier)
 	}
 
-	if !p.curTokenKindIs(lexer.TokenString) {
+	if !p.curTokenKindIs(lexer.TokenStr) {
 		return nil, p.error(p.curToken, "expected a string as module path, instead got ", p.curToken.Text)
 	}
 
@@ -715,7 +715,7 @@ func (p *Parser) parseStructExpression() ast.Expression {
 		p.nextToken()
 		return &ast.StructExpression{
 			Token:   expr.Token,
-			Fields:  []*ast.VarDeclaration{},
+			Fields:  []ast.Statement{},
 			Methods: []*ast.Method{},
 		}
 	}
@@ -733,28 +733,20 @@ func (p *Parser) parseStructExpression() ast.Expression {
 	return expr
 }
 
-func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method, error) {
-	fields := make([]*ast.VarDeclaration, 0)
+func (p *Parser) parseFields() ([]ast.Statement, []*ast.Method, error) {
+	fields := make([]ast.Statement, 0)
 	methods := make([]*ast.Method, 0)
 
 	// parse until, then consume it
 	for !p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
 
-		if p.curTokenKindIs(lexer.TokenBake) {
+		if p.curTokenKindIs(lexer.TokenUsing) {
 			// for now skip it
-			field := &ast.VarDeclaration{Token: p.curToken, Mutable: true}
-			field.Directive = append(field.Directive, ast.DirectiveExpression{
-				Token: p.curToken,
-				Kind:  ast.BakeDirective,
-			})
+			field, err := p.parseUsingStatement()
 
-			p.nextToken()
-
-			if !p.curTokenKindIs(lexer.TokenIdentifier) {
-				return nil, nil, p.error(p.curToken, "#bake directive expected an identifier, instead got ", p.curToken.Text)
+			if err != nil {
+				return nil, nil, err
 			}
-
-			field.Name = append(field.Name, p.parseIdentifier().(*ast.Identifier))
 
 			fields = append(fields, field)
 
@@ -1057,10 +1049,10 @@ func (p *Parser) parseCastExpression() ast.Expression {
 	p.nextToken()
 
 	if p.curTokenKindIs(lexer.TokenForce) {
-		expr.Directives = append(expr.Directives, ast.DirectiveExpression{
+		expr.Directives = ast.DirectiveExpression{
 			Token: p.curToken,
 			Kind:  ast.ForceDirective,
-		})
+		}
 
 		p.nextToken()
 	}
@@ -1365,10 +1357,7 @@ func (p *Parser) parseArrayLiteral() ast.Expression {
 
 	if p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
 		p.nextToken()
-		return &ast.ArrayLiteral{
-			Token:    expr.Token,
-			Elements: elements,
-		}
+		return expr
 	}
 
 	val := p.parseExpression(LOWEST)
@@ -1405,6 +1394,19 @@ round:
 	p.nextToken()
 
 	return expr
+}
+
+func (p *Parser) parseUsingStatement() (*ast.UsingStatement, error) {
+	stmt := &ast.UsingStatement{Token: p.curToken}
+	p.nextToken()
+
+	if !p.curTokenKindIs(lexer.TokenIdentifier) {
+		return nil, p.error(p.curToken, "expected an identifier, instead got ", p.curToken.Text)
+	}
+
+	stmt.Alias = p.parseIdentifier().(*ast.Identifier)
+
+	return stmt, nil
 }
 
 func (p *Parser) parseScope() (*ast.ScopeStatement, error) {

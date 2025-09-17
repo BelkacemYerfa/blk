@@ -21,6 +21,7 @@ const (
 	TokenReturn TokenKind = "return"
 	TokenImport TokenKind = "import"
 	TokenCast   TokenKind = "cast"
+	TokenUsing  TokenKind = "using"
 
 	// nul value
 	TokenNul TokenKind = "nul"
@@ -31,7 +32,6 @@ const (
 	TokenMustUse     TokenKind = "#must_use"
 	TokenFallthrough TokenKind = "#fallthrough"
 	TokenPartial     TokenKind = "#partial"
-	TokenBake        TokenKind = "#bake"
 	TokenForce       TokenKind = "#force"
 
 	// Units
@@ -128,6 +128,7 @@ const (
 	TokenEnum   TokenKind = "enum"
 
 	// number type (used in the lexing phase)
+	TokenStr             = "str"
 	TokenInt   TokenKind = "int"
 	TokenFloat TokenKind = "float"
 
