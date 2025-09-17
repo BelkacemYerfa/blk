@@ -113,24 +113,32 @@ func (tc *TypeChecker) checkVarDecl(d *ast.VarDeclaration) {
 		// char to ''
 		// bool to false
 
+		d.Value = []ast.Expression{}
+
 		switch d.Type.Type() {
 		case ast.TypeString:
-			d.Value = []ast.Expression{&ast.StringLiteral{Token: d.Token}}
+			d.Value = append(d.Value, &ast.StringLiteral{Token: d.Token})
 
 		case ast.TypeBool:
-			d.Value = []ast.Expression{&ast.BooleanLiteral{Token: d.Token}}
+			d.Value = append(d.Value, &ast.BooleanLiteral{Token: d.Token})
 
 		case ast.TypeChar:
-			d.Value = []ast.Expression{&ast.CharLiteral{Token: d.Token}}
+			d.Value = append(d.Value, &ast.CharLiteral{Token: d.Token})
 
 		case ast.TypePointer:
-			d.Value = []ast.Expression{&ast.NulLiteral{Token: d.Token}}
+			d.Value = append(d.Value, &ast.NulLiteral{Token: d.Token})
 
 		case ast.TypeFloat32, ast.TypeFloat64:
-			d.Value = []ast.Expression{&ast.FloatLiteral{Token: d.Token}}
+			d.Value = append(d.Value, &ast.FloatLiteral{Token: d.Token})
+
+		case ast.TypeArray:
+			d.Value = append(d.Value, &ast.ArrayLiteral{Token: d.Token, Type: d.Type})
+
+		case ast.TypeMap:
+			d.Value = append(d.Value, &ast.MapLiteral{Token: d.Token, Type: d.Type})
 
 		default:
-			d.Value = []ast.Expression{&ast.IntegerLiteral{Token: d.Token}}
+			d.Value = append(d.Value, &ast.IntegerLiteral{Token: d.Token})
 
 		}
 
@@ -141,7 +149,7 @@ func (tc *TypeChecker) checkVarDecl(d *ast.VarDeclaration) {
 			IsMutable: d.Mutable,
 			DeclNode:  d,
 		})
-
+		return
 	}
 
 	expr := d.Value[0]

@@ -13,15 +13,16 @@ const (
 	TokenIn     TokenKind = "in"
 	TokenNext   TokenKind = "next"
 	TokenBreak  TokenKind = "break"
-	TokenUse    TokenKind = "use"
+	TokenDo     TokenKind = "do"
 	TokenSwitch TokenKind = "switch"
 	TokenCase   TokenKind = "case"
 	TokenIf     TokenKind = "if"
 	TokenElse   TokenKind = "else"
 	TokenReturn TokenKind = "return"
 	TokenImport TokenKind = "import"
+	TokenCast   TokenKind = "cast"
 
-	// nul values
+	// nul value
 	TokenNul TokenKind = "nul"
 
 	// Directives
@@ -30,6 +31,8 @@ const (
 	TokenMustUse     TokenKind = "#must_use"
 	TokenFallthrough TokenKind = "#fallthrough"
 	TokenPartial     TokenKind = "#partial"
+	TokenBake        TokenKind = "#bake"
+	TokenForce       TokenKind = "#force"
 
 	// Units
 	TokenCurlyBraceOpen  TokenKind = "{"

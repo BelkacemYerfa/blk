@@ -259,30 +259,30 @@ const (
 	_ DirectiveType = iota
 	DistinctDirective
 	InlineDirective
-	DeprecatedDirective
 	MutUseDirective
 	FallthroughDirective
 	PartialDirective
-	AsmDirective
+	BakeDirective
+	ForceDirective
 )
 
 type DirectiveExpression struct {
 	Token lexer.Token
 	Kind  DirectiveType
-	Value Expression
 }
 
 func (de *DirectiveExpression) expressionNode()       {}
 func (de *DirectiveExpression) TokenLiteral() string  { return de.Token.Text }
 func (de *DirectiveExpression) GetToken() lexer.Token { return de.Token }
 func (de *DirectiveExpression) String() string {
-	return de.GetToken().Text + " " + de.Value.String()
+	return de.GetToken().Text + " " + fmt.Sprint(de.Kind)
 }
 
 type ImportStatement struct {
 	Token      lexer.Token // the token.LET token
-	ModuleName *StringLiteral
+	Directive  []DirectiveExpression
 	Alias      *Identifier // alias for module name
+	ModuleName *StringLiteral
 }
 
 func (ls *ImportStatement) statementNode()        {}
@@ -295,6 +295,21 @@ func (ls *ImportStatement) String() string {
 	if ls.Alias != nil {
 		out.WriteString("as " + ls.Alias.String())
 	}
+	return out.String()
+}
+
+type CastExpression struct {
+	Token            lexer.Token
+	Directives       []DirectiveExpression
+	TargetType       Type
+	TargetExpression Expression
+}
+
+func (ce *CastExpression) expressionNode()       {}
+func (ce *CastExpression) TokenLiteral() string  { return ce.Token.Text }
+func (ce *CastExpression) GetToken() lexer.Token { return ce.Token }
+func (ce *CastExpression) String() string {
+	var out bytes.Buffer
 	return out.String()
 }
 
@@ -945,7 +960,7 @@ func (ie *SwitchExpression) String() string {
 
 type CallExpression struct {
 	Token    lexer.Token // The '(' token
-	Function *Identifier  // Identifier
+	Function *Identifier // Identifier
 	Args     []Expression
 	Type     Type
 }

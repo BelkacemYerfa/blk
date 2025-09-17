@@ -12,7 +12,7 @@ var (
 		"case":   TokenCase,
 		"if":     TokenIf,
 		"else":   TokenElse,
-		"use":    TokenUse,
+		"use":    TokenDo,
 		"fn":     TokenFn,
 		"for":    TokenFor,
 		"in":     TokenIn,
@@ -20,6 +20,7 @@ var (
 		"return": TokenReturn,
 		"next":   TokenNext,
 		"break":  TokenBreak,
+		"cast":   TokenCast,
 		"true":   TokenBool,
 		"false":  TokenBool,
 		"nul":    TokenNul,
@@ -50,6 +51,8 @@ var (
 		"#must_use":    TokenMustUse,
 		"#fallthrough": TokenFallthrough,
 		"#partial":     TokenPartial,
+		"#bake":        TokenBake,
+		"#force":       TokenForce,
 	}
 
 	AssignBinOps = []TokenKind{

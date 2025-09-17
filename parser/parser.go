@@ -125,6 +125,7 @@ func NewParser(lex *lexer.Lexer, filepath string) *Parser {
 	p.registerPrefix(lexer.TokenStruct, p.parseStructExpression)
 	p.registerPrefix(lexer.TokenEnum, p.parseEnumExpression)
 	p.registerPrefix(lexer.TokenSwitch, p.parseSwitchExpression)
+	p.registerPrefix(lexer.TokenCast, p.parseCastExpression)
 
 	// infix/binary operators
 	p.registerInfix(lexer.TokenPlus, p.parseInfixExpression)
@@ -554,6 +555,10 @@ func (p *Parser) parseType() (ast.Type, error) {
 		}
 		return exp.(*ast.StructExpression), nil
 
+	case lexer.TokenIdentifier:
+		// TODO: needed to be handled when using a type alias
+		return nil, p.error(p.curToken, "not supported yet")
+
 	default:
 		// primitive type
 		return p.parsePrimitiveType(p.curToken)
@@ -659,6 +664,14 @@ func (p *Parser) parseImportStatement() (*ast.ImportStatement, error) {
 	// skip import
 	p.nextToken()
 
+	if p.curTokenKindIs(lexer.TokenBake) {
+		stmt.Directive = append(stmt.Directive, ast.DirectiveExpression{
+			Token: p.curToken,
+			Kind:  ast.BakeDirective,
+		})
+		p.nextToken()
+	}
+
 	if p.curTokenKindIs(lexer.TokenIdentifier) {
 		// means this is an alias
 		stmt.Alias = p.parseIdentifier().(*ast.Identifier)
@@ -727,86 +740,115 @@ func (p *Parser) parseFields() ([]*ast.VarDeclaration, []*ast.Method, error) {
 	// parse until, then consume it
 	for !p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
 
-		switch p.peekToken.Kind {
-		case lexer.TokenBind:
-			// parse it as method
-			if !p.curTokenKindIs(lexer.TokenIdentifier) {
-				err := p.error(p.prevToken, "expected an identifier, got ", p.prevToken.Text)
-				return nil, nil, err
-			}
-
-			method := p.parseIdentifier().(*ast.Identifier)
-
-			// this to consume the :: token
-			p.nextToken()
-
-			fn := p.parseFunctionExpression().(*ast.FunctionExpression)
-
-			methods = append(methods, &ast.Method{
-				Key:   method,
-				Value: fn,
+		if p.curTokenKindIs(lexer.TokenBake) {
+			// for now skip it
+			field := &ast.VarDeclaration{Token: p.curToken, Mutable: true}
+			field.Directive = append(field.Directive, ast.DirectiveExpression{
+				Token: p.curToken,
+				Kind:  ast.BakeDirective,
 			})
 
-			// check if there is a comma
-			if !p.curTokenKindIs(lexer.TokenComma) {
-				err := p.error(p.curToken, "expected an comma (,) at the end of each field, instead got ", p.prevToken.Text)
-				p.add(err)
-			}
-
 			p.nextToken()
-
-		case lexer.TokenColon:
-			// parse type
-			field := &ast.VarDeclaration{Token: p.peekToken, Mutable: true}
 
 			if !p.curTokenKindIs(lexer.TokenIdentifier) {
-				err := p.error(p.prevToken, "expected an identifier, got ", p.prevToken.Text)
-				return nil, nil, err
+				return nil, nil, p.error(p.curToken, "#bake directive expected an identifier, instead got ", p.curToken.Text)
 			}
 
-			ident := p.parseIdentifier().(*ast.Identifier)
-
-			field.Name = append(field.Name, ident)
-
-			// consume the :
-			p.nextToken()
-
-			tp, err := p.parseType()
-
-			if err != nil {
-				return nil, nil, err
-			}
-
-			field.Type = tp
-
-			// check if there is a default value or not
-			if p.curTokenKindIs(lexer.TokenAssign) {
-				p.nextToken() // consume = token
-
-				val := p.parseExpression(LOWEST)
-
-				if val == nil {
-					return nil, nil, fmt.Errorf("")
-				}
-
-				field.Value = []ast.Expression{val}
-			}
+			field.Name = append(field.Name, p.parseIdentifier().(*ast.Identifier))
 
 			fields = append(fields, field)
 
 			// check if there is a comma
 			if !p.curTokenKindIs(lexer.TokenComma) {
-				err := p.error(p.curToken, "expected an comma (,) at the end of each field, instead got ", p.prevToken.Text)
+				err := p.error(p.curToken, "expected an comma (,) at the end of each field, instead got ", p.curToken.Text)
 				p.add(err)
 			}
 
 			p.nextToken()
 
-		default:
-			// throw an error here
-			err := p.error(p.curToken, "expected either (:: or :), instead got ", p.curToken.Text)
-			p.add(err)
-			p.nextToken()
+		} else {
+
+			switch p.peekToken.Kind {
+			case lexer.TokenBind:
+				// parse it as method
+				if !p.curTokenKindIs(lexer.TokenIdentifier) {
+					err := p.error(p.prevToken, "expected an identifier, got ", p.prevToken.Text)
+					return nil, nil, err
+				}
+
+				method := p.parseIdentifier().(*ast.Identifier)
+
+				// this to consume the :: token
+				p.nextToken()
+
+				fn := p.parseFunctionExpression().(*ast.FunctionExpression)
+
+				methods = append(methods, &ast.Method{
+					Key:   method,
+					Value: fn,
+				})
+
+				// check if there is a comma
+				if !p.curTokenKindIs(lexer.TokenComma) {
+					err := p.error(p.curToken, "expected an comma (,) at the end of each field, instead got ", p.curToken.Text)
+					p.add(err)
+				}
+
+				p.nextToken()
+
+			case lexer.TokenColon:
+				// parse type
+				field := &ast.VarDeclaration{Token: p.peekToken, Mutable: true}
+
+				if !p.curTokenKindIs(lexer.TokenIdentifier) {
+					err := p.error(p.prevToken, "expected an identifier, got ", p.prevToken.Text)
+					return nil, nil, err
+				}
+
+				ident := p.parseIdentifier().(*ast.Identifier)
+
+				field.Name = append(field.Name, ident)
+
+				// consume the :
+				p.nextToken()
+
+				tp, err := p.parseType()
+
+				if err != nil {
+					return nil, nil, err
+				}
+
+				field.Type = tp
+
+				// check if there is a default value or not
+				if p.curTokenKindIs(lexer.TokenAssign) {
+					p.nextToken() // consume = token
+
+					val := p.parseExpression(LOWEST)
+
+					if val == nil {
+						return nil, nil, fmt.Errorf("")
+					}
+
+					field.Value = []ast.Expression{val}
+				}
+
+				fields = append(fields, field)
+
+				// check if there is a comma
+				if !p.curTokenKindIs(lexer.TokenComma) {
+					err := p.error(p.curToken, "expected an comma (,) at the end of each field, instead got ", p.curToken.Text)
+					p.add(err)
+				}
+
+				p.nextToken()
+
+			default:
+				// throw an error here
+				err := p.error(p.curToken, "expected either (:: or :), instead got ", p.curToken.Text)
+				p.add(err)
+				p.nextToken()
+			}
 		}
 	}
 
@@ -1004,20 +1046,45 @@ round:
 	return cases, nil
 }
 
-func (p *Parser) parseWhileStatement() (*ast.WhileStatement, error) {
-	stmt := &ast.WhileStatement{Token: p.curToken}
+func (p *Parser) parseCastExpression() ast.Expression {
+	expr := &ast.CastExpression{Token: p.curToken}
 	p.nextToken()
 
-	stmt.Condition = p.parseExpression(ASSIGN)
+	if !p.curTokenKindIs(lexer.TokenBraceOpen) {
+		p.add(p.error(p.curToken, "expected brace open ) after cast keyword instead got ", p.curToken.Text))
+		return nil
+	}
+	p.nextToken()
 
-	if !p.curTokenKindIs(lexer.TokenCurlyBraceOpen) {
-		return nil, fmt.Errorf("expected curly brace open ( { ), got shit")
+	if p.curTokenKindIs(lexer.TokenForce) {
+		expr.Directives = append(expr.Directives, ast.DirectiveExpression{
+			Token: p.curToken,
+			Kind:  ast.ForceDirective,
+		})
+
+		p.nextToken()
+	}
+
+	tp, err := p.parseType()
+
+	if err != nil {
+		p.add(err)
+		return nil
+	}
+
+	expr.TargetType = tp
+
+	if !p.curTokenKindIs(lexer.TokenBraceClose) {
+		p.add(p.error(p.curToken, "expected brace close ) after ", tp, " instead got ", p.curToken.Text))
+		return nil
 	}
 
 	p.nextToken()
 
-	stmt.Body = p.parseBlockStatement().(*ast.BlockStatement)
-	return stmt, nil
+	// ! Note: space currently isn't required, since it is better for the programmer readability and each one has his own style, currently don't force it
+	expr.TargetExpression = p.parseExpression(LOWEST)
+
+	return expr
 }
 
 // id, val in arr
@@ -1446,7 +1513,7 @@ func (p *Parser) parseIfExpression() ast.Expression {
 	})
 
 	// look ahead to the next token
-	if p.curTokenKindIs(lexer.TokenQuestion) || p.curTokenKindIs(lexer.TokenUse) {
+	if p.curTokenKindIs(lexer.TokenQuestion) || p.curTokenKindIs(lexer.TokenDo) {
 		p.nextToken() // consume the ?
 
 		exprStmt, err := p.parseExpressionStatement()

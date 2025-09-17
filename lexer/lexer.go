@@ -670,7 +670,6 @@ func (l *Lexer) readRune() Token {
 	text := string(l.Content[start:end])
 	// check if there are spaces
 	if utf8.RuneCountInString(text) != 1 {
-		// fmt.Println("lexer ", string(text))
 		return Token{
 			LiteralToken: LiteralToken{
 				Kind: TokenError,
@@ -815,7 +814,7 @@ func (l *Lexer) collectMultiComment() Token {
 	end := l.Cur
 	l.readChar()
 	l.readChar()
-	fmt.Println(string(l.Content[start+1 : end]))
+
 	return Token{
 		LiteralToken: LiteralToken{
 			Kind: TokenComment,
