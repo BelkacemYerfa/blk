@@ -645,7 +645,7 @@ func (rv *ReturnValue) Inspect() string {
 type Function struct {
 	EmptyObjImplementation
 	Parameters []*ast.Identifier
-	Body       *ast.BlockStatement
+	Body       *ast.BlockExpression
 	Env        *Environment
 }
 

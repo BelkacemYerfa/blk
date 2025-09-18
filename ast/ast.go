@@ -51,6 +51,7 @@ type TypeKind int
 
 const (
 	_ TypeKind = iota
+	TypeVoid
 	TypeInt8
 	TypeInt16
 	TypeInt32
@@ -304,7 +305,7 @@ func (ls *ImportStatement) String() string {
 
 type UsingStatement struct {
 	Token lexer.Token // the token.LET token
-	Alias *Identifier // alias for module name
+	Alias Expression  // alias for module name
 }
 
 func (ls *UsingStatement) statementNode()        {}
@@ -313,7 +314,7 @@ func (nt *UsingStatement) GetToken() lexer.Token { return nt.Token }
 func (ls *UsingStatement) String() string {
 	var out bytes.Buffer
 	out.WriteString(ls.TokenLiteral() + " ")
-	out.WriteString(ls.Alias.Value)
+	out.WriteString(ls.Alias.String())
 	return out.String()
 }
 
@@ -406,7 +407,7 @@ func (ss *EnumExpression) String() string {
 type MatchArm struct {
 	Token   lexer.Token
 	Pattern Expression
-	Body    *BlockStatement
+	Body    *BlockExpression
 }
 
 type MatchExpression struct {
@@ -484,7 +485,7 @@ func (es *ExpressionStatement) String() string {
 type WhileStatement struct {
 	Token     lexer.Token
 	Condition Expression
-	Body      *BlockStatement
+	Body      *BlockExpression
 }
 
 func (ws *WhileStatement) statementNode()        {}
@@ -574,7 +575,7 @@ func (fs *IteratorIn) String() string {
 type ForStatement struct {
 	Token   lexer.Token
 	Pattern Pattern
-	Body    *BlockStatement
+	Body    *BlockExpression
 }
 
 func (fs *ForStatement) statementNode()        {}
@@ -628,7 +629,7 @@ type FunctionExpression struct {
 	Self   *Identifier // this indicates the self key
 	Args   []*Arg
 	Return ReturnType
-	Body   *BlockStatement
+	Body   *BlockExpression
 }
 
 func (fn *FunctionExpression) expressionNode()       {}
@@ -661,7 +662,7 @@ func (fn *FunctionExpression) String() string {
 
 type ScopeStatement struct {
 	Token lexer.Token
-	Body  *BlockStatement
+	Body  *BlockExpression
 }
 
 func (ss *ScopeStatement) statementNode()        {}
@@ -879,15 +880,15 @@ func (b *AssignStatement) String() string {
 	return out.String()
 }
 
-type BlockStatement struct {
+type BlockExpression struct {
 	Token lexer.Token
 	Body  []Statement
 }
 
-func (bs *BlockStatement) expressionNode()       {}
-func (bs *BlockStatement) TokenLiteral() string  { return bs.Token.Text }
-func (nt *BlockStatement) GetToken() lexer.Token { return nt.Token }
-func (bs *BlockStatement) String() string {
+func (bs *BlockExpression) expressionNode()       {}
+func (bs *BlockExpression) TokenLiteral() string  { return bs.Token.Text }
+func (nt *BlockExpression) GetToken() lexer.Token { return nt.Token }
+func (bs *BlockExpression) String() string {
 	var out bytes.Buffer
 	for _, s := range bs.Body {
 		out.WriteString("  " + s.String() + "\n")
@@ -919,7 +920,7 @@ func (b *AssignExpression) String() string {
 type IfExpression struct {
 	Token       lexer.Token
 	Condition   Expression
-	Consequence *BlockStatement
+	Consequence *BlockExpression
 	Alternative Expression
 }
 
@@ -954,7 +955,7 @@ func (ie *IfExpression) String() string {
 type Case struct {
 	Token      lexer.Token
 	ArmPattern []Expression
-	Body       *BlockStatement
+	Body       *BlockExpression
 	Break      bool
 }
 

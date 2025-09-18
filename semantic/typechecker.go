@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
+	"strings"
 )
 
 // Typechecker implementation
@@ -26,7 +28,11 @@ func NewTypeChecker(filepath string, symtab *SymbolTable) *TypeChecker {
 }
 
 func (tc *TypeChecker) add(err error) {
-	tc.errors = append(tc.errors, err)
+	if _, found := slices.BinarySearchFunc(tc.errors, err, func(a, b error) int {
+		return strings.Compare(a.Error(), b.Error())
+	}); !found {
+		tc.errors = append(tc.errors, err)
+	}
 }
 
 // TODO: make the error a single collector struct to use on each phase
@@ -98,7 +104,14 @@ func (tc *TypeChecker) checkStmt(stmt ast.Statement) {
 		switch stmt.(type) {
 		case *ast.VarDeclaration, *ast.ImportStatement, *ast.UsingStatement:
 		default:
-			tc.add(tc.error(stmt.GetToken(), "the global scope only allows for declaration or or import statements, everything else if forbidden"))
+			tc.add(tc.error(stmt.GetToken(), "the global scope only allows for declaration or import statements, everything else if forbidden"))
+			return
+		}
+	}
+
+	if tc.symtab.CurrentScope != tc.symtab.GlobalScope {
+		if _, ok := stmt.(*ast.ImportStatement); ok {
+			tc.add(tc.error(stmt.GetToken(), "import statements are only allowed in the global scope, for organization purposes keep them at the top of the file"))
 			return
 		}
 	}
@@ -106,6 +119,10 @@ func (tc *TypeChecker) checkStmt(stmt ast.Statement) {
 	switch s := stmt.(type) {
 	case *ast.VarDeclaration:
 		tc.checkVarDecl(s)
+
+	case *ast.ScopeStatement:
+		tc.checkScope(s)
+
 	}
 }
 
@@ -175,10 +192,10 @@ func (tc *TypeChecker) checkVarDecl(d *ast.VarDeclaration) {
 		// check the explicit type against the inferred type
 		inferred := tc.inferExpr(expr)
 
-		errMsg := fmt.Sprintf("type mismatch, explicit type %v doesn't match inferred type (%v), change the explicit type, or let the compiler infer it with := syntax", tc.highlight(d.Type, Red), tc.highlight(inferred, Green))
+		// errMsg := fmt.Sprintf("type mismatch, explicit type %v doesn't match inferred type (%v), change the explicit type, or let the compiler infer it with := syntax", tc.highlight(d.Type, Red), tc.highlight(inferred, Green))
 
 		if !tc.typesCompatible(d.Type, inferred) {
-			tc.add(tc.error(expr.GetToken(), errMsg))
+			return
 		}
 	}
 
@@ -187,6 +204,10 @@ func (tc *TypeChecker) checkVarDecl(d *ast.VarDeclaration) {
 		d.Type = tc.inferExpr(expr)
 	}
 
+}
+
+func (tc *TypeChecker) checkScope(s *ast.ScopeStatement) {
+	tc.inferBlockExprType(s.Body)
 }
 
 func (tc *TypeChecker) inferExpr(expr ast.Expression) ast.Type {
@@ -198,8 +219,14 @@ func (tc *TypeChecker) inferExpr(expr ast.Expression) ast.Type {
 	case *ast.BinaryExpression:
 		return tc.inferBinaryExprType(e)
 
+	case *ast.BlockExpression:
+		return tc.inferBlockExprType(e)
+
 	case *ast.FunctionExpression:
 		return tc.inferFunctionType(e)
+
+	case *ast.Identifier:
+		return tc.inferIdentifierType(e)
 
 	case *ast.CallExpression:
 		fnType := tc.inferFunctionExpr(e)
@@ -363,6 +390,81 @@ func (tc *TypeChecker) inferBinaryExprType(expr *ast.BinaryExpression) ast.Type 
 	return leftType
 }
 
+func (tc *TypeChecker) collectVarDeclSymbol(node *ast.VarDeclaration) error {
+
+	var declarationType ast.Type
+
+	if node.Type != nil {
+		// explicit type
+		declarationType = node.Type
+	} else if node.Value != nil {
+		// first support only first value
+		declarationType = tc.inferExpr(node.Value[0])
+	}
+
+	// better to have errors returned later
+	err := tc.symtab.CurrentScope.Define(node.Name[0].String(), &Symbol{
+		Name:      node.Name[0].String(),
+		Kind:      declarationType,
+		IsMutable: node.Mutable,
+		DeclNode:  node,
+	})
+
+	return err
+}
+
+func (tc *TypeChecker) inferBlockExprType(block *ast.BlockExpression) ast.Type {
+	// check if the last statement is expr stmt, if it is, the block will be of it's type
+	// a unique case is with return where the type of that block needs to be of the same type of the return
+	// for the last statement the return is optional, in that case this will refer to first point made about last expr stmt
+
+	if len(block.Body) == 0 {
+		return &ast.PrimitiveType{
+			Kind: ast.TypeVoid,
+		}
+	}
+
+	tc.symtab.EnterScope()
+	defer tc.symtab.ExitScope()
+
+	// symbol collection first
+
+	// TODO: this works but not what we want, consider change later
+	for _, stmt := range block.Body {
+		switch s := stmt.(type) {
+		case *ast.VarDeclaration:
+			if err := tc.collectVarDeclSymbol(s); err != nil {
+				tc.add(err)
+			}
+		}
+	}
+
+	for _, stmt := range block.Body {
+		tc.checkStmt(stmt)
+
+		if rtStmt, ok := stmt.(*ast.ReturnStatement); ok {
+			if len(rtStmt.ReturnValues) == 0 {
+				return &ast.PrimitiveType{
+					Kind: ast.TypeVoid,
+				}
+			}
+
+			// TODO: currently only one is supported for simplicity, refactor later to support multi return values
+			return tc.inferExpr(rtStmt.ReturnValues[0])
+		}
+	}
+
+	lastStmt := block.Body[len(block.Body)-1]
+
+	if exprStmt, ok := lastStmt.(*ast.ExpressionStatement); ok {
+		return tc.inferExpr(exprStmt.Expression)
+	}
+
+	return &ast.PrimitiveType{
+		Kind: ast.TypeVoid,
+	}
+}
+
 func (tc *TypeChecker) inferFunctionType(fn *ast.FunctionExpression) ast.Type {
 
 	fnType := &ast.FunctionType{Token: fn.Token, Kind: ast.TypeFunction}
@@ -371,9 +473,40 @@ func (tc *TypeChecker) inferFunctionType(fn *ast.FunctionExpression) ast.Type {
 		fnType.Args = append(fnType.Args, arg.Type)
 	}
 
-	fnType.Return = append(fnType.Return, fn.Return.RtTypes...)
+	if len(fn.Return.RtTypes) == 0 {
+		fnType.Return = append(fnType.Return, &ast.PrimitiveType{
+			Kind: ast.TypeVoid,
+		})
+	} else {
+		fnType.Return = append(fnType.Return, fn.Return.RtTypes...)
+	}
+
+	// check the type against the last statment of the block
+	blockType := tc.inferBlockExprType(fn.Body)
+
+	if !tc.typesCompatible(fnType.Return[0], blockType) {
+		errMsg := ""
+		if fnType.Return[0].Type() == ast.TypeVoid {
+			errMsg = fmt.Sprintf("type mismatch where function doesn't expect a return, but got %v as return type", tc.highlight(blockType, Red))
+		} else {
+			errMsg = fmt.Sprintf("type mismatch between the returned typed, and the expected return type, where returned type is %v, and expected return type is %v", tc.highlight(blockType, Red), tc.highlight(fnType.Return[0], Yellow))
+		}
+		tc.add(tc.error(fn.Token, errMsg))
+		return nil
+	}
 
 	return fnType
+}
+
+func (tc *TypeChecker) inferIdentifierType(ident *ast.Identifier) ast.Type {
+	sym := tc.symtab.CurrentScope.Resolve(ident.Value)
+
+	if sym == nil {
+		tc.add(tc.error(ident.Token, "identifier ", ident.Value, " wasn't found"))
+		return nil
+	}
+
+	return sym.Kind
 }
 
 func (tc *TypeChecker) inferFunctionExpr(call *ast.CallExpression) ast.Type {
@@ -644,9 +777,9 @@ func (tc *TypeChecker) checkPrimitiveTypeCastAbility(ctt, exprPrimitive *ast.Pri
 			// Numeric -> Numeric
 			if exprPrimitive.Kind > ctt.Kind {
 				errMsg := fmt.Sprintf("Be careful, casting type %v into type %v will result in some information loss", tc.highlight(exprPrimitive, Red), tc.highlight(ctt, Yellow))
-				return nil, tc.error(exprPrimitive.Token, errMsg)
+				return exprPrimitive, tc.error(exprPrimitive.Token, errMsg)
 			}
-			return exprPrimitive, nil
+			return ctt, nil
 
 		case exprPrimitive.Kind == ast.TypeBool:
 			// Bool -> Numeric (true=1, false=0)
@@ -700,9 +833,8 @@ func (tc *TypeChecker) checkPrimitiveTypeCastAbility(ctt, exprPrimitive *ast.Pri
 		return nil, tc.error(exprPrimitive.Token, errMsg)
 	}
 
-	errMsg := fmt.Sprintf("converting %v into %v, isn't allowed", tc.highlight(exprPrimitive, Red), tc.highlight(ctt, Yellow))
-	return nil, tc.error(exprPrimitive.Token, errMsg)
-
+	// unreachable
+	return nil, nil
 }
 
 func (tc *TypeChecker) checkTypeAgainst(exprType ast.Type, cast *ast.CastExpression) ast.Type {
@@ -722,7 +854,6 @@ func (tc *TypeChecker) checkTypeAgainst(exprType ast.Type, cast *ast.CastExpress
 		}
 
 		res, err := tc.checkPrimitiveTypeCastAbility(ctt, exprPrimitive)
-
 		if err != nil {
 			tc.add(err)
 		}

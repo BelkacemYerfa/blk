@@ -2,7 +2,6 @@ package semantic
 
 import (
 	"blk/ast"
-	"fmt"
 )
 
 type Analyzer struct {
@@ -55,11 +54,7 @@ func (a *Analyzer) collectSymbols(node ast.Node) error {
 	case *ast.VarDeclaration:
 		return a.collectVarDeclSymbol(n)
 
-	case *ast.Comment:
-		// ignore the check
-
 	default:
-		return fmt.Errorf("not supported yet %v", n)
 
 	}
 

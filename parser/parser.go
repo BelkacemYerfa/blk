@@ -645,8 +645,10 @@ func (p *Parser) parseReturnStatement() (*ast.ReturnStatement, error) {
 
 	returnValues := make([]ast.Expression, 0)
 
-	// TODO: problem here with ++ & -- parsing also for <op>= exp
-	// ? Suggested fix: register the ++ && -- & other precedence operation to deal with this, resulting in change in the ast.AssignmentStatement to ast.AssignmentExpression
+	if p.curToken.Row > p.prevToken.Row {
+		stmt.ReturnValues = returnValues
+		return stmt, nil
+	}
 
 	returnValues = append(returnValues, p.parseExpression(LOWEST))
 
@@ -1008,7 +1010,7 @@ round:
 		p.nextToken()
 		// here enter the body
 
-		block := ast.BlockStatement{Token: p.curToken}
+		block := ast.BlockExpression{Token: p.curToken}
 		block.Body = make([]ast.Statement, 0)
 
 		for !p.curTokenKindIs(lexer.TokenCase) && !p.curTokenKindIs(lexer.TokenEOF) && !p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
@@ -1210,7 +1212,7 @@ func (p *Parser) parseForStatement() (*ast.ForStatement, error) {
 
 	p.nextToken()
 
-	stmt.Body = p.parseBlockStatement().(*ast.BlockStatement)
+	stmt.Body = p.parseBlockStatement().(*ast.BlockExpression)
 	return stmt, nil
 }
 
@@ -1404,7 +1406,7 @@ func (p *Parser) parseUsingStatement() (*ast.UsingStatement, error) {
 		return nil, p.error(p.curToken, "expected an identifier, instead got ", p.curToken.Text)
 	}
 
-	stmt.Alias = p.parseIdentifier().(*ast.Identifier)
+	stmt.Alias = p.parseExpression(PREFIX)
 
 	return stmt, nil
 }
@@ -1414,7 +1416,7 @@ func (p *Parser) parseScope() (*ast.ScopeStatement, error) {
 
 	p.nextToken()
 
-	stmt.Body = p.parseBlockStatement().(*ast.BlockStatement)
+	stmt.Body = p.parseBlockStatement().(*ast.BlockExpression)
 	return stmt, nil
 }
 
@@ -1522,7 +1524,7 @@ func (p *Parser) parseIfExpression() ast.Expression {
 		if err != nil {
 			return nil
 		}
-		expr.Consequence = &ast.BlockStatement{
+		expr.Consequence = &ast.BlockExpression{
 			Body: []ast.Statement{exprStmt},
 		}
 
@@ -1536,7 +1538,7 @@ func (p *Parser) parseIfExpression() ast.Expression {
 		if err != nil {
 			return nil
 		}
-		expr.Alternative = &ast.BlockStatement{
+		expr.Alternative = &ast.BlockExpression{
 			Body: []ast.Statement{exprStmt},
 		}
 	} else {
@@ -1547,7 +1549,7 @@ func (p *Parser) parseIfExpression() ast.Expression {
 
 		p.nextToken()
 
-		expr.Consequence = p.parseBlockStatement().(*ast.BlockStatement)
+		expr.Consequence = p.parseBlockStatement().(*ast.BlockExpression)
 
 		// check if there is an else stmt
 		if p.curTokenKindIs(lexer.TokenElse) {
@@ -1639,7 +1641,7 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 
 	p.nextToken()
 
-	body := p.parseBlockStatement().(*ast.BlockStatement)
+	body := p.parseBlockStatement().(*ast.BlockExpression)
 
 	if body == nil {
 		p.add(p.error(p.curToken, "expected valid body, instead got ", p.curToken.Text))
@@ -1744,7 +1746,7 @@ func (p *Parser) parseArguments() (*ast.Identifier, []*ast.Arg) {
 }
 
 func (p *Parser) parseBlockStatement() ast.Expression {
-	block := ast.BlockStatement{Token: p.curToken}
+	block := ast.BlockExpression{Token: p.curToken}
 	block.Body = make([]ast.Statement, 0)
 
 	for !p.curTokenKindIs(lexer.TokenCurlyBraceClose) && !p.curTokenKindIs(lexer.TokenEOF) {
