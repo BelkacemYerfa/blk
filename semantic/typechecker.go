@@ -98,11 +98,10 @@ func (tc *TypeChecker) check(program *ast.Program) {
 }
 
 func (tc *TypeChecker) checkStmt(stmt ast.Statement) {
-
 	if tc.symtab.GlobalScope == tc.symtab.CurrentScope {
 		// only declaration and imports allowed
 		switch stmt.(type) {
-		case *ast.VarDeclaration, *ast.ImportStatement, *ast.UsingStatement:
+		case *ast.Declaration, *ast.ImportStatement, *ast.UsingStatement:
 		default:
 			tc.add(tc.error(stmt.GetToken(), "the global scope only allows for declaration or import statements, everything else if forbidden"))
 			return
@@ -117,16 +116,16 @@ func (tc *TypeChecker) checkStmt(stmt ast.Statement) {
 	}
 
 	switch s := stmt.(type) {
-	case *ast.VarDeclaration:
-		tc.checkVarDecl(s)
+	case *ast.Declaration:
+		tc.checkDeclaration(s)
 
 	case *ast.ScopeStatement:
-		tc.checkScope(s)
+		tc.inferBlockExprType(s.Body)
 
 	}
 }
 
-func (tc *TypeChecker) checkVarDecl(d *ast.VarDeclaration) {
+func (tc *TypeChecker) checkDeclaration(d *ast.Declaration) {
 	isExplicit := d.Type != nil
 	isInit := d.Value != nil
 
@@ -206,10 +205,6 @@ func (tc *TypeChecker) checkVarDecl(d *ast.VarDeclaration) {
 
 }
 
-func (tc *TypeChecker) checkScope(s *ast.ScopeStatement) {
-	tc.inferBlockExprType(s.Body)
-}
-
 func (tc *TypeChecker) inferExpr(expr ast.Expression) ast.Type {
 	switch e := expr.(type) {
 
@@ -221,6 +216,9 @@ func (tc *TypeChecker) inferExpr(expr ast.Expression) ast.Type {
 
 	case *ast.BlockExpression:
 		return tc.inferBlockExprType(e)
+
+	case *ast.IfExpression:
+		return tc.inferIfExprType(e)
 
 	case *ast.FunctionExpression:
 		return tc.inferFunctionType(e)
@@ -390,29 +388,6 @@ func (tc *TypeChecker) inferBinaryExprType(expr *ast.BinaryExpression) ast.Type 
 	return leftType
 }
 
-func (tc *TypeChecker) collectVarDeclSymbol(node *ast.VarDeclaration) error {
-
-	var declarationType ast.Type
-
-	if node.Type != nil {
-		// explicit type
-		declarationType = node.Type
-	} else if node.Value != nil {
-		// first support only first value
-		declarationType = tc.inferExpr(node.Value[0])
-	}
-
-	// better to have errors returned later
-	err := tc.symtab.CurrentScope.Define(node.Name[0].String(), &Symbol{
-		Name:      node.Name[0].String(),
-		Kind:      declarationType,
-		IsMutable: node.Mutable,
-		DeclNode:  node,
-	})
-
-	return err
-}
-
 func (tc *TypeChecker) inferBlockExprType(block *ast.BlockExpression) ast.Type {
 	// check if the last statement is expr stmt, if it is, the block will be of it's type
 	// a unique case is with return where the type of that block needs to be of the same type of the return
@@ -424,20 +399,11 @@ func (tc *TypeChecker) inferBlockExprType(block *ast.BlockExpression) ast.Type {
 		}
 	}
 
+	// TODO: change this later, since it works for non recursion code checking only
 	tc.symtab.EnterScope()
 	defer tc.symtab.ExitScope()
 
-	// symbol collection first
-
-	// TODO: this works but not what we want, consider change later
-	for _, stmt := range block.Body {
-		switch s := stmt.(type) {
-		case *ast.VarDeclaration:
-			if err := tc.collectVarDeclSymbol(s); err != nil {
-				tc.add(err)
-			}
-		}
-	}
+	tc.collectSymbols(block)
 
 	for _, stmt := range block.Body {
 		tc.checkStmt(stmt)
@@ -463,6 +429,87 @@ func (tc *TypeChecker) inferBlockExprType(block *ast.BlockExpression) ast.Type {
 	return &ast.PrimitiveType{
 		Kind: ast.TypeVoid,
 	}
+}
+
+func (tc *TypeChecker) collectSymbols(node ast.Node) error {
+
+	switch n := node.(type) {
+	case *ast.Program:
+		for _, stmt := range n.Statements {
+			if err := tc.collectSymbols(stmt); err != nil {
+				return err
+			}
+		}
+
+	case *ast.BlockExpression:
+		for _, stmt := range n.Body {
+			if err := tc.collectSymbols(stmt); err != nil {
+				return err
+			}
+		}
+
+	case *ast.Declaration:
+		var declarationType ast.Type
+
+		if n.Type != nil {
+			// explicit type
+			declarationType = n.Type
+		} else {
+			// first support only first value
+			declarationType = tc.inferExpr(n.Value[0])
+		}
+
+		// better to have errors returned later
+		return tc.symtab.CurrentScope.Define(n.Name[0].String(), &Symbol{
+			Name:      n.Name[0].String(),
+			Kind:      declarationType,
+			IsMutable: n.Mutable,
+			DeclNode:  node,
+		})
+
+	case *ast.ScopeStatement:
+		for _, stmt := range n.Body.Body {
+			if err := tc.collectSymbols(stmt); err != nil {
+				return err
+			}
+		}
+
+	case *ast.UsingStatement:
+		declarationType := tc.inferExpr(n.Alias)
+		return tc.symtab.CurrentScope.Define(n.String(), &Symbol{
+			Name:     n.String(),
+			Kind:     declarationType,
+			DeclNode: n,
+		})
+	}
+
+	return nil
+}
+
+func (tc *TypeChecker) inferIfExprType(ifExpr *ast.IfExpression) ast.Type {
+	// check that the condition evaluates to a boolean
+
+	conditionType := tc.inferExpr(ifExpr.Condition)
+
+	if conditionType == nil {
+		return nil
+	}
+
+	if conditionType.Type() != ast.TypeBool {
+		errMsg := fmt.Sprintf("condition on if statement needs to be of type bool, instead got type %v", tc.highlight(conditionType, Red))
+		tc.add(tc.error(ifExpr.Condition.GetToken(), errMsg))
+		return nil
+	}
+
+	// TODO: think about how the checks will be done in here
+
+	tt := tc.inferBlockExprType(ifExpr.Consequence)
+
+	if ifExpr.Alternative != nil {
+		return tc.inferExpr(ifExpr.Alternative)
+	}
+
+	return tt
 }
 
 func (tc *TypeChecker) inferFunctionType(fn *ast.FunctionExpression) ast.Type {
@@ -512,12 +559,12 @@ func (tc *TypeChecker) inferIdentifierType(ident *ast.Identifier) ast.Type {
 func (tc *TypeChecker) inferFunctionExpr(call *ast.CallExpression) ast.Type {
 
 	sym := tc.symtab.CurrentScope.Resolve(call.Function.Value)
-
 	if sym == nil {
 		tc.add(tc.error(call.Token, "function ", call.Function.Value, " wasn't found"))
 		return nil
 	}
 
+	fmt.Println(sym)
 	return sym.Kind
 }
 

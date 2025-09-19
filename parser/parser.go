@@ -273,7 +273,7 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 	case lexer.TokenComment:
 		return p.parseCommentStatement()
 	case lexer.TokenLet, lexer.TokenConst:
-		return p.parseVarDeclaration()
+		return p.parseDeclaration()
 	case lexer.TokenReturn:
 		return p.parseReturnStatement()
 	case lexer.TokenImport:
@@ -568,7 +568,7 @@ func (p *Parser) parseType() (ast.Type, error) {
 
 }
 
-func (p *Parser) addDirective(stmt *ast.VarDeclaration) {
+func (p *Parser) addDirective(stmt *ast.Declaration) {
 	// for function
 	if p.curTokenKindIs(lexer.TokenInline) && p.peekTokenKindIs(lexer.TokenFn) {
 		drctv := ast.DirectiveExpression{
@@ -592,8 +592,8 @@ func (p *Parser) addDirective(stmt *ast.VarDeclaration) {
 	}
 }
 
-func (p *Parser) parseVarDeclaration() (*ast.VarDeclaration, error) {
-	stmt := &ast.VarDeclaration{Token: p.curToken}
+func (p *Parser) parseDeclaration() (*ast.Declaration, error) {
+	stmt := &ast.Declaration{Token: p.curToken}
 	stmt.Mutable = stmt.Token.Kind == lexer.TokenLet
 
 	p.nextToken()
@@ -792,7 +792,7 @@ func (p *Parser) parseFields() ([]ast.Statement, []*ast.Method, error) {
 
 			case lexer.TokenColon:
 				// parse type
-				field := &ast.VarDeclaration{Token: p.peekToken, Mutable: true}
+				field := &ast.Declaration{Token: p.peekToken, Mutable: true}
 
 				if !p.curTokenKindIs(lexer.TokenIdentifier) {
 					err := p.error(p.prevToken, "expected an identifier, got ", p.prevToken.Text)
@@ -1562,6 +1562,8 @@ func (p *Parser) parseIfExpression() ast.Expression {
 					p.add(p.error(p.curToken, "expected curly brace open {, instead got ", p.curToken.Text))
 					return nil
 				}
+				p.nextToken()
+
 				expr.Alternative = p.parseBlockStatement()
 			}
 		}
@@ -2042,7 +2044,7 @@ func (p *Parser) parseMultiAssignStatement() (ast.Statement, error) {
 
 	switch kind {
 	case lexer.TokenWalrus:
-		return &ast.VarDeclaration{Token: lexer.Token{
+		return &ast.Declaration{Token: lexer.Token{
 			LiteralToken: lexer.LiteralToken{
 				Text: "let",
 				Kind: lexer.TokenLet,
@@ -2052,7 +2054,7 @@ func (p *Parser) parseMultiAssignStatement() (ast.Statement, error) {
 		}, Mutable: true, Name: idents, Value: exprs}, nil
 
 	case lexer.TokenBind:
-		return &ast.VarDeclaration{Token: lexer.Token{
+		return &ast.Declaration{Token: lexer.Token{
 			LiteralToken: lexer.LiteralToken{
 				Text: "const",
 				Kind: lexer.TokenConst,
@@ -2072,7 +2074,7 @@ func (p *Parser) parseMultiAssignStatement() (ast.Statement, error) {
 }
 
 func (p *Parser) parseBindStmt() (ast.Statement, error) {
-	stmt := &ast.VarDeclaration{Token: lexer.Token{
+	stmt := &ast.Declaration{Token: lexer.Token{
 		LiteralToken: lexer.LiteralToken{
 			Text: "let",
 			Kind: lexer.TokenLet,

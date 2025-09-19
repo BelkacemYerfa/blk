@@ -485,7 +485,7 @@ func isLetter(char rune) bool {
 }
 
 func isDigit(char rune) bool {
-	return unicode.IsDigit(char)
+	return unicode.IsDigit(char) || char == '_'
 }
 
 func (l *Lexer) readDirective() Token {

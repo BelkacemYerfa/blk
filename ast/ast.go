@@ -227,7 +227,7 @@ func (c *Comment) String() string {
 	return "/* " + c.Value + " */"
 }
 
-type VarDeclaration struct {
+type Declaration struct {
 	Token     lexer.Token // the token.LET token
 	Mutable   bool        // indicates if the vars are mutable or not
 	Directive []DirectiveExpression
@@ -236,10 +236,10 @@ type VarDeclaration struct {
 	Value     []Expression
 }
 
-func (ls *VarDeclaration) statementNode()        {}
-func (ls *VarDeclaration) TokenLiteral() string  { return ls.Token.Text }
-func (nt *VarDeclaration) GetToken() lexer.Token { return nt.Token }
-func (ls *VarDeclaration) String() string {
+func (ls *Declaration) statementNode()        {}
+func (ls *Declaration) TokenLiteral() string  { return ls.Token.Text }
+func (nt *Declaration) GetToken() lexer.Token { return nt.Token }
+func (ls *Declaration) String() string {
 	var out bytes.Buffer
 	out.WriteString(ls.TokenLiteral() + " ")
 	for idx, name := range ls.Name {
@@ -647,7 +647,7 @@ func (fn *FunctionExpression) String() string {
 		params = append(params, formatParam)
 	}
 	for _, p := range fn.Return.RtTypes {
-		returnTypes = append(params, p.String())
+		returnTypes = append(returnTypes, p.String())
 	}
 	out.WriteString(fn.TokenLiteral())
 	out.WriteString("(")

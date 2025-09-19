@@ -51,24 +51,40 @@ func (a *Analyzer) collectSymbols(node ast.Node) error {
 			}
 		}
 
-	case *ast.VarDeclaration:
-		return a.collectVarDeclSymbol(n)
+	case *ast.Declaration:
+		return a.collectDeclSymbol(n)
 
-	default:
+	case *ast.ScopeStatement:
+		for _, stmt := range n.Body.Body {
+			if err := a.collectSymbols(stmt); err != nil {
+				return err
+			}
+		}
 
+	case *ast.UsingStatement:
+		return a.collectUsingSymbol(n)
 	}
 
 	return nil
 }
 
-func (a *Analyzer) collectVarDeclSymbol(node *ast.VarDeclaration) error {
+func (a *Analyzer) collectUsingSymbol(node *ast.UsingStatement) error {
+	declarationType := a.types.inferExpr(node.Alias)
+	return a.symtab.CurrentScope.Define(node.String(), &Symbol{
+		Name:     node.String(),
+		Kind:     declarationType,
+		DeclNode: node,
+	})
+}
+
+func (a *Analyzer) collectDeclSymbol(node *ast.Declaration) error {
 
 	var declarationType ast.Type
 
 	if node.Type != nil {
 		// explicit type
 		declarationType = node.Type
-	} else if node.Value != nil {
+	} else {
 		// first support only first value
 		declarationType = a.types.inferExpr(node.Value[0])
 	}
@@ -80,6 +96,8 @@ func (a *Analyzer) collectVarDeclSymbol(node *ast.VarDeclaration) error {
 		IsMutable: node.Mutable,
 		DeclNode:  node,
 	})
+
+	// body check of stuff here
 
 	return err
 }

@@ -20,7 +20,7 @@ func TestFunctionParameterParsing(t *testing.T) {
 		l := lexer.NewLexer("", tt.input)
 		p := parser.NewParser(l, "")
 		program := p.Parse()
-		functionStmt := program.Statements[0].(*ast.VarDeclaration).Value[0].(*ast.FunctionExpression)
+		functionStmt := program.Statements[0].(*ast.Declaration).Value[0].(*ast.FunctionExpression)
 
 		if len(functionStmt.Args) != len(tt.expectedParams) {
 			t.Errorf("length parameters wrong. want %d, got=%d\n",
