@@ -228,9 +228,10 @@ func (c *Comment) String() string {
 }
 
 type Declaration struct {
-	Token     lexer.Token // the token.LET token
-	Mutable   bool        // indicates if the vars are mutable or not
-	Directive []DirectiveExpression
+	Token     lexer.Token       // the token.LET token
+	Mutable   bool              // indicates if the vars are mutable or not
+	Inline    bool              // for function inline
+	Directive map[string]string // for non usual stuff such as #distinct types
 	Type      Type
 	Name      []*Identifier
 	Value     []Expression
@@ -270,21 +271,8 @@ const (
 	ForceDirective
 )
 
-type DirectiveExpression struct {
-	Token lexer.Token
-	Kind  DirectiveType
-}
-
-func (de *DirectiveExpression) expressionNode()       {}
-func (de *DirectiveExpression) TokenLiteral() string  { return de.Token.Text }
-func (de *DirectiveExpression) GetToken() lexer.Token { return de.Token }
-func (de *DirectiveExpression) String() string {
-	return de.GetToken().Text + " " + fmt.Sprint(de.Kind)
-}
-
 type ImportStatement struct {
 	Token      lexer.Token // the token.LET token
-	Directive  []DirectiveExpression
 	Alias      *Identifier // alias for module name
 	IntoScope  bool
 	ModuleName *StringLiteral
@@ -320,7 +308,7 @@ func (ls *UsingStatement) String() string {
 
 type CastExpression struct {
 	Token            lexer.Token
-	Directives       DirectiveExpression
+	ForceCast        bool // for #force directive
 	TargetType       Type
 	TargetExpression Expression
 }
@@ -620,8 +608,8 @@ type Arg struct {
 }
 
 type ReturnType struct {
-	RtTypes   []Type // support for multi return types
-	Directive []DirectiveExpression
+	RtTypes []Type // support for multi return types
+	MustUse bool   // refers to must_use directive
 }
 
 type FunctionExpression struct {
@@ -960,10 +948,10 @@ type Case struct {
 }
 
 type SwitchExpression struct {
-	Token     lexer.Token
-	Condition Expression
-	Cases     []*Case
-	Directive []DirectiveExpression
+	Token        lexer.Token
+	Condition    Expression
+	Cases        []*Case
+	PartialCheck bool // refers to #partial directive
 }
 
 func (ie *SwitchExpression) expressionNode()       {}

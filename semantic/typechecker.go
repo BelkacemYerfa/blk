@@ -191,9 +191,9 @@ func (tc *TypeChecker) checkDeclaration(d *ast.Declaration) {
 		// check the explicit type against the inferred type
 		inferred := tc.inferExpr(expr)
 
-		// errMsg := fmt.Sprintf("type mismatch, explicit type %v doesn't match inferred type (%v), change the explicit type, or let the compiler infer it with := syntax", tc.highlight(d.Type, Red), tc.highlight(inferred, Green))
-
 		if !tc.typesCompatible(d.Type, inferred) {
+			errMsg := fmt.Sprintf("type mismatch, explicit type %v doesn't match inferred type (%v), change the explicit type, or let the compiler infer it with := syntax", tc.highlight(d.Type, Red), tc.highlight(inferred, Green))
+			tc.add(tc.error(expr.GetToken(), errMsg))
 			return
 		}
 	}
@@ -307,8 +307,12 @@ func (tc *TypeChecker) inferBinaryExprType(expr *ast.BinaryExpression) ast.Type 
 		leftType = lrp.Return[0]
 	}
 
+	if leftType == nil || rightType == nil {
+		return nil
+	}
+
 	if !tc.typesCompatible(leftType, rightType) {
-		tc.add(tc.error(expr.Token, "sides of binary expression are not equals, left ", leftType, " right ", rightType))
+		tc.add(tc.error(expr.Token, "sides of binary expression are not equals, left ", tc.highlight(leftType, Yellow), " right ", tc.highlight(rightType, Green)))
 		return nil
 	}
 
@@ -388,6 +392,26 @@ func (tc *TypeChecker) inferBinaryExprType(expr *ast.BinaryExpression) ast.Type 
 	return leftType
 }
 
+func (tc *TypeChecker) checkFunctionBody(fn *ast.FunctionExpression) {
+	// check the type against the last statement of the block
+	fnType := tc.inferFunctionType(fn).(*ast.FunctionType)
+	blockType := tc.inferBlockExprType(fn.Body)
+
+	if fnType == nil || blockType == nil {
+		return
+	}
+
+	if !tc.typesCompatible(fnType.Return[0], blockType) {
+		errMsg := ""
+		if fnType.Return[0].Type() == ast.TypeVoid {
+			errMsg = fmt.Sprintf("type mismatch where function doesn't expect a return, but got %v as return type", tc.highlight(blockType, Red))
+		} else {
+			errMsg = fmt.Sprintf("type mismatch between the returned typed %v, and the expected return type %v", tc.highlight(blockType, Red), tc.highlight(fnType.Return[0], Yellow))
+		}
+		tc.add(tc.error(fn.Token, errMsg))
+	}
+}
+
 func (tc *TypeChecker) inferBlockExprType(block *ast.BlockExpression) ast.Type {
 	// check if the last statement is expr stmt, if it is, the block will be of it's type
 	// a unique case is with return where the type of that block needs to be of the same type of the return
@@ -398,12 +422,6 @@ func (tc *TypeChecker) inferBlockExprType(block *ast.BlockExpression) ast.Type {
 			Kind: ast.TypeVoid,
 		}
 	}
-
-	// TODO: change this later, since it works for non recursion code checking only
-	tc.symtab.EnterScope()
-	defer tc.symtab.ExitScope()
-
-	tc.collectSymbols(block)
 
 	for _, stmt := range block.Body {
 		tc.checkStmt(stmt)
@@ -429,61 +447,6 @@ func (tc *TypeChecker) inferBlockExprType(block *ast.BlockExpression) ast.Type {
 	return &ast.PrimitiveType{
 		Kind: ast.TypeVoid,
 	}
-}
-
-func (tc *TypeChecker) collectSymbols(node ast.Node) error {
-
-	switch n := node.(type) {
-	case *ast.Program:
-		for _, stmt := range n.Statements {
-			if err := tc.collectSymbols(stmt); err != nil {
-				return err
-			}
-		}
-
-	case *ast.BlockExpression:
-		for _, stmt := range n.Body {
-			if err := tc.collectSymbols(stmt); err != nil {
-				return err
-			}
-		}
-
-	case *ast.Declaration:
-		var declarationType ast.Type
-
-		if n.Type != nil {
-			// explicit type
-			declarationType = n.Type
-		} else {
-			// first support only first value
-			declarationType = tc.inferExpr(n.Value[0])
-		}
-
-		// better to have errors returned later
-		return tc.symtab.CurrentScope.Define(n.Name[0].String(), &Symbol{
-			Name:      n.Name[0].String(),
-			Kind:      declarationType,
-			IsMutable: n.Mutable,
-			DeclNode:  node,
-		})
-
-	case *ast.ScopeStatement:
-		for _, stmt := range n.Body.Body {
-			if err := tc.collectSymbols(stmt); err != nil {
-				return err
-			}
-		}
-
-	case *ast.UsingStatement:
-		declarationType := tc.inferExpr(n.Alias)
-		return tc.symtab.CurrentScope.Define(n.String(), &Symbol{
-			Name:     n.String(),
-			Kind:     declarationType,
-			DeclNode: n,
-		})
-	}
-
-	return nil
 }
 
 func (tc *TypeChecker) inferIfExprType(ifExpr *ast.IfExpression) ast.Type {
@@ -528,20 +491,6 @@ func (tc *TypeChecker) inferFunctionType(fn *ast.FunctionExpression) ast.Type {
 		fnType.Return = append(fnType.Return, fn.Return.RtTypes...)
 	}
 
-	// check the type against the last statment of the block
-	blockType := tc.inferBlockExprType(fn.Body)
-
-	if !tc.typesCompatible(fnType.Return[0], blockType) {
-		errMsg := ""
-		if fnType.Return[0].Type() == ast.TypeVoid {
-			errMsg = fmt.Sprintf("type mismatch where function doesn't expect a return, but got %v as return type", tc.highlight(blockType, Red))
-		} else {
-			errMsg = fmt.Sprintf("type mismatch between the returned typed, and the expected return type, where returned type is %v, and expected return type is %v", tc.highlight(blockType, Red), tc.highlight(fnType.Return[0], Yellow))
-		}
-		tc.add(tc.error(fn.Token, errMsg))
-		return nil
-	}
-
 	return fnType
 }
 
@@ -564,7 +513,6 @@ func (tc *TypeChecker) inferFunctionExpr(call *ast.CallExpression) ast.Type {
 		return nil
 	}
 
-	fmt.Println(sym)
 	return sym.Kind
 }
 

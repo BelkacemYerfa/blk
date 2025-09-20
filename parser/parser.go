@@ -106,7 +106,7 @@ func NewParser(lex *lexer.Lexer, filepath string) *Parser {
 	// prefix/unary operators
 	p.registerPrefix(lexer.TokenIdentifier, p.parseIdentifier)
 	p.registerPrefix(lexer.TokenSelf, p.parseIdentifier)
-	p.registerPrefix(lexer.TokenInt, p.parseIntLiteral)
+	p.registerPrefix(lexer.TokenInteger, p.parseIntLiteral)
 	p.registerPrefix(lexer.TokenFloat, p.parseFloatLiteral)
 	p.registerPrefix(lexer.TokenStr, p.parseStringLiteral)
 	p.registerPrefix(lexer.TokenChar, p.parseCharLiteral)
@@ -338,7 +338,7 @@ func (p *Parser) parseCompositeType(prev lexer.Token) (*ast.CompositeType, error
 			p.nextToken()
 
 		} else {
-			if !p.curTokenKindIs(lexer.TokenInt) {
+			if !p.curTokenKindIs(lexer.TokenInteger) {
 				return nil, p.error(p.curToken, "expected an int literal | identifier after ", tp.LeftType, " instead got ", p.curToken.Text)
 			}
 
@@ -571,24 +571,14 @@ func (p *Parser) parseType() (ast.Type, error) {
 func (p *Parser) addDirective(stmt *ast.Declaration) {
 	// for function
 	if p.curTokenKindIs(lexer.TokenInline) && p.peekTokenKindIs(lexer.TokenFn) {
-		drctv := ast.DirectiveExpression{
-			Token: p.curToken,
-			Kind:  ast.InlineDirective,
-		}
-
+		stmt.Inline = true
 		p.nextToken()
-		stmt.Directive = append(stmt.Directive, drctv)
 	}
 
 	// for types
 	if p.curTokenKindIs(lexer.TokenDistinct) {
-		drctv := ast.DirectiveExpression{
-			Token: p.curToken,
-			Kind:  ast.DistinctDirective,
-		}
-
+		stmt.Directive[lexer.TokenDistinct] = lexer.TokenDistinct
 		p.nextToken()
-		stmt.Directive = append(stmt.Directive, drctv)
 	}
 }
 
@@ -905,7 +895,7 @@ func (p *Parser) parseEnumFields() ([]*ast.AssignExpression, error) {
 			// consume =
 			p.nextToken()
 
-			if !p.curTokenKindIs(lexer.TokenInt) {
+			if !p.curTokenKindIs(lexer.TokenInteger) {
 				err := p.error(p.curToken, "expected an int literal, instead got ", p.curToken.Text)
 				p.syncUntilTokenIs(lexer.TokenCurlyBraceClose, true)
 				return nil, err
@@ -936,12 +926,7 @@ func (p *Parser) parseSwitchExpression() ast.Expression {
 
 	// for switch
 	if p.curTokenKindIs(lexer.TokenPartial) {
-		drctv := ast.DirectiveExpression{
-			Token: p.curToken,
-			Kind:  ast.PartialDirective,
-		}
-		expr.Directive = append(expr.Directive, drctv)
-
+		expr.PartialCheck = true
 		p.nextToken()
 	}
 
@@ -1051,11 +1036,7 @@ func (p *Parser) parseCastExpression() ast.Expression {
 	p.nextToken()
 
 	if p.curTokenKindIs(lexer.TokenForce) {
-		expr.Directives = ast.DirectiveExpression{
-			Token: p.curToken,
-			Kind:  ast.ForceDirective,
-		}
-
+		expr.ForceCast = true
 		p.nextToken()
 	}
 
@@ -1627,13 +1608,8 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 	p.nextToken()
 
 	if p.curTokenKindIs(lexer.TokenMustUse) {
-		drctv := ast.DirectiveExpression{
-			Token: p.curToken,
-			Kind:  ast.InlineDirective,
-		}
-
+		expr.Return.MustUse = true
 		p.nextToken()
-		expr.Return.Directive = append(expr.Return.Directive, drctv)
 	}
 
 	if !p.curTokenKindIs(lexer.TokenCurlyBraceOpen) {
@@ -1993,7 +1969,7 @@ func (p *Parser) parseDoubleOperatorExpression(left ast.Expression) ast.Expressi
 			Right: &ast.IntegerLiteral{
 				Token: lexer.Token{
 					LiteralToken: lexer.LiteralToken{
-						Kind: lexer.TokenInt,
+						Kind: lexer.TokenInteger,
 						Text: "1",
 					},
 					Row: expr.Left[0].GetToken().Row + 1,
@@ -2074,25 +2050,12 @@ func (p *Parser) parseMultiAssignStatement() (ast.Statement, error) {
 }
 
 func (p *Parser) parseBindStmt() (ast.Statement, error) {
-	stmt := &ast.Declaration{Token: lexer.Token{
-		LiteralToken: lexer.LiteralToken{
-			Text: "let",
-			Kind: lexer.TokenLet,
-		},
-		Col: p.curToken.Col,
-		Row: p.curToken.Row,
-	}, Mutable: true}
+	stmt := &ast.Declaration{Token: p.curToken, Mutable: true}
 
 	stmt.Name = p.parseIdentifiers()
 
 	switch p.curToken.Kind {
 	case lexer.TokenBind:
-		stmt.Token = lexer.Token{
-			LiteralToken: lexer.LiteralToken{
-				Text: "const",
-				Kind: lexer.TokenConst,
-			},
-		}
 		stmt.Mutable = false
 
 	case lexer.TokenWalrus:

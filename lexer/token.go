@@ -110,10 +110,12 @@ const (
 	TokenString  TokenKind = "string"
 	TokenChar    TokenKind = "char"
 	TokenBool    TokenKind = "bool"
+	TokenInt     TokenKind = "int"
 	TokenInt8    TokenKind = "i8"
 	TokenInt16   TokenKind = "i16"
 	TokenInt32   TokenKind = "i32"
 	TokenInt64   TokenKind = "i64"
+	TokenUInt    TokenKind = "uint"
 	TokenUInt8   TokenKind = "u8"
 	TokenUInt16  TokenKind = "u16"
 	TokenUInt32  TokenKind = "u32"
@@ -127,10 +129,10 @@ const (
 	TokenStruct TokenKind = "struct"
 	TokenEnum   TokenKind = "enum"
 
-	// number type (used in the lexing phase)
-	TokenStr             = "str"
-	TokenInt   TokenKind = "int"
-	TokenFloat TokenKind = "float"
+	// Types (used in the lexing phase)
+	TokenStr               = "str"
+	TokenInteger TokenKind = "integer"
+	TokenFloat   TokenKind = "float"
 
 	// Error
 	TokenError TokenKind = "error"

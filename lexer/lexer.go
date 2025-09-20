@@ -753,7 +753,7 @@ func (l *Lexer) readNumber() Token {
 		text := string(l.Content[startPos:l.Cur])
 		return Token{
 			LiteralToken: LiteralToken{
-				Kind: TokenInt,
+				Kind: TokenInteger,
 				Text: text,
 			},
 			Row: row,
@@ -764,7 +764,7 @@ func (l *Lexer) readNumber() Token {
 
 		return Token{
 			LiteralToken: LiteralToken{
-				Kind: TokenInt,
+				Kind: TokenInteger,
 				Text: text,
 			},
 			Row: row,
