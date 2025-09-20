@@ -2,6 +2,7 @@ package semantic
 
 import (
 	"blk/ast"
+	"fmt"
 )
 
 type Analyzer struct {
@@ -85,6 +86,16 @@ func (a *Analyzer) collectExpressionSymbol(node ast.Expression) error {
 		defer a.symtab.ExitScope()
 
 		for _, arg := range n.Args {
+			if arg.DefaultValue != nil {
+				inferred := a.types.inferExpr(arg.DefaultValue)
+
+				if !a.types.typesCompatible(arg.Type, inferred) {
+					errMsg := fmt.Sprintf("type mismatch on %v argument, explicit type %v doesn't match the inferred type %v, change the explicit type or the associated value", a.types.highlight(arg.Name.Value, Yellow), a.types.highlight(arg.Type, Red), a.types.highlight(inferred, Green))
+					a.types.add(a.types.error(arg.Token, errMsg))
+					return nil
+				}
+			}
+
 			if err := a.symtab.CurrentScope.Define(arg.Name.Value, &Symbol{
 				Name:      arg.Name.Value,
 				Kind:      arg.Type,

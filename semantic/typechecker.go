@@ -228,7 +228,8 @@ func (tc *TypeChecker) inferExpr(expr ast.Expression) ast.Type {
 
 	case *ast.CallExpression:
 		fnType := tc.inferFunctionExpr(e)
-		return tc.checkCallAgainst(fnType, e)
+		fnSign := tc.functionSignature(fnType, e)
+		return tc.checkCallAgainst(fnType, fnSign, e)
 
 	case *ast.IntegerLiteral, *ast.StringLiteral, *ast.CharLiteral, *ast.NulLiteral, *ast.FloatLiteral, *ast.BooleanLiteral:
 		return tc.inferPrimitiveType(e)
@@ -494,6 +495,49 @@ func (tc *TypeChecker) inferFunctionType(fn *ast.FunctionExpression) ast.Type {
 	return fnType
 }
 
+func (tc *TypeChecker) functionSignature(fnType ast.Type, call *ast.CallExpression) *ast.FunctionSignature {
+
+	fn := tc.symtab.CurrentScope.Resolve(call.Function.Value)
+	if fn == nil {
+		tc.add(tc.error(call.Token, "function ", call.Function.Value, " wasn't found"))
+		return nil
+	}
+
+	ft, ok := fn.Kind.(*ast.FunctionType)
+	if !ok {
+		tc.add(tc.error(call.Token, "attempted to call non-function type ", fnType))
+		return nil
+	}
+
+	// this cast is required to get the signature
+	fnDecl, ok := fn.DeclNode.(*ast.Declaration).Value[0].(*ast.FunctionExpression)
+
+	if !ok {
+		tc.add(tc.error(call.Token, "associated value ", call.Function.Value, " is not a functions"))
+		return nil
+	}
+
+	fnSignature := &ast.FunctionSignature{Token: ft.Token, Kind: ast.TypeFunction, Args: map[string]*ast.Arg{}}
+
+	for _, arg := range fnDecl.Args {
+		fnSignature.Args[arg.Name.Value] = &ast.Arg{
+			Token: arg.Token,
+			Name:  arg.Name,
+			Type:  arg.Type,
+		}
+	}
+
+	if len(ft.Return) == 0 {
+		fnSignature.Return = append(fnSignature.Return, &ast.PrimitiveType{
+			Kind: ast.TypeVoid,
+		})
+	} else {
+		fnSignature.Return = append(fnSignature.Return, ft.Return...)
+	}
+
+	return fnSignature
+}
+
 func (tc *TypeChecker) inferIdentifierType(ident *ast.Identifier) ast.Type {
 	sym := tc.symtab.CurrentScope.Resolve(ident.Value)
 
@@ -516,25 +560,43 @@ func (tc *TypeChecker) inferFunctionExpr(call *ast.CallExpression) ast.Type {
 	return sym.Kind
 }
 
-func (tc *TypeChecker) checkCallAgainst(fnType ast.Type, call *ast.CallExpression) ast.Type {
+func (tc *TypeChecker) checkCallAgainst(fnType ast.Type, fnSign *ast.FunctionSignature, call *ast.CallExpression) ast.Type {
+	// get the function Signature
 	ft, ok := fnType.(*ast.FunctionType)
 	if !ok {
 		tc.add(tc.error(call.Token, "attempted to call non-function type ", fnType))
 		return nil
 	}
 
-	if len(call.Args) != len(ft.Args) {
-		tc.add(tc.error(call.Token, "function expects  args, got ", len(ft.Args), len(call.Args)))
+	if fnSign == nil {
+		tc.add(tc.error(call.Token, "function signature issues ", fnSign))
+		return nil
+	}
+
+	if len(call.Args) > len(ft.Args) {
+		tc.add(tc.error(call.Token, "function expects ", len(ft.Args), " instead got ", len(call.Args)))
 		return ft.Return[0]
 	}
+
 	for i, arg := range call.Args {
 		expected := ft.Args[i]
-		inferred := tc.inferExpr(arg)
+		inferred := tc.inferExpr(arg.Value)
 
-		errMsg := fmt.Sprintf("type mismatch on %v function params, expected %v, instead got %v as type of specified value", tc.highlight(call.Function.Value, Yellow), tc.highlight(expected, Red), tc.highlight(inferred, Green))
+		if arg.Name != nil {
+			exp, found := fnSign.Args[arg.Name.Value]
+
+			if !found {
+				errMsg := fmt.Sprintf("argument %v wasn't found in the function", tc.highlight(arg.Name, Yellow))
+				tc.add(tc.error(arg.Token, errMsg))
+				return nil
+			}
+
+			expected = exp.Type
+		}
 
 		if !tc.typesCompatible(expected, inferred) {
-			tc.add(tc.error(arg.GetToken(), errMsg))
+			errMsg := fmt.Sprintf("type mismatch on %v function params, expected %v, instead got %v as type of specified value", tc.highlight(call.Function.Value, Yellow), tc.highlight(expected, Red), tc.highlight(inferred, Green))
+			tc.add(tc.error(arg.Token, errMsg))
 		}
 	}
 

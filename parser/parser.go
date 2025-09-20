@@ -1469,6 +1469,31 @@ round:
 	}
 }
 
+// useful for parsing literal such as (integers of all sort, floats, strings, arrays, booleans ...etc)
+func (p *Parser) parseLiteral() ast.Expression {
+	switch p.curToken.Kind {
+	case lexer.TokenInteger:
+		return p.parseIntLiteral()
+	case lexer.TokenFloat:
+		return p.parseFloatLiteral()
+	case lexer.TokenStr:
+		return p.parseStringLiteral()
+	case lexer.TokenChar:
+		return p.parseCharLiteral()
+	case lexer.TokenNul:
+		return p.parseNulLiteral()
+	case lexer.TokenBracketOpen:
+		return p.parseArrayLiteral()
+	case lexer.TokenMap:
+		return p.parseMapLiteral()
+
+	default:
+		p.syncUntilTokenIs(lexer.TokenBraceClose, false)
+		p.add(p.error(p.curToken, "expected a literal token (int, float, bool, ...etc), instead got ", p.curToken.Text))
+		return nil
+	}
+}
+
 func (p *Parser) parseCommentStatement() (*ast.Comment, error) {
 	tok := p.curToken
 	p.nextToken()
@@ -1655,13 +1680,15 @@ func (p *Parser) parseArguments() (*ast.Identifier, []*ast.Arg) {
 
 	arg := &ast.Arg{
 		Token: p.curToken,
-		Name: &ast.Identifier{
-			Token: p.curToken,
-			Value: p.curToken.Text,
-		},
 	}
 
-	p.nextToken()
+	if !p.curTokenKindIs(lexer.TokenIdentifier) {
+		p.add(p.error(p.curToken, "expected identifier, instead got ", p.curToken.Text))
+		return nil, nil
+	}
+
+	arg.Name = p.parseIdentifier().(*ast.Identifier)
+
 	// expect colon
 	if !p.curTokenKindIs(lexer.TokenColon) {
 		p.add(p.error(p.curToken, "expected : after argument name, instead got ", p.curToken.Text))
@@ -1680,17 +1707,27 @@ func (p *Parser) parseArguments() (*ast.Identifier, []*ast.Arg) {
 
 	arg.Type = tp
 
+	if p.curTokenKindIs(lexer.TokenAssign) {
+		p.nextToken()
+		// default value
+		arg.DefaultValue = p.parseLiteral()
+	}
+
 	args = append(args, arg)
 
 	for p.curTokenKindIs(lexer.TokenComma) {
 		p.nextToken()
+
 		arg := &ast.Arg{
 			Token: p.curToken,
-			Name: &ast.Identifier{
-				Token: p.curToken,
-				Value: p.curToken.Text,
-			},
 		}
+
+		if !p.curTokenKindIs(lexer.TokenIdentifier) {
+			p.add(p.error(p.curToken, "expected identifier, instead got ", p.curToken.Text))
+			return nil, nil
+		}
+
+		arg.Name = p.parseIdentifier().(*ast.Identifier)
 
 		// expect colon
 		if !p.curTokenKindIs(lexer.TokenColon) {
@@ -1709,6 +1746,12 @@ func (p *Parser) parseArguments() (*ast.Identifier, []*ast.Arg) {
 		}
 
 		arg.Type = tp
+
+		if p.curTokenKindIs(lexer.TokenAssign) {
+			p.nextToken()
+			// default value
+			arg.DefaultValue = p.parseLiteral()
+		}
 
 		args = append(args, arg)
 	}
@@ -1764,8 +1807,8 @@ func (p *Parser) parseCallExpression(left ast.Expression) ast.Expression {
 	return &exp
 }
 
-func (p *Parser) parseCallArguments() []ast.Expression {
-	args := make([]ast.Expression, 0)
+func (p *Parser) parseCallArguments() []ast.Param {
+	args := make([]ast.Param, 0)
 
 	if !p.curTokenKindIs(lexer.TokenBraceOpen) {
 		p.add(p.error(p.curToken, "expect brace (, instead got ", p.curToken.Text))
@@ -1779,15 +1822,41 @@ func (p *Parser) parseCallArguments() []ast.Expression {
 		return args
 	}
 
-	args = append(args, p.parseExpression(LOWEST))
+	param := ast.Param{
+		Token: p.curToken,
+	}
+
+	if p.curTokenKindIs(lexer.TokenIdentifier) {
+		// parse it
+		param.Name = p.parseIdentifier().(*ast.Identifier)
+
+		if !p.curTokenKindIs(lexer.TokenAssign) {
+			p.add(p.error(p.curToken, "expect assign = after ", param.Name, " instead got ", p.curToken.Text))
+			return nil
+		}
+		p.nextToken()
+	}
+
+	param.Value = p.parseExpression(LOWEST)
+	args = append(args, param)
 
 	for p.curTokenKindIs(lexer.TokenComma) {
 		p.nextToken()
-		expr := p.parseExpression(LOWEST)
-		if expr == nil {
-			return nil
+		param := ast.Param{
+			Token: p.curToken,
 		}
-		args = append(args, expr)
+
+		if p.curTokenKindIs(lexer.TokenIdentifier) {
+			// parse it
+			param.Name = p.parseIdentifier().(*ast.Identifier)
+
+			if !p.curTokenKindIs(lexer.TokenAssign) {
+				p.nextToken()
+			}
+		}
+
+		param.Value = p.parseExpression(LOWEST)
+		args = append(args, param)
 	}
 
 	if !p.curTokenKindIs(lexer.TokenBraceClose) {

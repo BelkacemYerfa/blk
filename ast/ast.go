@@ -165,6 +165,13 @@ func (ct *CompositeType) String() string {
 	return out.String()
 }
 
+type FunctionSignature struct {
+	Token  lexer.Token
+	Kind   TypeKind
+	Args   map[string]*Arg
+	Return []Type // support for multi return types
+}
+
 // represents function types such as fn(i8,i8): f32
 type FunctionType struct {
 	Token  lexer.Token
@@ -602,9 +609,10 @@ func (nt *BreakStatement) GetToken() lexer.Token { return nt.Token }
 func (fs *BreakStatement) String() string        { return fs.TokenLiteral() }
 
 type Arg struct {
-	Token lexer.Token
-	Name  *Identifier
-	Type  Type
+	Token        lexer.Token
+	Name         *Identifier
+	DefaultValue Expression
+	Type         Type
 }
 
 type ReturnType struct {
@@ -978,10 +986,16 @@ func (ie *SwitchExpression) String() string {
 	return out.String()
 }
 
+type Param struct {
+	Token lexer.Token
+	Name  *Identifier
+	Value Expression
+}
+
 type CallExpression struct {
 	Token    lexer.Token // The '(' token
 	Function *Identifier // Identifier
-	Args     []Expression
+	Args     []Param
 	Type     Type
 }
 
@@ -992,7 +1006,7 @@ func (ce *CallExpression) String() string {
 	var out bytes.Buffer
 	args := []string{}
 	for _, a := range ce.Args {
-		args = append(args, a.String())
+		args = append(args, a.Value.String())
 	}
 	out.WriteString(ce.Function.String())
 	out.WriteString("(")
