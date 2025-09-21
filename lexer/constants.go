@@ -17,7 +17,6 @@ var (
 		"for":    TokenFor,
 		"in":     TokenIn,
 		"import": TokenImport,
-		"using":  TokenUsing,
 		"return": TokenReturn,
 		"next":   TokenNext,
 		"break":  TokenBreak,
@@ -55,6 +54,7 @@ var (
 		"#fallthrough": TokenFallthrough,
 		"#partial":     TokenPartial,
 		"#force":       TokenForce,
+		"#bake":        TokenBake,
 	}
 
 	AssignBinOps = []TokenKind{

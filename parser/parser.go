@@ -286,8 +286,6 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		return p.parseBreakStatement()
 	case lexer.TokenCurlyBraceOpen:
 		return p.parseScope()
-	case lexer.TokenUsing:
-		return p.parseUsingStatement()
 	case lexer.TokenIdentifier, lexer.TokenSelf:
 
 		if p.peekTokenKindIs(lexer.TokenComma) || p.peekTokenKindIs(lexer.TokenAssign) {
@@ -707,7 +705,7 @@ func (p *Parser) parseStructExpression() ast.Expression {
 		p.nextToken()
 		return &ast.StructExpression{
 			Token:   expr.Token,
-			Fields:  []ast.Statement{},
+			Fields:  []*ast.Declaration{},
 			Methods: []*ast.Method{},
 		}
 	}
@@ -725,27 +723,34 @@ func (p *Parser) parseStructExpression() ast.Expression {
 	return expr
 }
 
-func (p *Parser) parseFields() ([]ast.Statement, []*ast.Method, error) {
-	fields := make([]ast.Statement, 0)
+func (p *Parser) parseFields() ([]*ast.Declaration, []*ast.Method, error) {
+	fields := make([]*ast.Declaration, 0)
 	methods := make([]*ast.Method, 0)
 
 	// parse until, then consume it
 	for !p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
 
-		if p.curTokenKindIs(lexer.TokenUsing) {
+		if p.curTokenKindIs(lexer.TokenBake) {
 			// for now skip it
-			field, err := p.parseUsingStatement()
+			field := &ast.Declaration{Token: p.curToken, Mutable: true, Directive: map[string]string{}}
+			field.Directive["bake"] = "bake"
 
-			if err != nil {
+			p.nextToken()
+
+			if !p.curTokenKindIs(lexer.TokenIdentifier) {
+				err := p.error(p.curToken, "expected an comma (,) at the end of each field, instead got ", p.curToken.Text)
 				return nil, nil, err
 			}
+
+			ident := p.parseIdentifier().(*ast.Identifier)
+			field.Name = append(field.Name, ident)
 
 			fields = append(fields, field)
 
 			// check if there is a comma
 			if !p.curTokenKindIs(lexer.TokenComma) {
 				err := p.error(p.curToken, "expected an comma (,) at the end of each field, instead got ", p.curToken.Text)
-				p.add(err)
+				return nil, nil, err
 			}
 
 			p.nextToken()
@@ -1377,19 +1382,6 @@ round:
 	p.nextToken()
 
 	return expr
-}
-
-func (p *Parser) parseUsingStatement() (*ast.UsingStatement, error) {
-	stmt := &ast.UsingStatement{Token: p.curToken}
-	p.nextToken()
-
-	if !p.curTokenKindIs(lexer.TokenIdentifier) {
-		return nil, p.error(p.curToken, "expected an identifier, instead got ", p.curToken.Text)
-	}
-
-	stmt.Alias = p.parseExpression(PREFIX)
-
-	return stmt, nil
 }
 
 func (p *Parser) parseScope() (*ast.ScopeStatement, error) {

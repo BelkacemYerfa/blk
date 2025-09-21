@@ -298,21 +298,6 @@ func (ls *ImportStatement) String() string {
 	return out.String()
 }
 
-type UsingStatement struct {
-	Token lexer.Token // the token.LET token
-	Alias Expression  // alias for module name
-}
-
-func (ls *UsingStatement) statementNode()        {}
-func (ls *UsingStatement) TokenLiteral() string  { return ls.Token.Text }
-func (nt *UsingStatement) GetToken() lexer.Token { return nt.Token }
-func (ls *UsingStatement) String() string {
-	var out bytes.Buffer
-	out.WriteString(ls.TokenLiteral() + " ")
-	out.WriteString(ls.Alias.String())
-	return out.String()
-}
-
 type CastExpression struct {
 	Token            lexer.Token
 	ForceCast        bool // for #force directive
@@ -335,7 +320,7 @@ type Method struct {
 
 type StructExpression struct {
 	Token   lexer.Token // the token.LET token
-	Fields  []Statement
+	Fields  []*Declaration
 	Methods []*Method
 }
 

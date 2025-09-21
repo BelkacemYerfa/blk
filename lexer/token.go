@@ -21,7 +21,6 @@ const (
 	TokenReturn TokenKind = "return"
 	TokenImport TokenKind = "import"
 	TokenCast   TokenKind = "cast"
-	TokenUsing  TokenKind = "using"
 
 	// nul value
 	TokenNul TokenKind = "nul"
@@ -33,6 +32,7 @@ const (
 	TokenFallthrough TokenKind = "#fallthrough"
 	TokenPartial     TokenKind = "#partial"
 	TokenForce       TokenKind = "#force"
+	TokenBake        TokenKind = "#bake"
 
 	// Units
 	TokenCurlyBraceOpen  TokenKind = "{"

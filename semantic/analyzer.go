@@ -62,20 +62,9 @@ func (a *Analyzer) collectSymbols(node ast.Node) error {
 			}
 		}
 
-	case *ast.UsingStatement:
-		return a.collectUsingSymbol(n)
 	}
 
 	return nil
-}
-
-func (a *Analyzer) collectUsingSymbol(node *ast.UsingStatement) error {
-	declarationType := a.types.inferExpr(node.Alias)
-	return a.symtab.CurrentScope.Define(node.String(), &Symbol{
-		Name:     node.String(),
-		Kind:     declarationType,
-		DeclNode: node,
-	})
 }
 
 func (a *Analyzer) collectExpressionSymbol(node ast.Expression) error {
