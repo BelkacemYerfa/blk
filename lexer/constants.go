@@ -11,6 +11,7 @@ var (
 		"switch": TokenSwitch,
 		"case":   TokenCase,
 		"if":     TokenIf,
+		"do":     TokenDo,
 		"else":   TokenElse,
 		"use":    TokenDo,
 		"fn":     TokenFn,

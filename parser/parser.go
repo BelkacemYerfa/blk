@@ -1185,20 +1185,38 @@ func (p *Parser) parseForStatement() (*ast.ForStatement, error) {
 		// for cond style loop
 		expr := &ast.IterationPattern{Token: p.curToken}
 
-		if !p.curTokenKindIs(lexer.TokenCurlyBraceOpen) {
+		if !p.curTokenKindIs(lexer.TokenCurlyBraceOpen) && !p.curTokenKindIs(lexer.TokenDo) {
 			expr.Condition = p.parseExpression(OR)
 		}
 
 		stmt.Pattern = expr
 	}
 
-	if !p.curTokenKindIs(lexer.TokenCurlyBraceOpen) {
-		return nil, p.error(p.curToken, "expected curly brace open { , instead got ", p.curToken.Text)
+	if !p.curTokenKindIs(lexer.TokenCurlyBraceOpen) && !p.curTokenKindIs(lexer.TokenDo) {
+		return nil, p.error(p.curToken, "expected curly brace open { or do token , instead got ", p.curToken.Text)
 	}
 
-	p.nextToken()
+	if p.curTokenKindIs(lexer.TokenCurlyBraceOpen) {
+		p.nextToken()
 
-	stmt.Body = p.parseBlockStatement().(*ast.BlockExpression)
+		stmt.Body = p.parseBlockStatement().(*ast.BlockExpression)
+	}
+
+	if p.curTokenKindIs(lexer.TokenDo) {
+		p.nextToken()
+		s, err := p.parseStatement()
+
+		if err != nil {
+			p.add(err)
+			p.sync(false)
+		} else {
+			stmt.Body = &ast.BlockExpression{
+				Token: p.curToken,
+				Body:  []ast.Statement{s},
+			}
+		}
+	}
+
 	return stmt, nil
 }
 
@@ -1629,21 +1647,38 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 		p.nextToken()
 	}
 
-	if !p.curTokenKindIs(lexer.TokenCurlyBraceOpen) {
-		p.add(p.error(p.curToken, "expected curly brace open ( { ), instead got ", p.curToken.Text))
+	if !p.curTokenKindIs(lexer.TokenCurlyBraceOpen) && !p.curTokenKindIs(lexer.TokenDo) {
+		p.add(p.error(p.curToken, "expected curly brace open ( { ) or do token, instead got ", p.curToken.Text))
 		return nil
 	}
 
-	p.nextToken()
+	if p.curTokenKindIs(lexer.TokenCurlyBraceOpen) {
+		p.nextToken()
 
-	body := p.parseBlockStatement().(*ast.BlockExpression)
+		body := p.parseBlockStatement().(*ast.BlockExpression)
 
-	if body == nil {
-		p.add(p.error(p.curToken, "expected valid body, instead got ", p.curToken.Text))
-		return nil
+		if body == nil {
+			p.add(p.error(p.curToken, "expected valid body, instead got ", p.curToken.Text))
+			return nil
+		}
+
+		expr.Body = body
 	}
 
-	expr.Body = body
+	if p.curTokenKindIs(lexer.TokenDo) {
+		p.nextToken()
+		s, err := p.parseStatement()
+
+		if err != nil {
+			p.add(err)
+			p.sync(false)
+		} else {
+			expr.Body = &ast.BlockExpression{
+				Token: p.curToken,
+				Body:  []ast.Statement{s},
+			}
+		}
+	}
 
 	return expr
 }

@@ -6,82 +6,85 @@ import (
 )
 
 type Analyzer struct {
-	errors   []error
+	filename string
 	symtab   *SymbolTable
 	types    *TypeChecker
-	filename string
+	errors   *ErrorCollector
 }
 
 func NewAnalyzer(filename string) *Analyzer {
 	symtab := NewSymTable()
+	errCollector := NewErrorCollector(filename)
 	return &Analyzer{
-		errors:   make([]error, 0),
+		errors:   errCollector,
 		symtab:   symtab,
-		types:    NewTypeChecker(filename, symtab),
+		types:    NewTypeChecker(filename, symtab, errCollector),
 		filename: filename,
 	}
 }
 
 func (a *Analyzer) GetErrors() []error {
-	return a.errors
-}
-
-func (a *Analyzer) add(err error) {
-	if len(err.Error()) > 0 {
-		a.errors = append(a.errors, err)
-	}
+	return a.errors.errors
 }
 
 func (a *Analyzer) Analyze(node *ast.Program) {
 	// start collecting
-	if err := a.collectSymbols(node); err != nil {
-		a.add(err)
-	}
+	a.collectSymbols(node)
 
 	a.types.check(node)
-	a.errors = append(a.errors, a.types.errors...)
+
+	if main := a.symtab.CurrentScope.Resolve("main"); main == nil {
+		a.errors.error(ERROR, node.GetToken(), fmt.Errorf("no entry point found (main function), an entry point is required"))
+	}
+
+	for _, sym := range a.symtab.CurrentScope.Symbols {
+		if sym.DeclNode != nil && !sym.Used {
+			a.errors.error(WARNING, sym.DeclNode.GetToken(), fmt.Errorf("%v is not used", sym.Name))
+		}
+	}
+
 }
 
-func (a *Analyzer) collectSymbols(node ast.Node) error {
+func (a *Analyzer) collectSymbols(node ast.Node) {
 
 	switch n := node.(type) {
 	case *ast.Program:
 		for _, stmt := range n.Statements {
-			if err := a.collectSymbols(stmt); err != nil {
-				return err
-			}
+			a.collectSymbols(stmt)
 		}
 
 	case *ast.Declaration:
-		return a.collectDeclSymbol(n)
+		a.collectDeclSymbol(n)
 
 	case *ast.ScopeStatement:
 		for _, stmt := range n.Body.Body {
-			if err := a.collectSymbols(stmt); err != nil {
-				return err
-			}
+			a.collectSymbols(stmt)
 		}
-
 	}
-
-	return nil
 }
 
-func (a *Analyzer) collectExpressionSymbol(node ast.Expression) error {
+func (a *Analyzer) collectExpressionSymbol(node ast.Expression) {
 
 	switch n := node.(type) {
 	case *ast.FunctionExpression:
 		a.symtab.EnterScope()
 		defer a.symtab.ExitScope()
 
+		if n.Self.Value != "" {
+			// error out, for now, later check for the struct
+			errMsg := fmt.Sprintf("self keyword can only be used withing struct context, but %v function is not a method, so either consider removing it or make this method a part of some struct", a.errors.highlight(n.Token.LiteralToken.Text, Yellow))
+			a.errors.error(ERROR, n.Self.Token, errMsg)
+			return
+		}
+
 		for _, arg := range n.Args {
 			if arg.DefaultValue != nil {
 				inferred := a.types.inferExpr(arg.DefaultValue)
 
 				if !a.types.typesCompatible(arg.Type, inferred) {
-					errMsg := fmt.Sprintf("type mismatch on %v argument, explicit type %v doesn't match the inferred type %v, change the explicit type or the associated value", a.types.highlight(arg.Name.Value, Yellow), a.types.highlight(arg.Type, Red), a.types.highlight(inferred, Green))
-					a.types.add(a.types.error(arg.Token, errMsg))
-					return nil
+					errMsg := fmt.Sprintf("type mismatch on %v argument, explicit type %v doesn't match the inferred type %v, change the explicit type or the associated value", a.errors.highlight(arg.Name.Value, Yellow), a.errors.highlight(arg.Type, Red), a.errors.highlight(inferred, Green))
+					a.errors.error(ERROR, arg.Token, errMsg)
+					return
 				}
 			}
 
@@ -91,14 +94,14 @@ func (a *Analyzer) collectExpressionSymbol(node ast.Expression) error {
 				IsMutable: true,
 				DeclNode:  arg.Name,
 			}); err != nil {
-				return err
+				a.errors.error(ERROR, arg.Token, err)
+				return
 			}
+
 		}
 
 		for _, stmt := range n.Body.Body {
-			if err := a.collectSymbols(stmt); err != nil {
-				return err
-			}
+			a.collectSymbols(stmt)
 
 			if s, ok := stmt.(*ast.Declaration); ok {
 				if len(s.Value) > 0 {
@@ -109,21 +112,30 @@ func (a *Analyzer) collectExpressionSymbol(node ast.Expression) error {
 
 		a.types.checkFunctionBody(n)
 
+		for _, sym := range a.symtab.CurrentScope.Symbols {
+			if sym.DeclNode != nil && !sym.Used {
+				a.errors.error(WARNING, sym.DeclNode.GetToken(), fmt.Errorf("%v is not used", sym.Name))
+			}
+		}
+
 	case *ast.BlockExpression:
 		a.symtab.EnterScope()
 		defer a.symtab.ExitScope()
 
 		for _, stmt := range n.Body {
-			if err := a.collectSymbols(stmt); err != nil {
-				return err
+			a.collectSymbols(stmt)
+		}
+
+		for _, sym := range a.symtab.CurrentScope.Symbols {
+			if sym.DeclNode != nil && !sym.Used {
+				a.errors.error(WARNING, sym.DeclNode.GetToken(), fmt.Errorf("%v is not used", sym.Name))
 			}
 		}
-	}
 
-	return nil
+	}
 }
 
-func (a *Analyzer) collectDeclSymbol(node *ast.Declaration) error {
+func (a *Analyzer) collectDeclSymbol(node *ast.Declaration) {
 
 	var declarationType ast.Type
 
@@ -142,12 +154,12 @@ func (a *Analyzer) collectDeclSymbol(node *ast.Declaration) error {
 		IsMutable: node.Mutable,
 		DeclNode:  node,
 	}); err != nil {
-		return err
+		a.errors.error(ERROR, node.Token, err)
+		return
 	}
 
 	// body check of different expression such as functions, if blocks, switches, ...ect
 	if len(node.Value) > 0 {
-		return a.collectExpressionSymbol(node.Value[0])
+		a.collectExpressionSymbol(node.Value[0])
 	}
-	return nil
 }

@@ -2,12 +2,8 @@ package semantic
 
 import (
 	"blk/ast"
-	"blk/lexer"
-	"errors"
 	"fmt"
 	"math"
-	"slices"
-	"strings"
 )
 
 // Typechecker implementation
@@ -16,79 +12,15 @@ import (
 type TypeChecker struct {
 	filePath string
 	symtab   *SymbolTable
-	errors   []error
+	errors   *ErrorCollector
 }
 
-func NewTypeChecker(filepath string, symtab *SymbolTable) *TypeChecker {
+func NewTypeChecker(filepath string, symtab *SymbolTable, errors *ErrorCollector) *TypeChecker {
 	return &TypeChecker{
 		filePath: filepath,
 		symtab:   symtab,
-		errors:   make([]error, 0),
+		errors:   errors,
 	}
-}
-
-func (tc *TypeChecker) add(err error) {
-	if _, found := slices.BinarySearchFunc(tc.errors, err, func(a, b error) int {
-		return strings.Compare(a.Error(), b.Error())
-	}); !found {
-		tc.errors = append(tc.errors, err)
-	}
-}
-
-// TODO: make the error a single collector struct to use on each phase
-
-func (tc *TypeChecker) error(tok lexer.Token, msg ...interface{}) error {
-	errMsg := fmt.Sprintf("\033[1;90m%s:%d:%d:\033[0m ERROR: %s", tc.filePath, tok.Row, tok.Col, fmt.Sprint(msg...))
-
-	return errors.New(errMsg)
-}
-
-type HighlightFlag string
-
-const (
-	Reset   HighlightFlag = "\033[0m"
-	Red     HighlightFlag = "\033[31m"
-	Green   HighlightFlag = "\033[32m"
-	Yellow  HighlightFlag = "\033[33m"
-	Blue    HighlightFlag = "\033[34m"
-	Magenta HighlightFlag = "\033[35m"
-	Cyan    HighlightFlag = "\033[36m"
-	Gray    HighlightFlag = "\033[37m"
-	White   HighlightFlag = "\033[97m"
-)
-
-func (tc *TypeChecker) highlight(msg any, flag HighlightFlag) string {
-	nwMsg := ""
-
-	switch flag {
-	case Red:
-		nwMsg = fmt.Sprintf("%v%v%v", Red, msg, Reset)
-	case Green:
-		nwMsg = fmt.Sprintf("%v%v%v", Green, msg, Reset)
-
-	case Yellow:
-		nwMsg = fmt.Sprintf("%v%v%v", Yellow, msg, Reset)
-
-	case Blue:
-		nwMsg = fmt.Sprintf("%v%v%v", Blue, msg, Reset)
-
-	case Magenta:
-		nwMsg = fmt.Sprintf("%v%v%v", Magenta, msg, Reset)
-
-	case Cyan:
-		nwMsg = fmt.Sprintf("%v%v%v", Cyan, msg, Reset)
-
-	case Gray:
-		nwMsg = fmt.Sprintf("%v%v%v", Gray, msg, Reset)
-
-	case White:
-		nwMsg = fmt.Sprintf("%v%v%v", White, msg, Reset)
-
-	default:
-		// reset
-	}
-
-	return nwMsg
 }
 
 func (tc *TypeChecker) check(program *ast.Program) {
@@ -103,14 +35,14 @@ func (tc *TypeChecker) checkStmt(stmt ast.Statement) {
 		switch stmt.(type) {
 		case *ast.Declaration, *ast.ImportStatement:
 		default:
-			tc.add(tc.error(stmt.GetToken(), "the global scope only allows for declaration or import statements, everything else if forbidden"))
+			(tc.errors.error(ERROR, stmt.GetToken(), "the global scope only allows for declaration or import statements, everything else if forbidden"))
 			return
 		}
 	}
 
 	if tc.symtab.CurrentScope != tc.symtab.GlobalScope {
 		if _, ok := stmt.(*ast.ImportStatement); ok {
-			tc.add(tc.error(stmt.GetToken(), "import statements are only allowed in the global scope, for organization purposes keep them at the top of the file"))
+			(tc.errors.error(ERROR, stmt.GetToken(), "import statements are only allowed in the global scope, for organization purposes keep them at the top of the file"))
 			return
 		}
 	}
@@ -183,7 +115,7 @@ func (tc *TypeChecker) checkDeclaration(d *ast.Declaration) {
 	sym := tc.symtab.CurrentScope.Resolve(name)
 
 	if sym == nil {
-		tc.add(tc.error(d.Token, "variable with ", name, " wasn't found"))
+		(tc.errors.error(ERROR, d.Token, "variable with ", name, " wasn't found"))
 		return
 	}
 
@@ -192,8 +124,8 @@ func (tc *TypeChecker) checkDeclaration(d *ast.Declaration) {
 		inferred := tc.inferExpr(expr)
 
 		if !tc.typesCompatible(d.Type, inferred) {
-			errMsg := fmt.Sprintf("type mismatch, explicit type %v doesn't match inferred type (%v), change the explicit type, or let the compiler infer it with := syntax", tc.highlight(d.Type, Red), tc.highlight(inferred, Green))
-			tc.add(tc.error(expr.GetToken(), errMsg))
+			errMsg := fmt.Sprintf("type mismatch, explicit type %v doesn't match inferred type (%v), change the explicit type, or let the compiler infer it with := syntax", tc.errors.highlight(d.Type, Red), tc.errors.highlight(inferred, Green))
+			(tc.errors.error(ERROR, expr.GetToken(), errMsg))
 			return
 		}
 	}
@@ -248,13 +180,13 @@ func (tc *TypeChecker) inferExpr(expr ast.Expression) ast.Type {
 			return tc.checkTypeAgainst(exprType, e)
 
 		default:
-			errMsg := fmt.Sprintf("%v expression isn't supported with cast expression, the only supported ones are literal (floats, ints, ...), identifiers, functions call and nested cast expression", tc.highlight(e.TargetExpression.String(), Red))
-			tc.add(tc.error(e.Token, errMsg))
+			errMsg := fmt.Sprintf("%v expression isn't supported with cast expression, the only supported ones are literal (floats, ints, ...), identifiers, functions call and nested cast expression", tc.errors.highlight(e.TargetExpression.String(), Red))
+			(tc.errors.error(ERROR, e.Token, errMsg))
 			return nil
 		}
 
 	default:
-		tc.add(tc.error(expr.GetToken(), "cannot infer type for expression"))
+		(tc.errors.error(ERROR, expr.GetToken(), "cannot infer type for expression"))
 		return nil
 	}
 
@@ -266,7 +198,7 @@ func (tc *TypeChecker) inferUnaryExprType(expr *ast.UnaryExpression) ast.Type {
 	switch expr.Operator {
 	case "!":
 		if rightType.Type() != ast.TypeBool {
-			tc.add(fmt.Errorf("bang operator can only be used with boolean, but the received type is %s", rightType))
+			(tc.errors.error(ERROR, expr.Right.GetToken(), fmt.Errorf("bang operator can only be used with boolean, but the received type is %s", rightType)))
 			return nil
 		}
 
@@ -274,7 +206,7 @@ func (tc *TypeChecker) inferUnaryExprType(expr *ast.UnaryExpression) ast.Type {
 
 	case "~":
 		if rightType.Type() > ast.TypeUInt64 {
-			tc.add(fmt.Errorf("bitwise not operator ~ can only be applied on signed int or unsigned int, but the received type is %v", rightType))
+			(tc.errors.error(ERROR, expr.Right.GetToken(), fmt.Errorf("bitwise not operator ~ can only be applied on signed int or unsigned int, but the received type is %v", rightType)))
 			return nil
 		}
 
@@ -282,7 +214,7 @@ func (tc *TypeChecker) inferUnaryExprType(expr *ast.UnaryExpression) ast.Type {
 
 	case "-":
 		if rightType.Type() > ast.TypeFloat64 {
-			tc.add(fmt.Errorf("- operator can only be applied either on signed int or unsigned int or floats, but the received type is %v", rightType))
+			(tc.errors.error(ERROR, expr.Right.GetToken(), fmt.Errorf("- operator can only be applied either on signed int or unsigned int or floats, but the received type is %v", rightType)))
 			return nil
 		}
 
@@ -313,7 +245,7 @@ func (tc *TypeChecker) inferBinaryExprType(expr *ast.BinaryExpression) ast.Type 
 	}
 
 	if !tc.typesCompatible(leftType, rightType) {
-		tc.add(tc.error(expr.Token, "sides of binary expression are not equals, left ", tc.highlight(leftType, Yellow), " right ", tc.highlight(rightType, Green)))
+		(tc.errors.error(ERROR, expr.Token, "sides of binary expression are not equals, left ", tc.errors.highlight(leftType, Yellow), " right ", tc.errors.highlight(rightType, Green)))
 		return nil
 	}
 
@@ -323,14 +255,14 @@ func (tc *TypeChecker) inferBinaryExprType(expr *ast.BinaryExpression) ast.Type 
 		// cases allowed: string (plus only) , int, uint, floats
 
 		if leftType.Type() > ast.TypeString || rightType.Type() > ast.TypeString {
-			tc.add(tc.error(expr.Token, "arithmetic operators can only be applied on (integers, unsigned integers, floats, strings), but the received type is ", rightType))
+			(tc.errors.error(ERROR, expr.Token, "arithmetic operators can only be applied on (integers, unsigned integers, floats, strings), but the received type is ", rightType))
 			return nil
 		}
 
 		switch leftType.Type() {
 		case ast.TypeString:
 			if expr.Operator != "+" {
-				tc.add(tc.error(expr.Token, "the only arithmetic operation allowed on strings is +, but received ", expr.Operator, " as operator"))
+				(tc.errors.error(ERROR, expr.Token, "the only arithmetic operation allowed on strings is +, but received ", expr.Operator, " as operator"))
 				return nil
 			}
 
@@ -338,7 +270,7 @@ func (tc *TypeChecker) inferBinaryExprType(expr *ast.BinaryExpression) ast.Type 
 
 		case ast.TypeFloat32, ast.TypeFloat64:
 			if expr.Operator == "%" {
-				tc.add(tc.error(expr.Token, "% (modules) operator isn't allowed on float, it is only allowed on ints"))
+				(tc.errors.error(ERROR, expr.Token, "% (modules) operator isn't allowed on float, it is only allowed on ints"))
 				return nil
 			}
 
@@ -353,7 +285,7 @@ func (tc *TypeChecker) inferBinaryExprType(expr *ast.BinaryExpression) ast.Type 
 		// cases allowed: bool, string, int, uint, floats
 
 		if leftType.Type() > ast.TypeBool || rightType.Type() > ast.TypeBool {
-			tc.add(tc.error(expr.Token, "arithmetic operators can only be applied on (integers, unsigned integers, floats, strings), but the received type is ", rightType))
+			(tc.errors.error(ERROR, expr.Token, "arithmetic operators can only be applied on (integers, unsigned integers, floats, strings), but the received type is ", rightType))
 			return nil
 		}
 
@@ -363,7 +295,7 @@ func (tc *TypeChecker) inferBinaryExprType(expr *ast.BinaryExpression) ast.Type 
 		// cases allowed: int, uint, floats
 
 		if leftType.Type() > ast.TypeBool || rightType.Type() > ast.TypeBool {
-			tc.add(tc.error(expr.Token, "comparison operators can only be applied on (integers, unsigned integers, floats, strings), but the received type is ", rightType))
+			(tc.errors.error(ERROR, expr.Token, "comparison operators can only be applied on (integers, unsigned integers, floats, strings), but the received type is ", rightType))
 			return nil
 		}
 
@@ -373,7 +305,7 @@ func (tc *TypeChecker) inferBinaryExprType(expr *ast.BinaryExpression) ast.Type 
 		//cases allowed: booleans
 
 		if leftType.Type() != ast.TypeBool || rightType.Type() != ast.TypeBool {
-			tc.add(tc.error(expr.Token, "arithmetic operators can only be applied on (integers, unsigned integers, floats, strings), but the received type is ", rightType))
+			(tc.errors.error(ERROR, expr.Token, "arithmetic operators can only be applied on (integers, unsigned integers, floats, strings), but the received type is ", rightType))
 			return nil
 		}
 
@@ -382,7 +314,7 @@ func (tc *TypeChecker) inferBinaryExprType(expr *ast.BinaryExpression) ast.Type 
 	case "<<", ">>", "^", "&", "|":
 		// cases allowed int, uint
 		if leftType.Type() > ast.TypeUInt64 || rightType.Type() > ast.TypeUInt64 {
-			tc.add(tc.error(expr.Token, "bitwise operators can only be applied on (integers, unsigned integers), but the received type is ", rightType))
+			(tc.errors.error(ERROR, expr.Token, "bitwise operators can only be applied on (integers, unsigned integers), but the received type is ", rightType))
 			return nil
 		}
 
@@ -405,11 +337,11 @@ func (tc *TypeChecker) checkFunctionBody(fn *ast.FunctionExpression) {
 	if !tc.typesCompatible(fnType.Return[0], blockType) {
 		errMsg := ""
 		if fnType.Return[0].Type() == ast.TypeVoid {
-			errMsg = fmt.Sprintf("type mismatch where function doesn't expect a return, but got %v as return type", tc.highlight(blockType, Red))
+			errMsg = fmt.Sprintf("type mismatch where function doesn't expect a return, but got %v as return type", tc.errors.highlight(blockType, Red))
 		} else {
-			errMsg = fmt.Sprintf("type mismatch between the returned typed %v, and the expected return type %v", tc.highlight(blockType, Red), tc.highlight(fnType.Return[0], Yellow))
+			errMsg = fmt.Sprintf("type mismatch between the returned typed %v, and the expected return type %v", tc.errors.highlight(blockType, Red), tc.errors.highlight(fnType.Return[0], Yellow))
 		}
-		tc.add(tc.error(fn.Token, errMsg))
+		(tc.errors.error(ERROR, fn.Token, errMsg))
 	}
 }
 
@@ -460,8 +392,8 @@ func (tc *TypeChecker) inferIfExprType(ifExpr *ast.IfExpression) ast.Type {
 	}
 
 	if conditionType.Type() != ast.TypeBool {
-		errMsg := fmt.Sprintf("condition on if statement needs to be of type bool, instead got type %v", tc.highlight(conditionType, Red))
-		tc.add(tc.error(ifExpr.Condition.GetToken(), errMsg))
+		errMsg := fmt.Sprintf("condition on if statement needs to be of type bool, instead got type %v", tc.errors.highlight(conditionType, Red))
+		(tc.errors.error(ERROR, ifExpr.Condition.GetToken(), errMsg))
 		return nil
 	}
 
@@ -499,13 +431,13 @@ func (tc *TypeChecker) functionSignature(fnType ast.Type, call *ast.CallExpressi
 
 	fn := tc.symtab.CurrentScope.Resolve(call.Function.Value)
 	if fn == nil {
-		tc.add(tc.error(call.Token, "function ", call.Function.Value, " wasn't found"))
+		(tc.errors.error(ERROR, call.Token, "function ", call.Function.Value, " wasn't found"))
 		return nil
 	}
 
 	ft, ok := fn.Kind.(*ast.FunctionType)
 	if !ok {
-		tc.add(tc.error(call.Token, "attempted to call non-function type ", fnType))
+		(tc.errors.error(ERROR, call.Token, "attempted to call non-function type ", fnType))
 		return nil
 	}
 
@@ -513,7 +445,7 @@ func (tc *TypeChecker) functionSignature(fnType ast.Type, call *ast.CallExpressi
 	fnDecl, ok := fn.DeclNode.(*ast.Declaration).Value[0].(*ast.FunctionExpression)
 
 	if !ok {
-		tc.add(tc.error(call.Token, "associated value ", call.Function.Value, " is not a functions"))
+		(tc.errors.error(ERROR, call.Token, "associated value ", call.Function.Value, " is not a functions"))
 		return nil
 	}
 
@@ -542,10 +474,11 @@ func (tc *TypeChecker) inferIdentifierType(ident *ast.Identifier) ast.Type {
 	sym := tc.symtab.CurrentScope.Resolve(ident.Value)
 
 	if sym == nil {
-		tc.add(tc.error(ident.Token, "identifier ", ident.Value, " wasn't found"))
+		(tc.errors.error(ERROR, ident.Token, "identifier ", ident.Value, " wasn't found"))
 		return nil
 	}
 
+	sym.Used = true
 	return sym.Kind
 }
 
@@ -553,7 +486,7 @@ func (tc *TypeChecker) inferFunctionExpr(call *ast.CallExpression) ast.Type {
 
 	sym := tc.symtab.CurrentScope.Resolve(call.Function.Value)
 	if sym == nil {
-		tc.add(tc.error(call.Token, "function ", call.Function.Value, " wasn't found"))
+		(tc.errors.error(ERROR, call.Token, "function ", call.Function.Value, " wasn't found"))
 		return nil
 	}
 
@@ -564,17 +497,17 @@ func (tc *TypeChecker) checkCallAgainst(fnType ast.Type, fnSign *ast.FunctionSig
 	// get the function Signature
 	ft, ok := fnType.(*ast.FunctionType)
 	if !ok {
-		tc.add(tc.error(call.Token, "attempted to call non-function type ", fnType))
+		(tc.errors.error(ERROR, call.Token, "attempted to call non-function type ", fnType))
 		return nil
 	}
 
 	if fnSign == nil {
-		tc.add(tc.error(call.Token, "function signature issues ", fnSign))
+		(tc.errors.error(ERROR, call.Token, "function signature issues ", fnSign))
 		return nil
 	}
 
 	if len(call.Args) > len(ft.Args) {
-		tc.add(tc.error(call.Token, "function expects ", len(ft.Args), " instead got ", len(call.Args)))
+		(tc.errors.error(ERROR, call.Token, "function expects ", len(ft.Args), " instead got ", len(call.Args)))
 		return ft.Return[0]
 	}
 
@@ -586,8 +519,8 @@ func (tc *TypeChecker) checkCallAgainst(fnType ast.Type, fnSign *ast.FunctionSig
 			exp, found := fnSign.Args[arg.Name.Value]
 
 			if !found {
-				errMsg := fmt.Sprintf("argument %v wasn't found in the function", tc.highlight(arg.Name, Yellow))
-				tc.add(tc.error(arg.Token, errMsg))
+				errMsg := fmt.Sprintf("argument %v wasn't found in the function", tc.errors.highlight(arg.Name, Yellow))
+				(tc.errors.error(ERROR, arg.Token, errMsg))
 				return nil
 			}
 
@@ -595,8 +528,8 @@ func (tc *TypeChecker) checkCallAgainst(fnType ast.Type, fnSign *ast.FunctionSig
 		}
 
 		if !tc.typesCompatible(expected, inferred) {
-			errMsg := fmt.Sprintf("type mismatch on %v function params, expected %v, instead got %v as type of specified value", tc.highlight(call.Function.Value, Yellow), tc.highlight(expected, Red), tc.highlight(inferred, Green))
-			tc.add(tc.error(arg.Token, errMsg))
+			errMsg := fmt.Sprintf("type mismatch on %v function params, expected %v, instead got %v as type of specified value", tc.errors.highlight(call.Function.Value, Yellow), tc.errors.highlight(expected, Red), tc.errors.highlight(inferred, Green))
+			(tc.errors.error(ERROR, arg.Token, errMsg))
 		}
 	}
 
@@ -734,7 +667,7 @@ func (tc *TypeChecker) inferMapType(expr *ast.MapLiteral) ast.Type {
 
 		if !tc.typesCompatible(mapType.LeftType, inferredKeyType) {
 			errMsg := fmt.Sprintf("%v key type isn't compatible with explicit type (%v), consider changing the key's value to the corresponding type", key.String(), inferredKeyType)
-			tc.add(tc.error(key.GetToken(), errMsg))
+			(tc.errors.error(ERROR, key.GetToken(), errMsg))
 			return nil
 		}
 
@@ -742,7 +675,7 @@ func (tc *TypeChecker) inferMapType(expr *ast.MapLiteral) ast.Type {
 
 		if !tc.typesCompatible(mapType.RightType, inferredValueType) {
 			errMsg := fmt.Sprintf("%v value type isn't compatible with explicit type (%v), consider changing the key's value to the corresponding type", value.String(), inferredValueType)
-			tc.add(tc.error(value.GetToken(), errMsg))
+			(tc.errors.error(ERROR, value.GetToken(), errMsg))
 			return nil
 		}
 	}
@@ -755,14 +688,14 @@ func (tc *TypeChecker) inferArrayType(expr *ast.ArrayLiteral) ast.Type {
 
 	if arrayType.Size.Value == 0 {
 		errMsg := "declaring an array with size 0 isn't allowed, either set the proper size, or make it dynamic"
-		tc.add(tc.error(expr.Token, errMsg))
+		(tc.errors.error(ERROR, expr.Token, errMsg))
 		return nil
 	}
 
 	//check the size
 	if arrayType.Size.Value > 0 && arrayType.Size.Value < int64(len(expr.Elements)) {
 		errMsg := fmt.Sprintf("number of elements > declared size type, see for yourself, declaration states size is %d, number of elements in the array %d", arrayType.Size.Value, len(expr.Elements))
-		tc.add(tc.error(expr.Token, errMsg))
+		(tc.errors.error(ERROR, expr.Token, errMsg))
 		return nil
 	}
 
@@ -773,7 +706,7 @@ func (tc *TypeChecker) inferArrayType(expr *ast.ArrayLiteral) ast.Type {
 
 		if !tc.typesCompatible(arrayType.LeftType, inferredElementType) {
 			errMsg := fmt.Sprintf("%v element type isn't compatible with explicit type (%v), consider changing the value of the element", element.String(), inferredElementType)
-			tc.add(tc.error(element.GetToken(), errMsg))
+			(tc.errors.error(ERROR, element.GetToken(), errMsg))
 			return nil
 		}
 	}
@@ -786,13 +719,13 @@ func (tc *TypeChecker) checkArrayType(etp, itp *ast.CompositeType) bool {
 	// check against the inferred type (itp)
 	if itp.Size.Value == 0 {
 		errMsg := "doesn't make sense to declare an array with a fixed size of 0, if u want a fixed size array, size should be > 0, or make it dynamic with [..] syntax"
-		tc.add(tc.error(itp.Token, errMsg))
+		(tc.errors.error(ERROR, itp.Token, errMsg))
 		return false
 	}
 
 	if etp.Size.Value == 0 {
 		errMsg := "the explicit type contains a fixed size of 0, this isn't allowed, if u want a fixed size array, size should be > 0, or make it dynamic with [..] syntax"
-		tc.add(tc.error(etp.Token, errMsg))
+		(tc.errors.error(ERROR, etp.Token, errMsg))
 		return false
 	}
 
@@ -800,18 +733,18 @@ func (tc *TypeChecker) checkArrayType(etp, itp *ast.CompositeType) bool {
 		if itp.Size.Value > etp.Size.Value {
 			if etp.Size.Value == -1 {
 				errMsg := fmt.Sprintf("explicit type, states that the variable should be a dynamic array, instead we got a fixed size array initialization with %d as it's size, change the explicit type or change the size of initialized array to dynamic with [..] syntax", itp.Size.Value)
-				tc.add(tc.error(etp.Token, errMsg))
+				(tc.errors.error(ERROR, etp.Token, errMsg))
 			} else {
 				errMsg := fmt.Sprintf("array was declared with a fixed size of %d, and inferred array size is %d, so either set the correct size or change the fixed size to dynamic using [..] syntax", etp.Size.Value, itp.Size.Value)
-				tc.add(tc.error(etp.Token, errMsg))
+				(tc.errors.error(ERROR, etp.Token, errMsg))
 			}
 		} else {
 			if itp.Size.Value == -1 {
 				errMsg := fmt.Sprintf("explicit type, states that the variable should be an array with a fixed size of %d, instead we got a dynamic array initialization, change the explicit type or change the size of initialized array to fixed size like [%d] syntax", etp.Size.Value, etp.Size.Value)
-				tc.add(tc.error(itp.Token, errMsg))
+				(tc.errors.error(ERROR, itp.Token, errMsg))
 			} else {
 				errMsg := fmt.Sprintf("array was declared with a fixed size of %d, and inferred array size is %d, so either set the correct size or change the fixed size to dynamic using [..] syntax", etp.Size.Value, itp.Size.Value)
-				tc.add(tc.error(itp.Token, errMsg))
+				(tc.errors.error(ERROR, itp.Token, errMsg))
 			}
 		}
 		return false
@@ -833,8 +766,8 @@ func (tc *TypeChecker) checkPrimitiveTypeCastAbility(ctt, exprPrimitive *ast.Pri
 		case exprPrimitive.Kind >= ast.TypeInt8 && exprPrimitive.Kind <= ast.TypeFloat64:
 			// Numeric -> Numeric
 			if exprPrimitive.Kind > ctt.Kind {
-				errMsg := fmt.Sprintf("Be careful, casting type %v into type %v will result in some information loss", tc.highlight(exprPrimitive, Red), tc.highlight(ctt, Yellow))
-				return exprPrimitive, tc.error(exprPrimitive.Token, errMsg)
+				errMsg := fmt.Sprintf("Be careful, casting type %v into type %v will result in some information loss", tc.errors.highlight(exprPrimitive, Red), tc.errors.highlight(ctt, Yellow))
+				return exprPrimitive, tc.errors.error(ERROR, exprPrimitive.Token, errMsg)
 			}
 			return ctt, nil
 
@@ -847,8 +780,8 @@ func (tc *TypeChecker) checkPrimitiveTypeCastAbility(ctt, exprPrimitive *ast.Pri
 			return ctt, nil
 
 		case exprPrimitive.Kind == ast.TypeString:
-			errMsg := fmt.Sprintf("converting %v into %v, isn't allowed", tc.highlight(exprPrimitive, Red), tc.highlight(ctt, Yellow))
-			return nil, tc.error(exprPrimitive.Token, errMsg)
+			errMsg := fmt.Sprintf("converting %v into %v, isn't allowed", tc.errors.highlight(exprPrimitive, Red), tc.errors.highlight(ctt, Yellow))
+			return nil, tc.errors.error(ERROR, exprPrimitive.Token, errMsg)
 		}
 
 	case ctt.Kind == ast.TypeChar:
@@ -863,8 +796,8 @@ func (tc *TypeChecker) checkPrimitiveTypeCastAbility(ctt, exprPrimitive *ast.Pri
 			return ctt, nil
 
 		default:
-			errMsg := fmt.Sprintf("converting %v into %v, isn't allowed", tc.highlight(exprPrimitive, Red), tc.highlight(ctt, Yellow))
-			return nil, tc.error(exprPrimitive.Token, errMsg)
+			errMsg := fmt.Sprintf("converting %v into %v, isn't allowed", tc.errors.highlight(exprPrimitive, Red), tc.errors.highlight(ctt, Yellow))
+			return nil, tc.errors.error(ERROR, exprPrimitive.Token, errMsg)
 		}
 
 	case ctt.Kind == ast.TypeBool:
@@ -877,8 +810,8 @@ func (tc *TypeChecker) checkPrimitiveTypeCastAbility(ctt, exprPrimitive *ast.Pri
 			return ctt, nil
 
 		default:
-			errMsg := fmt.Sprintf("converting %v into %v, isn't allowed", tc.highlight(exprPrimitive, Red), tc.highlight(ctt, Yellow))
-			return nil, tc.error(exprPrimitive.Token, errMsg)
+			errMsg := fmt.Sprintf("converting %v into %v, isn't allowed", tc.errors.highlight(exprPrimitive, Red), tc.errors.highlight(ctt, Yellow))
+			return nil, tc.errors.error(ERROR, exprPrimitive.Token, errMsg)
 		}
 
 	case ctt.Kind == ast.TypeString:
@@ -886,8 +819,8 @@ func (tc *TypeChecker) checkPrimitiveTypeCastAbility(ctt, exprPrimitive *ast.Pri
 		return ctt, nil
 
 	default:
-		errMsg := fmt.Sprintf("converting %v into %v, isn't allowed", tc.highlight(exprPrimitive, Red), tc.highlight(ctt, Yellow))
-		return nil, tc.error(exprPrimitive.Token, errMsg)
+		errMsg := fmt.Sprintf("converting %v into %v, isn't allowed", tc.errors.highlight(exprPrimitive, Red), tc.errors.highlight(ctt, Yellow))
+		return nil, tc.errors.error(ERROR, exprPrimitive.Token, errMsg)
 	}
 
 	// unreachable
@@ -905,14 +838,14 @@ func (tc *TypeChecker) checkTypeAgainst(exprType ast.Type, cast *ast.CastExpress
 		// cast to the same type
 		exprPrimitive, ok := exprType.(*ast.PrimitiveType)
 		if !ok {
-			errMsg := fmt.Sprintf("types need to be of the same category constructor, meaning if the provided type is a primitive, the expr needs to give back a primitive, if it is a composite type, it needs to give back composite type, but we received %v as cast type, and expr gives back %v type", tc.highlight(castToType, Green), tc.highlight(exprType, Red))
-			tc.add(tc.error(targetExpr.GetToken(), errMsg))
+			errMsg := fmt.Sprintf("types need to be of the same category constructor, meaning if the provided type is a primitive, the expr needs to give back a primitive, if it is a composite type, it needs to give back composite type, but we received %v as cast type, and expr gives back %v type", tc.errors.highlight(castToType, Green), tc.errors.highlight(exprType, Red))
+			(tc.errors.error(ERROR, targetExpr.GetToken(), errMsg))
 			return nil
 		}
 
 		res, err := tc.checkPrimitiveTypeCastAbility(ctt, exprPrimitive)
 		if err != nil {
-			tc.add(err)
+			tc.errors.error(ERROR, cast.Token, err)
 		}
 		return res
 
@@ -920,27 +853,27 @@ func (tc *TypeChecker) checkTypeAgainst(exprType ast.Type, cast *ast.CastExpress
 
 		exprPrimitive, ok := exprType.(*ast.CompositeType)
 		if !ok {
-			errMsg := fmt.Sprintf("types need to be of the same category constructor, meaning if the provided type is a primitive, the expr needs to give back a primitive, if it is a composite type, it needs to give back composite type, but we received %v as cast type, and expr gives back %v type", tc.highlight(castToType, Green), tc.highlight(exprType, Red))
-			tc.add(tc.error(targetExpr.GetToken(), errMsg))
+			errMsg := fmt.Sprintf("types need to be of the same category constructor, meaning if the provided type is a primitive, the expr needs to give back a primitive, if it is a composite type, it needs to give back composite type, but we received %v as cast type, and expr gives back %v type", tc.errors.highlight(castToType, Green), tc.errors.highlight(exprType, Red))
+			(tc.errors.error(ERROR, targetExpr.GetToken(), errMsg))
 			return nil
 		}
 
 		if ctt.Kind != exprPrimitive.Kind {
-			errMsg := fmt.Sprintf("trying to cast an expression of type %v into %v type isn't allowed", tc.highlight(exprType, Red), tc.highlight(castToType, Green))
-			tc.add(tc.error(targetExpr.GetToken(), errMsg))
+			errMsg := fmt.Sprintf("trying to cast an expression of type %v into %v type isn't allowed", tc.errors.highlight(exprType, Red), tc.errors.highlight(castToType, Green))
+			(tc.errors.error(ERROR, targetExpr.GetToken(), errMsg))
 			return nil
 		}
 
 		if ctt.Kind == ast.TypeArray {
 			if ctt.Size.Value != exprPrimitive.Size.Value {
-				errMsg := fmt.Sprintf("array size are not equal, expression array size is %v and cast type size is %v, both of them need to be equal", tc.highlight(exprPrimitive.Size, Red), tc.highlight(ctt.Size, Green))
-				tc.add(tc.error(targetExpr.GetToken(), errMsg))
+				errMsg := fmt.Sprintf("array size are not equal, expression array size is %v and cast type size is %v, both of them need to be equal", tc.errors.highlight(exprPrimitive.Size, Red), tc.errors.highlight(ctt.Size, Green))
+				(tc.errors.error(ERROR, targetExpr.GetToken(), errMsg))
 				return nil
 			}
 
 			if !tc.typesCompatible(ctt.LeftType, exprPrimitive.LeftType) {
-				errMsg := fmt.Sprintf("trying to cast %v into %v isn't allowed", tc.highlight(exprPrimitive, Red), tc.highlight(ctt, Green))
-				tc.add(tc.error(targetExpr.GetToken(), errMsg))
+				errMsg := fmt.Sprintf("trying to cast %v into %v isn't allowed", tc.errors.highlight(exprPrimitive, Red), tc.errors.highlight(ctt, Green))
+				(tc.errors.error(ERROR, targetExpr.GetToken(), errMsg))
 
 				return nil
 			}
@@ -954,8 +887,8 @@ func (tc *TypeChecker) checkTypeAgainst(exprType ast.Type, cast *ast.CastExpress
 				TargetType:       exprPrimitive.LeftType,
 				TargetExpression: targetExpr,
 			}); tp == nil {
-				errMsg := fmt.Sprintf("trying to cast %v into %v isn't allowed", tc.highlight(exprPrimitive.LeftType, Red), tc.highlight(ctt.LeftType, Green))
-				tc.add(tc.error(targetExpr.GetToken(), errMsg))
+				errMsg := fmt.Sprintf("trying to cast %v into %v isn't allowed", tc.errors.highlight(exprPrimitive.LeftType, Red), tc.errors.highlight(ctt.LeftType, Green))
+				(tc.errors.error(ERROR, targetExpr.GetToken(), errMsg))
 
 				return nil
 			}
@@ -964,8 +897,8 @@ func (tc *TypeChecker) checkTypeAgainst(exprType ast.Type, cast *ast.CastExpress
 				TargetType:       exprPrimitive.RightType,
 				TargetExpression: targetExpr,
 			}); tp == nil {
-				errMsg := fmt.Sprintf("trying to cast %v into %v isn't allowed", tc.highlight(exprPrimitive.RightType, Red), tc.highlight(ctt.RightType, Green))
-				tc.add(tc.error(targetExpr.GetToken(), errMsg))
+				errMsg := fmt.Sprintf("trying to cast %v into %v isn't allowed", tc.errors.highlight(exprPrimitive.RightType, Red), tc.errors.highlight(ctt.RightType, Green))
+				(tc.errors.error(ERROR, targetExpr.GetToken(), errMsg))
 
 				return nil
 			}
@@ -975,8 +908,8 @@ func (tc *TypeChecker) checkTypeAgainst(exprType ast.Type, cast *ast.CastExpress
 
 	default:
 		errMsg := fmt.Sprintf("using %v as casting type isn't supported yet",
-			tc.highlight(cast.String(), Red))
-		tc.add(tc.error(cast.Token, errMsg))
+			tc.errors.highlight(cast.String(), Red))
+		(tc.errors.error(ERROR, cast.Token, errMsg))
 		return nil
 	}
 

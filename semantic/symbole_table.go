@@ -11,6 +11,7 @@ type Symbol struct {
 	IsMutable  bool
 	IsFunction bool
 	DeclNode   ast.Node
+	Used       bool
 }
 
 type Scope struct {
