@@ -235,10 +235,10 @@ func (c *Comment) String() string {
 }
 
 type Declaration struct {
-	Token     lexer.Token       // the token.LET token
-	Mutable   bool              // indicates if the vars are mutable or not
-	Inline    bool              // for function inline
-	Directive map[string]string // for non usual stuff such as #distinct types
+	Token     lexer.Token               // the token.LET token
+	Mutable   bool                      // indicates if the vars are mutable or not
+	Inline    bool                      // for function inline
+	Directive map[string]*StringLiteral // for non usual stuff such as #distinct types
 	Type      Type
 	Name      []*Identifier
 	Value     []Expression

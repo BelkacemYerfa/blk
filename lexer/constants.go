@@ -56,6 +56,8 @@ var (
 		"#partial":     TokenPartial,
 		"#force":       TokenForce,
 		"#bake":        TokenBake,
+		"#deprecated":  TokenDeprecated,
+		"#no_init":     TokenNoInit,
 	}
 
 	AssignBinOps = []TokenKind{

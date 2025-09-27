@@ -2,6 +2,7 @@ package semantic
 
 import (
 	"blk/ast"
+	"blk/lexer"
 	"fmt"
 	"math"
 )
@@ -62,6 +63,18 @@ func (tc *TypeChecker) checkDeclaration(d *ast.Declaration) {
 	isInit := d.Value != nil
 
 	name := d.Name[0].String()
+
+	nit, ok := d.Directive[lexer.TokenNoInit]
+
+	if ok && !isExplicit {
+		tc.errors.error(ERROR, nit.Token, name, " requires the type to be explicit since it uses the #no_init directive, either consider giving the type or an init value removing the #no_init directive")
+		return
+	}
+
+	if ok && isInit {
+		tc.errors.error(ERROR, nit.Token, name, " is declared with #no_init directive, meaning it shouldn't have an expression as a value, but got ", d.Value, " consider removing it")
+		return
+	}
 
 	if isExplicit && !isInit {
 		// default initialization in this case

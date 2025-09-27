@@ -91,6 +91,8 @@ type Parser struct {
 	prevToken lexer.Token // previous token of current token
 	curToken  lexer.Token
 	peekToken lexer.Token // one token lookahead
+
+	directives map[string]lexer.Token // for directives that are not tied in a special place
 }
 
 func NewParser(lex *lexer.Lexer, filepath string) *Parser {
@@ -101,6 +103,7 @@ func NewParser(lex *lexer.Lexer, filepath string) *Parser {
 		prefixParseFns: make(map[lexer.TokenKind]prefixParseFn),
 		infixParseFns:  make(map[lexer.TokenKind]infixParseFn),
 		internalFlags:  []string{},
+		directives:     make(map[string]lexer.Token),
 	}
 
 	// prefix/unary operators
@@ -258,7 +261,7 @@ func (p *Parser) Parse() *ast.Program {
 		if err != nil {
 			p.add(err)
 			p.sync(true)
-		} else {
+		} else if stmt != nil {
 			ast.Statements = append(ast.Statements, stmt)
 		}
 	}
@@ -286,6 +289,18 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		return p.parseBreakStatement()
 	case lexer.TokenCurlyBraceOpen:
 		return p.parseScope()
+	case lexer.TokenDeprecated:
+		// check there is a reason
+		p.nextToken()
+		if !p.curTokenKindIs(lexer.TokenStr) {
+			return nil, p.error(p.curToken, "expected a string after #deprecated directive, instead got ", p.curToken.Text)
+		}
+
+		p.directives["#deprecated"] = p.curToken
+		p.nextToken()
+
+		return nil, nil
+
 	case lexer.TokenIdentifier, lexer.TokenSelf:
 
 		if p.peekTokenKindIs(lexer.TokenComma) || p.peekTokenKindIs(lexer.TokenAssign) {
@@ -575,13 +590,21 @@ func (p *Parser) addDirective(stmt *ast.Declaration) {
 
 	// for types
 	if p.curTokenKindIs(lexer.TokenDistinct) {
-		stmt.Directive[lexer.TokenDistinct] = lexer.TokenDistinct
+		stmt.Directive[lexer.TokenDistinct] = &ast.StringLiteral{Value: lexer.TokenDistinct}
 		p.nextToken()
 	}
 }
 
 func (p *Parser) parseDeclaration() (*ast.Declaration, error) {
-	stmt := &ast.Declaration{Token: p.curToken}
+	stmt := &ast.Declaration{Token: p.curToken, Directive: make(map[string]*ast.StringLiteral)}
+
+	for directive, dValue := range p.directives {
+		stmt.Directive[directive] = &ast.StringLiteral{Token: dValue, Value: dValue.Text}
+	}
+
+	// reset map
+	clear(p.directives)
+
 	stmt.Mutable = stmt.Token.Kind == lexer.TokenLet
 
 	p.nextToken()
@@ -611,6 +634,16 @@ func (p *Parser) parseDeclaration() (*ast.Declaration, error) {
 	if p.curTokenKindIs(lexer.TokenAssign) {
 		// consume =
 		p.nextToken()
+
+		if p.curTokenKindIs(lexer.TokenNoInit) {
+			stmt.Directive[lexer.TokenNoInit] = &ast.StringLiteral{
+				Token: p.curToken,
+				Value: "no explicit init",
+			}
+
+			p.nextToken()
+			return stmt, nil
+		}
 
 		p.addDirective(stmt)
 
@@ -732,8 +765,8 @@ func (p *Parser) parseFields() ([]*ast.Declaration, []*ast.Method, error) {
 
 		if p.curTokenKindIs(lexer.TokenBake) {
 			// for now skip it
-			field := &ast.Declaration{Token: p.curToken, Mutable: true, Directive: map[string]string{}}
-			field.Directive["bake"] = "bake"
+			field := &ast.Declaration{Token: p.curToken, Mutable: true, Directive: map[string]*ast.StringLiteral{}}
+			field.Directive["#bake"] = &ast.StringLiteral{Token: p.curToken, Value: "#bake"}
 
 			p.nextToken()
 

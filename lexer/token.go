@@ -33,6 +33,8 @@ const (
 	TokenPartial     TokenKind = "#partial"
 	TokenForce       TokenKind = "#force"
 	TokenBake        TokenKind = "#bake"
+	TokenDeprecated  TokenKind = "#deprecated"
+	TokenNoInit      TokenKind = "#no_init"
 
 	// Units
 	TokenCurlyBraceOpen  TokenKind = "{"
@@ -124,6 +126,7 @@ const (
 	TokenFloat64 TokenKind = "f64"
 	TokenMap     TokenKind = "map"
 	TokenAny     TokenKind = "any"
+	TokenBryhx   TokenKind = "bryhx"
 
 	// Record types
 	TokenStruct TokenKind = "struct"

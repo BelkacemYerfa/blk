@@ -136,7 +136,6 @@ func (a *Analyzer) collectExpressionSymbol(node ast.Expression) {
 }
 
 func (a *Analyzer) collectDeclSymbol(node *ast.Declaration) {
-
 	var declarationType ast.Type
 
 	if node.Type != nil {
