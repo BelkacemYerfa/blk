@@ -72,6 +72,7 @@ const (
 	TypeEnum
 	TypeStruct
 	TypeFunction
+	TypeAlias
 )
 
 var PrimitiveTypes = map[lexer.TokenKind]TypeKind{
@@ -162,6 +163,21 @@ func (ct *CompositeType) String() string {
 		out.WriteString(ct.RightType.String())
 	}
 
+	return out.String()
+}
+
+type AliasType struct {
+	Token lexer.Token
+	Kind  TypeKind
+	Alias *Identifier
+}
+
+func (ct *AliasType) Type() TypeKind {
+	return ct.Kind
+}
+func (ct *AliasType) String() string {
+	var out bytes.Buffer
+	out.WriteString(ct.Alias.String())
 	return out.String()
 }
 
@@ -336,18 +352,18 @@ type Method struct {
 	Value *FunctionExpression // any value type
 }
 
-type StructExpression struct {
+type StructType struct {
 	Token   lexer.Token // the token.LET token
 	Fields  []*Declaration
 	Methods []*Method
 }
 
-func (ss *StructExpression) Type() TypeKind {
+func (ss *StructType) Type() TypeKind {
 	return TypeStruct
 }
-func (ss *StructExpression) TokenLiteral() string  { return ss.Token.Text }
-func (nt *StructExpression) GetToken() lexer.Token { return nt.Token }
-func (ss *StructExpression) String() string {
+func (ss *StructType) TokenLiteral() string  { return ss.Token.Text }
+func (nt *StructType) GetToken() lexer.Token { return nt.Token }
+func (ss *StructType) String() string {
 	var out bytes.Buffer
 	out.WriteString(ss.TokenLiteral())
 	out.WriteString(" { ")
@@ -374,17 +390,17 @@ func (ss *StructExpression) String() string {
 	return out.String()
 }
 
-type EnumExpression struct {
+type EnumType struct {
 	Token lexer.Token // the token.LET token
 	Body  []*AssignExpression
 }
 
-func (ss *EnumExpression) Type() TypeKind {
+func (ss *EnumType) Type() TypeKind {
 	return TypeEnum
 }
-func (ss *EnumExpression) TokenLiteral() string  { return ss.Token.Text }
-func (nt *EnumExpression) GetToken() lexer.Token { return nt.Token }
-func (ss *EnumExpression) String() string {
+func (ss *EnumType) TokenLiteral() string  { return ss.Token.Text }
+func (nt *EnumType) GetToken() lexer.Token { return nt.Token }
+func (ss *EnumType) String() string {
 	var out bytes.Buffer
 	out.WriteString(ss.TokenLiteral())
 	out.WriteString(" { ")
@@ -395,49 +411,6 @@ func (ss *EnumExpression) String() string {
 				out.WriteString(", ")
 			}
 		}
-	}
-	out.WriteString(" }")
-	return out.String()
-}
-
-type MatchArm struct {
-	Token   lexer.Token
-	Pattern Expression
-	Body    *BlockExpression
-}
-
-type MatchExpression struct {
-	Token    lexer.Token
-	MatchKey Expression // mainly identifiers of different type
-	Arms     []MatchArm
-	Default  *MatchArm
-}
-
-func (rs *MatchExpression) expressionNode()       {}
-func (rs *MatchExpression) TokenLiteral() string  { return rs.Token.Text }
-func (nt *MatchExpression) GetToken() lexer.Token { return nt.Token }
-func (rs *MatchExpression) String() string {
-	var out bytes.Buffer
-	out.WriteString(rs.TokenLiteral() + " ")
-	out.WriteString(rs.MatchKey.String())
-	out.WriteString(" { ")
-	if rs.Arms != nil {
-		for idx, arm := range rs.Arms {
-			out.WriteString(arm.Pattern.String())
-			out.WriteString(" => {")
-			out.WriteString(arm.Body.String())
-			out.WriteString(" }")
-			if idx+1 <= len(rs.Arms)-1 {
-				out.WriteString(", ")
-			}
-		}
-	}
-	// default case (catch all)
-	if rs.Default != nil {
-		out.WriteString(rs.Default.Pattern.String())
-		out.WriteString(" => {")
-		out.WriteString(rs.Default.Body.String())
-		out.WriteString(" }")
 	}
 	out.WriteString(" }")
 	return out.String()

@@ -503,6 +503,12 @@ func (p *Parser) parsePointerType(tok lexer.Token) (ast.Type, error) {
 	return ptr, nil
 }
 
+func (p *Parser) parseTypeAlias(tok lexer.Token) (ast.Type, error) {
+	alias := &ast.AliasType{Token: tok, Kind: ast.TypeAlias}
+	alias.Alias = p.parseIdentifier().(*ast.Identifier)
+	return alias, nil
+}
+
 func (p *Parser) parsePrimitiveType(tok lexer.Token) (ast.Type, error) {
 	primitive := &ast.PrimitiveType{
 		Token: tok,
@@ -563,7 +569,7 @@ func (p *Parser) parseType() (ast.Type, error) {
 
 	case lexer.TokenStruct:
 		// anonymous struct
-		exp := p.parseStructExpression()
+		exp := p.parseStructType()
 
 		if exp == nil {
 			return nil, nil
@@ -571,7 +577,7 @@ func (p *Parser) parseType() (ast.Type, error) {
 		return exp, nil
 
 	case lexer.TokenEnum:
-		exp := p.parseEnumExpression()
+		exp := p.parseEnumType()
 
 		if exp == nil {
 			return nil, nil
@@ -579,8 +585,7 @@ func (p *Parser) parseType() (ast.Type, error) {
 		return exp, nil
 
 	case lexer.TokenIdentifier:
-		// TODO: needed to be handled when using a type alias
-		return nil, p.error(p.curToken, "not supported yet")
+		return p.parseTypeAlias(p.curToken)
 
 	default:
 		// primitive type
@@ -757,8 +762,8 @@ func (p *Parser) parseExpressionStatement() (*ast.ExpressionStatement, error) {
 	return stmt, nil
 }
 
-func (p *Parser) parseStructExpression() *ast.StructExpression {
-	expr := &ast.StructExpression{Token: p.curToken}
+func (p *Parser) parseStructType() *ast.StructType {
+	expr := &ast.StructType{Token: p.curToken}
 	p.nextToken()
 
 	if !p.curTokenKindIs(lexer.TokenCurlyBraceOpen) {
@@ -770,7 +775,7 @@ func (p *Parser) parseStructExpression() *ast.StructExpression {
 
 	if p.curTokenKindIs(lexer.TokenBracketClose) {
 		p.nextToken()
-		return &ast.StructExpression{
+		return &ast.StructType{
 			Token:   expr.Token,
 			Fields:  []*ast.Declaration{},
 			Methods: []*ast.Method{},
@@ -913,8 +918,8 @@ func (p *Parser) parseFields() ([]*ast.Declaration, []*ast.Method, error) {
 	return fields, methods, nil
 }
 
-func (p *Parser) parseEnumExpression() *ast.EnumExpression {
-	expr := &ast.EnumExpression{Token: p.curToken}
+func (p *Parser) parseEnumType() *ast.EnumType {
+	expr := &ast.EnumType{Token: p.curToken}
 
 	// consume the enum lexer.token
 	p.nextToken()
@@ -928,7 +933,7 @@ func (p *Parser) parseEnumExpression() *ast.EnumExpression {
 
 	if p.curTokenKindIs(lexer.TokenBracketClose) {
 		p.nextToken()
-		return &ast.EnumExpression{
+		return &ast.EnumType{
 			Token: expr.Token,
 			Body:  []*ast.AssignExpression{},
 		}
