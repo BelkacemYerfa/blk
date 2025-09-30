@@ -266,6 +266,24 @@ func (ls *Declaration) String() string {
 	return out.String()
 }
 
+type TypeStatement struct {
+	Token    lexer.Token
+	Alias    *Identifier
+	Type     Type
+	Distinct bool
+}
+
+func (ls *TypeStatement) statementNode()        {}
+func (ls *TypeStatement) TokenLiteral() string  { return ls.Token.Text }
+func (nt *TypeStatement) GetToken() lexer.Token { return nt.Token }
+func (ls *TypeStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString(ls.TokenLiteral() + " ")
+	out.WriteString(ls.Alias.String() + " = ")
+	out.WriteString(ls.Type.String())
+	return out.String()
+}
+
 type DirectiveType int
 
 const (
@@ -324,7 +342,6 @@ type StructExpression struct {
 	Methods []*Method
 }
 
-func (ss *StructExpression) expressionNode() {}
 func (ss *StructExpression) Type() TypeKind {
 	return TypeStruct
 }
@@ -362,7 +379,6 @@ type EnumExpression struct {
 	Body  []*AssignExpression
 }
 
-func (ss *EnumExpression) expressionNode() {}
 func (ss *EnumExpression) Type() TypeKind {
 	return TypeEnum
 }

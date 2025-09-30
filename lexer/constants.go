@@ -22,6 +22,7 @@ var (
 		"next":   TokenNext,
 		"break":  TokenBreak,
 		"cast":   TokenCast,
+		"type":   TokenType,
 		"true":   TokenBool,
 		"false":  TokenBool,
 		"nul":    TokenNul,
@@ -60,7 +61,7 @@ var (
 		"#no_init":     TokenNoInit,
 	}
 
-	AssignBinOps = []TokenKind{
+	AssignBinOps = [...]TokenKind{
 		TokenAssignSlash,
 		TokenAssignMultiply,
 		TokenAssignModule,
@@ -75,7 +76,7 @@ var (
 		TokenAssignBitXor,
 	}
 
-	AssignOp = []TokenKind{
+	AssignOp = [...]TokenKind{
 		TokenAssign,
 		TokenWalrus,
 		TokenBind,

@@ -34,7 +34,7 @@ func (tc *TypeChecker) checkStmt(stmt ast.Statement) {
 	if tc.symtab.GlobalScope == tc.symtab.CurrentScope {
 		// only declaration and imports allowed
 		switch stmt.(type) {
-		case *ast.Declaration, *ast.ImportStatement:
+		case *ast.Declaration, *ast.ImportStatement, *ast.TypeStatement:
 		default:
 			(tc.errors.error(ERROR, stmt.GetToken(), "the global scope only allows for declaration or import statements, everything else if forbidden"))
 			return

@@ -125,8 +125,6 @@ func NewParser(lex *lexer.Lexer, filepath string) *Parser {
 	p.registerPrefix(lexer.TokenBraceOpen, p.parseGroupedExpression)
 	p.registerPrefix(lexer.TokenIf, p.parseIfExpression)
 	p.registerPrefix(lexer.TokenFn, p.parseFunctionExpression)
-	p.registerPrefix(lexer.TokenStruct, p.parseStructExpression)
-	p.registerPrefix(lexer.TokenEnum, p.parseEnumExpression)
 	p.registerPrefix(lexer.TokenSwitch, p.parseSwitchExpression)
 	p.registerPrefix(lexer.TokenCast, p.parseCastExpression)
 
@@ -277,6 +275,8 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		return p.parseCommentStatement()
 	case lexer.TokenLet, lexer.TokenConst:
 		return p.parseDeclaration()
+	case lexer.TokenType:
+		return p.parseTypeStatement()
 	case lexer.TokenReturn:
 		return p.parseReturnStatement()
 	case lexer.TokenImport:
@@ -568,7 +568,15 @@ func (p *Parser) parseType() (ast.Type, error) {
 		if exp == nil {
 			return nil, nil
 		}
-		return exp.(*ast.StructExpression), nil
+		return exp, nil
+
+	case lexer.TokenEnum:
+		exp := p.parseEnumExpression()
+
+		if exp == nil {
+			return nil, nil
+		}
+		return exp, nil
 
 	case lexer.TokenIdentifier:
 		// TODO: needed to be handled when using a type alias
@@ -585,12 +593,6 @@ func (p *Parser) addDirective(stmt *ast.Declaration) {
 	// for function
 	if p.curTokenKindIs(lexer.TokenInline) && p.peekTokenKindIs(lexer.TokenFn) {
 		stmt.Inline = true
-		p.nextToken()
-	}
-
-	// for types
-	if p.curTokenKindIs(lexer.TokenDistinct) {
-		stmt.Directive[lexer.TokenDistinct] = &ast.StringLiteral{Value: lexer.TokenDistinct}
 		p.nextToken()
 	}
 }
@@ -660,6 +662,38 @@ func (p *Parser) parseDeclaration() (*ast.Declaration, error) {
 	return stmt, nil
 }
 
+func (p *Parser) parseTypeStatement() (*ast.TypeStatement, error) {
+	stmt := &ast.TypeStatement{Token: p.curToken}
+	p.nextToken()
+
+	if !p.curTokenKindIs(lexer.TokenIdentifier) {
+		return nil, p.error(p.curToken, "expected an identifier, instead got ", p.curToken.Text)
+	}
+
+	stmt.Alias = p.parseIdentifier().(*ast.Identifier)
+
+	if !p.curTokenKindIs(lexer.TokenAssign) {
+		return nil, p.error(p.curToken, "expected an assign (=), instead got ", p.curToken.Text)
+	}
+
+	p.nextToken()
+
+	if p.curTokenKindIs(lexer.TokenDistinct) {
+		stmt.Distinct = true
+		p.nextToken()
+	}
+
+	tp, err := p.parseType()
+
+	if err != nil {
+		return nil, err
+	}
+
+	stmt.Type = tp
+
+	return stmt, nil
+}
+
 func (p *Parser) parseReturnStatement() (*ast.ReturnStatement, error) {
 	stmt := &ast.ReturnStatement{Token: p.curToken}
 	p.nextToken()
@@ -723,7 +757,7 @@ func (p *Parser) parseExpressionStatement() (*ast.ExpressionStatement, error) {
 	return stmt, nil
 }
 
-func (p *Parser) parseStructExpression() ast.Expression {
+func (p *Parser) parseStructExpression() *ast.StructExpression {
 	expr := &ast.StructExpression{Token: p.curToken}
 	p.nextToken()
 
@@ -879,7 +913,7 @@ func (p *Parser) parseFields() ([]*ast.Declaration, []*ast.Method, error) {
 	return fields, methods, nil
 }
 
-func (p *Parser) parseEnumExpression() ast.Expression {
+func (p *Parser) parseEnumExpression() *ast.EnumExpression {
 	expr := &ast.EnumExpression{Token: p.curToken}
 
 	// consume the enum lexer.token
