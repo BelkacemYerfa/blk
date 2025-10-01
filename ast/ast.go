@@ -282,17 +282,17 @@ func (ls *Declaration) String() string {
 	return out.String()
 }
 
-type TypeStatement struct {
+type TypeDeclaration struct {
 	Token    lexer.Token
 	Alias    *Identifier
 	Type     Type
 	Distinct bool
 }
 
-func (ls *TypeStatement) statementNode()        {}
-func (ls *TypeStatement) TokenLiteral() string  { return ls.Token.Text }
-func (nt *TypeStatement) GetToken() lexer.Token { return nt.Token }
-func (ls *TypeStatement) String() string {
+func (ls *TypeDeclaration) statementNode()        {}
+func (ls *TypeDeclaration) TokenLiteral() string  { return ls.Token.Text }
+func (nt *TypeDeclaration) GetToken() lexer.Token { return nt.Token }
+func (ls *TypeDeclaration) String() string {
 	var out bytes.Buffer
 	out.WriteString(ls.TokenLiteral() + " ")
 	out.WriteString(ls.Alias.String() + " = ")

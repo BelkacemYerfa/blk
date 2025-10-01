@@ -34,7 +34,7 @@ func (tc *TypeChecker) checkStmt(stmt ast.Statement) {
 	if tc.symtab.GlobalScope == tc.symtab.CurrentScope {
 		// only declaration and imports allowed
 		switch stmt.(type) {
-		case *ast.Declaration, *ast.ImportStatement, *ast.TypeStatement:
+		case *ast.Declaration, *ast.ImportStatement, *ast.TypeDeclaration:
 		default:
 			(tc.errors.error(ERROR, stmt.GetToken(), "the global scope only allows for declaration or import statements, everything else if forbidden"))
 			return
@@ -147,7 +147,30 @@ func (tc *TypeChecker) checkDeclaration(d *ast.Declaration) {
 		// no explicit type, type will get inferred from the assign expression
 		d.Type = tc.inferExpr(expr)
 	}
+}
 
+func (tc *TypeChecker) unalias(tp ast.Type) ast.Type {
+
+	alsTp, ok := tp.(*ast.AliasType)
+	if !ok {
+		return tp
+	}
+
+	// search for the alias
+	sym := tc.symtab.CurrentScope.Resolve(alsTp.Alias.Value)
+
+	if sym == nil {
+		(tc.errors.error(ERROR, alsTp.Token, "type ", alsTp.Alias, " wasn't found"))
+		return nil
+	}
+
+	sym.Used = true
+
+	if sym.Kind.Type() == ast.TypeAlias {
+		return tc.unalias(sym.Kind)
+	}
+
+	return sym.Kind
 }
 
 func (tc *TypeChecker) inferExpr(expr ast.Expression) ast.Type {

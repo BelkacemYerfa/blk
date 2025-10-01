@@ -56,6 +56,9 @@ func (a *Analyzer) collectSymbols(node ast.Node) {
 	case *ast.Declaration:
 		a.collectDeclSymbol(n)
 
+	case *ast.TypeDeclaration:
+		a.collectTypeSymbol(n)
+
 	case *ast.ScopeStatement:
 		for _, stmt := range n.Body.Body {
 			a.collectSymbols(stmt)
@@ -140,7 +143,7 @@ func (a *Analyzer) collectDeclSymbol(node *ast.Declaration) {
 
 	if node.Type != nil {
 		// explicit type
-		declarationType = node.Type
+		declarationType = a.types.unalias(node.Type)
 	} else {
 		// first support only first value
 		declarationType = a.types.inferExpr(node.Value[0])
@@ -160,5 +163,19 @@ func (a *Analyzer) collectDeclSymbol(node *ast.Declaration) {
 	// body check of different expression such as functions, if blocks, switches, ...ect
 	if len(node.Value) > 0 {
 		a.collectExpressionSymbol(node.Value[0])
+	}
+}
+
+func (a *Analyzer) collectTypeSymbol(node *ast.TypeDeclaration) {
+	name := node.Alias.String()
+	declarationType := a.types.unalias(node.Type)
+
+	if err := a.symtab.CurrentScope.Define(name, &Symbol{
+		Name:     node.Alias.String(),
+		Kind:     declarationType,
+		DeclNode: node,
+	}); err != nil {
+		a.errors.error(ERROR, node.Token, err)
+		return
 	}
 }

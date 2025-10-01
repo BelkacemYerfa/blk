@@ -667,8 +667,8 @@ func (p *Parser) parseDeclaration() (*ast.Declaration, error) {
 	return stmt, nil
 }
 
-func (p *Parser) parseTypeStatement() (*ast.TypeStatement, error) {
-	stmt := &ast.TypeStatement{Token: p.curToken}
+func (p *Parser) parseTypeStatement() (*ast.TypeDeclaration, error) {
+	stmt := &ast.TypeDeclaration{Token: p.curToken}
 	p.nextToken()
 
 	if !p.curTokenKindIs(lexer.TokenIdentifier) {
