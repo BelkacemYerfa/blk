@@ -22,6 +22,7 @@ const (
 	TokenImport TokenKind = "import"
 	TokenCast   TokenKind = "cast"
 	TokenType   TokenKind = "type"
+	TokenTest   TokenKind = "test"
 
 	// nul value
 	TokenNul TokenKind = "nul"

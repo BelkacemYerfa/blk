@@ -277,6 +277,8 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 		return p.parseDeclaration()
 	case lexer.TokenType:
 		return p.parseTypeStatement()
+	case lexer.TokenTest:
+		return p.parseTestStatement()
 	case lexer.TokenReturn:
 		return p.parseReturnStatement()
 	case lexer.TokenImport:
@@ -695,6 +697,33 @@ func (p *Parser) parseTypeStatement() (*ast.TypeDeclaration, error) {
 	}
 
 	stmt.Type = tp
+
+	return stmt, nil
+}
+
+func (p *Parser) parseTestStatement() (*ast.TestStatement, error) {
+	stmt := &ast.TestStatement{Token: p.curToken}
+	p.nextToken()
+
+	if !p.curTokenKindIs(lexer.TokenStr) {
+		return nil, p.error(p.curToken, "expected a test name, instead got ", p.curToken.Text)
+	}
+
+	stmt.Name = p.curToken.Text
+	p.nextToken()
+
+	if !p.curTokenKindIs(lexer.TokenCurlyBraceOpen) {
+		return nil, p.error(p.curToken, "expected a {, instead got ", p.curToken.Text)
+	}
+	p.nextToken()
+
+	body := p.parseBlockStatement()
+
+	if body == nil {
+		return nil, nil
+	}
+
+	stmt.Body = body.(*ast.BlockExpression)
 
 	return stmt, nil
 }
@@ -1882,7 +1911,7 @@ func (p *Parser) parseBlockStatement() ast.Expression {
 	}
 
 	if !p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
-		p.error(p.curToken, "end of block expression expects }, instead got ", p.curToken.Text)
+		p.add(p.error(p.curToken, "end of block expression expects }, instead got ", p.curToken.Text))	
 		return nil
 	}
 

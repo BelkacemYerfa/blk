@@ -312,6 +312,23 @@ const (
 	ForceDirective
 )
 
+type TestStatement struct {
+	Token lexer.Token
+	Name  string
+	Body  *BlockExpression
+}
+
+func (ls *TestStatement) statementNode()        {}
+func (ls *TestStatement) TokenLiteral() string  { return ls.Token.Text }
+func (nt *TestStatement) GetToken() lexer.Token { return nt.Token }
+func (ls *TestStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString(ls.TokenLiteral() + " ")
+	out.WriteString(ls.Name)
+	out.WriteString(ls.Body.String())
+	return out.String()
+}
+
 type ImportStatement struct {
 	Token      lexer.Token // the token.LET token
 	Alias      *Identifier // alias for module name

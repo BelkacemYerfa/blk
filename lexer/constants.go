@@ -23,6 +23,7 @@ var (
 		"break":  TokenBreak,
 		"cast":   TokenCast,
 		"type":   TokenType,
+		"test":   TokenTest,
 		"true":   TokenBool,
 		"false":  TokenBool,
 		"nul":    TokenNul,
