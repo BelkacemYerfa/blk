@@ -13,7 +13,6 @@ var (
 		"if":     TokenIf,
 		"do":     TokenDo,
 		"else":   TokenElse,
-		"use":    TokenDo,
 		"fn":     TokenFn,
 		"for":    TokenFor,
 		"in":     TokenIn,

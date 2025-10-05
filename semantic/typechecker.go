@@ -188,6 +188,9 @@ func (tc *TypeChecker) inferExpr(expr ast.Expression) ast.Type {
 	case *ast.IfExpression:
 		return tc.inferIfExprType(e)
 
+	case *ast.SwitchExpression:
+		return tc.inferSwitchExprType(e)
+
 	case *ast.FunctionExpression:
 		return tc.inferFunctionType(e)
 
@@ -419,7 +422,6 @@ func (tc *TypeChecker) inferBlockExprType(block *ast.BlockExpression) ast.Type {
 }
 
 func (tc *TypeChecker) inferIfExprType(ifExpr *ast.IfExpression) ast.Type {
-	// check that the condition evaluates to a boolean
 
 	conditionType := tc.inferExpr(ifExpr.Condition)
 
@@ -427,6 +429,7 @@ func (tc *TypeChecker) inferIfExprType(ifExpr *ast.IfExpression) ast.Type {
 		return nil
 	}
 
+	// check that the condition evaluates to a boolean
 	if conditionType.Type() != ast.TypeBool {
 		errMsg := fmt.Sprintf("condition on if statement needs to be of type bool, instead got type %v", tc.errors.highlight(conditionType, Red))
 		(tc.errors.error(ERROR, ifExpr.Condition.GetToken(), errMsg))
@@ -442,6 +445,40 @@ func (tc *TypeChecker) inferIfExprType(ifExpr *ast.IfExpression) ast.Type {
 	}
 
 	return tt
+}
+
+func (tc *TypeChecker) inferSwitchExprType(switchExpr *ast.SwitchExpression) ast.Type {
+	switchTargetType := tc.inferExpr(switchExpr.Condition)
+
+	if switchTargetType == nil {
+		return nil
+	}
+
+	tc.symtab.EnterScope()
+	defer tc.symtab.ExitScope()
+
+	var bodyType ast.Type
+
+	for _, cs := range switchExpr.Cases {
+		// check the arm pattern of each case
+		for _, csArm := range cs.ArmPattern {
+			csArmType := tc.inferExpr(csArm)
+
+			if csArmType == nil {
+				return nil
+			}
+
+			if csArmType.Type() != switchTargetType.Type() {
+				errMsg := fmt.Sprintf("%v arm is of type %v that doesn't match %v type, consider changing the value type", csArm, tc.errors.highlight(csArmType, Red), tc.errors.highlight(switchTargetType, Yellow))
+				(tc.errors.error(ERROR, switchExpr.Condition.GetToken(), errMsg))
+			}
+		}
+
+		// check the body of each case
+		bodyType = tc.inferBlockExprType(cs.Body)
+	}
+
+	return bodyType
 }
 
 func (tc *TypeChecker) inferFunctionType(fn *ast.FunctionExpression) ast.Type {
