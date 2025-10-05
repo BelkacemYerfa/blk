@@ -211,6 +211,9 @@ func (tc *TypeChecker) inferExpr(expr ast.Expression) ast.Type {
 	case *ast.ArrayLiteral:
 		return tc.inferArrayType(e)
 
+	case *ast.IndexExpression:
+		return tc.inferIndexType(e)
+
 	case *ast.CastExpression:
 		// check if expression is supported first
 		switch e.TargetExpression.(type) {
@@ -479,6 +482,64 @@ func (tc *TypeChecker) inferSwitchExprType(switchExpr *ast.SwitchExpression) ast
 	}
 
 	return bodyType
+}
+
+func (tc *TypeChecker) inferIndexType(idxExpr *ast.IndexExpression) ast.Type {
+	leftType := tc.inferExpr(idxExpr.Left)
+
+	if leftType == nil {
+		return nil
+	}
+
+	if leftType.Type() != ast.TypeArray && leftType.Type() != ast.TypeMap {
+		errMsg := fmt.Sprintf("left side of index expression should be either an array or map, instead got %v", tc.errors.highlight(leftType, Red))
+		(tc.errors.error(ERROR, idxExpr.Left.GetToken(), errMsg))
+		return nil
+	}
+
+	castLeftType := leftType.(*ast.CompositeType)
+	startType := tc.inferExpr(idxExpr.Start)
+
+	if leftType.Type() == ast.TypeMap {
+		keyType := castLeftType.LeftType
+
+		if !tc.typesCompatible(keyType, startType) {
+			errMsg := fmt.Sprintf("provided key type is %v, doesn't match the original expected type %v", tc.errors.highlight(startType, Red), tc.errors.highlight(keyType, Yellow))
+			(tc.errors.error(ERROR, idxExpr.Left.GetToken(), errMsg))
+			return nil
+		}
+
+		// check if end exists
+		if idxExpr.Range {
+			(tc.errors.error(ERROR, idxExpr.Left.GetToken(), "left side of index expression is of type map, thus u can't use range with map"))
+			return nil
+		}
+	}
+
+	if leftType.Type() == ast.TypeArray {
+
+		if startType.Type() < ast.TypeInt8 || startType.Type() > ast.TypeUInt64 {
+			errMsg := fmt.Sprintf("left side of index expression is of type array, thus the start index should be of type int, instead got %v", tc.errors.highlight(leftType, Red))
+			(tc.errors.error(ERROR, idxExpr.Left.GetToken(), errMsg))
+			return nil
+		}
+
+		if idxExpr.Range {
+			endType := tc.inferExpr(idxExpr.End)
+
+			if endType != nil && (startType.Type() < ast.TypeInt8 || startType.Type() > ast.TypeUInt64) {
+				errMsg := fmt.Sprintf("left side of index expression is of type array, thus the end bound should be of type int, instead got %v", tc.errors.highlight(leftType, Red))
+				(tc.errors.error(ERROR, idxExpr.Left.GetToken(), errMsg))
+				return nil
+			}
+		}
+	}
+
+	if leftType.Type() == ast.TypeMap {
+		return castLeftType.RightType
+	}
+
+	return castLeftType.LeftType
 }
 
 func (tc *TypeChecker) inferFunctionType(fn *ast.FunctionExpression) ast.Type {
