@@ -70,6 +70,7 @@ const (
 	TypeMap
 	TypePointer
 	TypeEnum
+	TypeUnion
 	TypeStruct
 	TypeFunction
 	TypeAlias
@@ -104,9 +105,10 @@ type PrimitiveType struct {
 	Signed bool // for ints
 }
 
-func (p *PrimitiveType) Type() TypeKind {
-	return p.Kind
-}
+func (p *PrimitiveType) Type() TypeKind        { return p.Kind }
+func (p *PrimitiveType) GetToken() lexer.Token { return p.Token }
+func (p *PrimitiveType) TokenLiteral() string  { return p.Token.Text }
+func (p *PrimitiveType) expressionNode()       {}
 func (p *PrimitiveType) String() string {
 	var out bytes.Buffer
 	if p.Size > 0 {
@@ -142,9 +144,10 @@ type CompositeType struct {
 	Size      *IntegerLiteral
 }
 
-func (ct *CompositeType) Type() TypeKind {
-	return ct.Kind
-}
+func (ct *CompositeType) Type() TypeKind        { return ct.Kind }
+func (ct *CompositeType) GetToken() lexer.Token { return ct.Token }
+func (ct *CompositeType) TokenLiteral() string  { return ct.Token.Text }
+func (ct *CompositeType) expressionNode()       {}
 func (ct *CompositeType) String() string {
 	var out bytes.Buffer
 	if ct.Kind == TypeArray {
@@ -172,12 +175,13 @@ type AliasType struct {
 	Alias *Identifier
 }
 
-func (ct *AliasType) Type() TypeKind {
-	return ct.Kind
-}
-func (ct *AliasType) String() string {
+func (as *AliasType) Type() TypeKind        { return as.Kind }
+func (as *AliasType) GetToken() lexer.Token { return as.Token }
+func (as *AliasType) TokenLiteral() string  { return as.Token.Text }
+func (as *AliasType) expressionNode()       {}
+func (as *AliasType) String() string {
 	var out bytes.Buffer
-	out.WriteString(ct.Alias.String())
+	out.WriteString(as.Alias.String())
 	return out.String()
 }
 
@@ -196,9 +200,10 @@ type FunctionType struct {
 	Return []Type // support for multi return types
 }
 
-func (ft *FunctionType) Type() TypeKind {
-	return ft.Kind
-}
+func (ft *FunctionType) Type() TypeKind        { return ft.Kind }
+func (ft *FunctionType) GetToken() lexer.Token { return ft.Token }
+func (ft *FunctionType) TokenLiteral() string  { return ft.Token.Text }
+func (ft *FunctionType) expressionNode()       {}
 func (ft *FunctionType) String() string {
 	var out bytes.Buffer
 	out.WriteString(ft.Token.Kind)
@@ -228,9 +233,10 @@ type PointerType struct {
 	Right Type
 }
 
-func (ptr *PointerType) Type() TypeKind {
-	return ptr.Kind
-}
+func (ptr *PointerType) Type() TypeKind        { return ptr.Kind }
+func (ptr *PointerType) GetToken() lexer.Token { return ptr.Token }
+func (ptr *PointerType) TokenLiteral() string  { return ptr.Token.Text }
+func (ptr *PointerType) expressionNode()       {}
 func (ptr *PointerType) String() string {
 	var out bytes.Buffer
 	out.WriteString(ptr.Token.Kind)
@@ -375,9 +381,8 @@ type StructType struct {
 	Methods []*Method
 }
 
-func (ss *StructType) Type() TypeKind {
-	return TypeStruct
-}
+func (ss *StructType) Type() TypeKind        { return TypeStruct }
+func (ss *StructType) expressionNode()       {}
 func (ss *StructType) TokenLiteral() string  { return ss.Token.Text }
 func (nt *StructType) GetToken() lexer.Token { return nt.Token }
 func (ss *StructType) String() string {
@@ -412,12 +417,36 @@ type EnumType struct {
 	Body  []*AssignExpression
 }
 
-func (ss *EnumType) Type() TypeKind {
-	return TypeEnum
-}
+func (ss *EnumType) Type() TypeKind        { return TypeEnum }
+func (ss *EnumType) expressionNode()       {}
 func (ss *EnumType) TokenLiteral() string  { return ss.Token.Text }
 func (nt *EnumType) GetToken() lexer.Token { return nt.Token }
 func (ss *EnumType) String() string {
+	var out bytes.Buffer
+	out.WriteString(ss.TokenLiteral())
+	out.WriteString(" { ")
+	if ss.Body != nil {
+		for idx, expr := range ss.Body {
+			out.WriteString(expr.String())
+			if idx+1 <= len(ss.Body)-1 {
+				out.WriteString(", ")
+			}
+		}
+	}
+	out.WriteString(" }")
+	return out.String()
+}
+
+type UnionType struct {
+	Token lexer.Token // the token.LET token
+	Body  []Type
+}
+
+func (ss *UnionType) Type() TypeKind        { return TypeUnion }
+func (ss *UnionType) expressionNode()       {}
+func (ss *UnionType) TokenLiteral() string  { return ss.Token.Text }
+func (nt *UnionType) GetToken() lexer.Token { return nt.Token }
+func (ss *UnionType) String() string {
 	var out bytes.Buffer
 	out.WriteString(ss.TokenLiteral())
 	out.WriteString(" { ")

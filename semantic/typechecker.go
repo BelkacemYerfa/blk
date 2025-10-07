@@ -471,7 +471,7 @@ func (tc *TypeChecker) inferSwitchExprType(switchExpr *ast.SwitchExpression) ast
 				return nil
 			}
 
-			if csArmType.Type() != switchTargetType.Type() {
+			if csArmType.Type() != switchTargetType.Type() && csArmType.Type() != ast.TypeAny {
 				errMsg := fmt.Sprintf("%v arm is of type %v that doesn't match %v type, consider changing the value type", csArm, tc.errors.highlight(csArmType, Red), tc.errors.highlight(switchTargetType, Yellow))
 				(tc.errors.error(ERROR, switchExpr.Condition.GetToken(), errMsg))
 			}

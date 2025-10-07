@@ -571,20 +571,22 @@ func (p *Parser) parseType() (ast.Type, error) {
 
 	case lexer.TokenStruct:
 		// anonymous struct
-		exp := p.parseStructType()
-
-		if exp == nil {
-			return nil, nil
+		if exp := p.parseStructType(); exp != nil {
+			return exp, nil
 		}
-		return exp, nil
+		return nil, nil
 
 	case lexer.TokenEnum:
-		exp := p.parseEnumType()
-
-		if exp == nil {
-			return nil, nil
+		if exp := p.parseEnumType(); exp != nil {
+			return exp, nil
 		}
-		return exp, nil
+		return nil, nil
+
+	case lexer.TokenUnion:
+		if exp := p.parseUnionType(); exp != nil {
+			return exp, nil
+		}
+		return nil, nil
 
 	case lexer.TokenIdentifier:
 		return p.parseTypeAlias(p.curToken)
@@ -1026,6 +1028,48 @@ func (p *Parser) parseEnumFields() ([]*ast.AssignExpression, error) {
 	return fields, nil
 }
 
+func (p *Parser) parseUnionType() *ast.UnionType {
+	expr := &ast.UnionType{Token: p.curToken}
+	p.nextToken()
+
+	if !p.curTokenKindIs(lexer.TokenCurlyBraceOpen) {
+		p.add(p.error(p.curToken, "expected curly brace open {, instead got ", p.curToken.Text))
+		return nil
+	}
+
+	p.nextToken()
+
+	if p.curTokenKindIs(lexer.TokenBracketClose) {
+		p.nextToken()
+		return &ast.UnionType{
+			Token: expr.Token,
+			Body:  []ast.Type{},
+		}
+	}
+
+	for !p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
+		tp, err := p.parseType()
+
+		if err != nil {
+			p.add(p.error(p.curToken, err))
+			p.sync(true)
+		}
+
+		expr.Body = append(expr.Body, tp)
+
+		if !p.curTokenKindIs(lexer.TokenComma) {
+			p.add(p.error(p.curToken, "expected a comma (,) at the end, instead got ", p.curToken.Text))
+			p.syncUntilTokenIs(lexer.TokenCurlyBraceClose, true)
+		}
+
+		p.nextToken()
+	}
+
+	p.nextToken()
+
+	return expr
+}
+
 func (p *Parser) parseSwitchExpression() ast.Expression {
 	expr := &ast.SwitchExpression{Token: p.curToken}
 	p.nextToken()
@@ -1083,11 +1127,21 @@ round:
 			value := p.parseExpression(LOWEST)
 
 			if value == nil {
-				p.syncUntilTokenIs(lexer.TokenCase, false)
-				continue round
+				// ! This is a hacky way to support type in arm cases
+				// try to parse the type in this case
+				tp, err := p.parseType()
+				if err != nil {
+					p.syncUntilTokenIs(lexer.TokenCase, false)
+					continue round
+				}
+				cs.ArmPattern = append(cs.ArmPattern, tp.(ast.Expression))
+				// remove the last error in this case
+				p.errors = p.errors[:len(p.errors)-1]
 			}
 
-			cs.ArmPattern = append(cs.ArmPattern, value)
+			if value != nil {
+				cs.ArmPattern = append(cs.ArmPattern, value)
+			}
 
 			if p.curTokenKindIs(lexer.TokenComma) && p.peekTokenKindIs(lexer.TokenColon) {
 				return cases, p.error(p.curToken, "issue after last colo, probably u forgot to add another case, if no remove it")
@@ -1911,7 +1965,7 @@ func (p *Parser) parseBlockStatement() ast.Expression {
 	}
 
 	if !p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
-		p.add(p.error(p.curToken, "end of block expression expects }, instead got ", p.curToken.Text))	
+		p.add(p.error(p.curToken, "end of block expression expects }, instead got ", p.curToken.Text))
 		return nil
 	}
 

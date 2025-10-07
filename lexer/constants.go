@@ -7,7 +7,6 @@ var (
 		"let":    TokenLet,
 		"const":  TokenConst,
 		"self":   TokenSelf,
-		"enum":   TokenEnum,
 		"switch": TokenSwitch,
 		"case":   TokenCase,
 		"if":     TokenIf,
@@ -47,6 +46,8 @@ var (
 		"any":    TokenAny,
 		"map":    TokenMap,
 		"struct": TokenStruct,
+		"enum":   TokenEnum,
+		"union":  TokenUnion,
 	}
 
 	Directives = map[string]TokenKind{

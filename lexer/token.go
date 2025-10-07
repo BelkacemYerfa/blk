@@ -128,11 +128,11 @@ const (
 	TokenFloat64 TokenKind = "f64"
 	TokenMap     TokenKind = "map"
 	TokenAny     TokenKind = "any"
-	TokenBryhx   TokenKind = "bryhx"
 
 	// Record types
 	TokenStruct TokenKind = "struct"
 	TokenEnum   TokenKind = "enum"
+	TokenUnion  TokenKind = "union"
 
 	// Types (used in the lexing phase)
 	TokenStr               = "str"
