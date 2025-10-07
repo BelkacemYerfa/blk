@@ -518,7 +518,7 @@ func (tc *TypeChecker) inferIndexType(idxExpr *ast.IndexExpression) ast.Type {
 
 	if leftType.Type() == ast.TypeArray {
 
-		if startType.Type() < ast.TypeInt8 || startType.Type() > ast.TypeUInt64 {
+		if startType.Type() < ast.TypeSInt8 || startType.Type() > ast.TypeUInt64 {
 			errMsg := fmt.Sprintf("left side of index expression is of type array, thus the start index should be of type int, instead got %v", tc.errors.highlight(leftType, Red))
 			(tc.errors.error(ERROR, idxExpr.Left.GetToken(), errMsg))
 			return nil
@@ -527,7 +527,7 @@ func (tc *TypeChecker) inferIndexType(idxExpr *ast.IndexExpression) ast.Type {
 		if idxExpr.Range {
 			endType := tc.inferExpr(idxExpr.End)
 
-			if endType != nil && (startType.Type() < ast.TypeInt8 || startType.Type() > ast.TypeUInt64) {
+			if endType != nil && (startType.Type() < ast.TypeSInt8 || startType.Type() > ast.TypeUInt64) {
 				errMsg := fmt.Sprintf("left side of index expression is of type array, thus the end bound should be of type int, instead got %v", tc.errors.highlight(leftType, Red))
 				(tc.errors.error(ERROR, idxExpr.Left.GetToken(), errMsg))
 				return nil
@@ -734,14 +734,14 @@ func (tc *TypeChecker) inferPrimitiveType(expr ast.Expression) ast.Type {
 			case e.Value <= math.MaxInt8 && e.Value >= math.MinInt8:
 				return &ast.PrimitiveType{
 					Token:  e.GetToken(),
-					Kind:   ast.TypeInt8,
+					Kind:   ast.TypeSInt8,
 					Size:   8,
 					Signed: true,
 				}
 			case e.Value <= math.MaxInt16 && e.Value >= math.MinInt16:
 				return &ast.PrimitiveType{
 					Token:  e.GetToken(),
-					Kind:   ast.TypeInt16,
+					Kind:   ast.TypeSInt16,
 					Size:   16,
 					Signed: true,
 				}
@@ -749,7 +749,7 @@ func (tc *TypeChecker) inferPrimitiveType(expr ast.Expression) ast.Type {
 			case e.Value <= math.MaxInt32 && e.Value >= math.MinInt32:
 				return &ast.PrimitiveType{
 					Token:  e.GetToken(),
-					Kind:   ast.TypeInt32,
+					Kind:   ast.TypeSInt32,
 					Size:   32,
 					Signed: true,
 				}
@@ -757,7 +757,7 @@ func (tc *TypeChecker) inferPrimitiveType(expr ast.Expression) ast.Type {
 			default:
 				return &ast.PrimitiveType{
 					Token:  e.GetToken(),
-					Kind:   ast.TypeInt64,
+					Kind:   ast.TypeSInt64,
 					Size:   64,
 					Signed: true,
 				}
@@ -894,10 +894,10 @@ func (tc *TypeChecker) checkPrimitiveTypeCastAbility(ctt, exprPrimitive *ast.Pri
 		// Same type
 		return exprPrimitive, nil
 
-	case ctt.Kind >= ast.TypeInt8 && ctt.Kind <= ast.TypeFloat64:
+	case ctt.Kind >= ast.TypeSInt8 && ctt.Kind <= ast.TypeFloat64:
 		// Casting TO numeric
 		switch {
-		case exprPrimitive.Kind >= ast.TypeInt8 && exprPrimitive.Kind <= ast.TypeFloat64:
+		case exprPrimitive.Kind >= ast.TypeSInt8 && exprPrimitive.Kind <= ast.TypeFloat64:
 			// Numeric -> Numeric
 			if exprPrimitive.Kind > ctt.Kind {
 				errMsg := fmt.Sprintf("Be careful, casting type %v into type %v will result in some information loss", tc.errors.highlight(exprPrimitive, Red), tc.errors.highlight(ctt, Yellow))
@@ -921,7 +921,7 @@ func (tc *TypeChecker) checkPrimitiveTypeCastAbility(ctt, exprPrimitive *ast.Pri
 	case ctt.Kind == ast.TypeChar:
 		switch exprPrimitive.Kind {
 
-		case ast.TypeInt8, ast.TypeInt16, ast.TypeInt32, ast.TypeInt64,
+		case ast.TypeSInt8, ast.TypeSInt16, ast.TypeSInt32, ast.TypeSInt64,
 			ast.TypeUInt8, ast.TypeUInt16, ast.TypeUInt32, ast.TypeUInt64:
 			// Numeric -> Char (runtime check: must fit in range)
 			return ctt, nil
@@ -937,7 +937,7 @@ func (tc *TypeChecker) checkPrimitiveTypeCastAbility(ctt, exprPrimitive *ast.Pri
 	case ctt.Kind == ast.TypeBool:
 		switch exprPrimitive.Kind {
 
-		case ast.TypeInt8, ast.TypeInt16, ast.TypeInt32, ast.TypeInt64,
+		case ast.TypeSInt8, ast.TypeSInt16, ast.TypeSInt32, ast.TypeSInt64,
 			ast.TypeUInt8, ast.TypeUInt16, ast.TypeUInt32, ast.TypeUInt64,
 			ast.TypeFloat32, ast.TypeFloat64, ast.TypeChar:
 			// Numeric/Char -> Bool (0=false, else true)

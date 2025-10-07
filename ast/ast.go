@@ -52,10 +52,10 @@ type TypeKind int
 const (
 	_ TypeKind = iota
 	TypeVoid
-	TypeInt8
-	TypeInt16
-	TypeInt32
-	TypeInt64
+	TypeSInt8
+	TypeSInt16
+	TypeSInt32
+	TypeSInt64
 	TypeUInt8
 	TypeUInt16
 	TypeUInt32
@@ -80,10 +80,10 @@ var PrimitiveTypes = map[lexer.TokenKind]TypeKind{
 	lexer.TokenString:  TypeString,
 	lexer.TokenChar:    TypeChar,
 	lexer.TokenBool:    TypeBool,
-	lexer.TokenInt8:    TypeInt8,
-	lexer.TokenInt16:   TypeInt16,
-	lexer.TokenInt32:   TypeInt32,
-	lexer.TokenInt64:   TypeInt64,
+	lexer.TokenSInt8:   TypeSInt8,
+	lexer.TokenSInt16:  TypeSInt16,
+	lexer.TokenSInt32:  TypeSInt32,
+	lexer.TokenSInt64:  TypeSInt64,
 	lexer.TokenUInt8:   TypeUInt8,
 	lexer.TokenUInt16:  TypeUInt16,
 	lexer.TokenUInt32:  TypeUInt32,

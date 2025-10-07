@@ -521,7 +521,7 @@ func (p *Parser) parsePrimitiveType(tok lexer.Token) (ast.Type, error) {
 	case lexer.TokenAny:
 	case lexer.TokenBool, lexer.TokenString, lexer.TokenChar:
 
-	case lexer.TokenInt8, lexer.TokenInt16, lexer.TokenInt32, lexer.TokenInt64:
+	case lexer.TokenSInt8, lexer.TokenSInt16, lexer.TokenSInt32, lexer.TokenSInt64:
 		// signed int
 		size, _ := strconv.ParseInt(strings.Split(tok.Text, "i")[1], 10, 8)
 		primitive.Size = int(size)
