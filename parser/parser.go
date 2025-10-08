@@ -5,6 +5,7 @@ import (
 	"blk/lexer"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -83,6 +84,7 @@ type (
 type Parser struct {
 	lexer          *lexer.Lexer
 	filePath       string
+	fileName       string
 	errors         []error
 	prefixParseFns map[lexer.TokenKind]prefixParseFn
 	infixParseFns  map[lexer.TokenKind]infixParseFn
@@ -95,10 +97,11 @@ type Parser struct {
 	directives map[string]lexer.Token // for directives that are not tied in a special place
 }
 
-func NewParser(lex *lexer.Lexer, filepath string) *Parser {
+func NewParser(lex *lexer.Lexer, filepath, filename string) *Parser {
 	p := Parser{
 		lexer:          lex,
 		filePath:       filepath,
+		fileName:       filename,
 		errors:         []error{},
 		prefixParseFns: make(map[lexer.TokenKind]prefixParseFn),
 		infixParseFns:  make(map[lexer.TokenKind]infixParseFn),
@@ -109,6 +112,9 @@ func NewParser(lex *lexer.Lexer, filepath string) *Parser {
 	// prefix/unary operators
 	p.registerPrefix(lexer.TokenIdentifier, p.parseIdentifier)
 	p.registerPrefix(lexer.TokenSelf, p.parseIdentifier)
+	p.registerPrefix(lexer.TokenLine, p.parseDirectiveToValue)
+	p.registerPrefix(lexer.TokenFile, p.parseDirectiveToValue)
+	p.registerPrefix(lexer.TokenDir, p.parseDirectiveToValue)
 	p.registerPrefix(lexer.TokenInteger, p.parseIntLiteral)
 	p.registerPrefix(lexer.TokenFloat, p.parseFloatLiteral)
 	p.registerPrefix(lexer.TokenStr, p.parseStringLiteral)
@@ -235,7 +241,7 @@ func (p *Parser) peekTokenKindIs(kind lexer.TokenKind) bool {
 }
 
 func (p *Parser) error(tok lexer.Token, msg ...interface{}) error {
-	errMsg := fmt.Sprintf("\033[1;90m%s:%d:%d:\033[0m ERROR: %s", p.filePath, tok.Row, tok.Col, fmt.Sprint(msg...))
+	errMsg := fmt.Sprintf("\033[1;90m%s:%d:%d:\033[0m ERROR: %s", p.fileName, tok.Row, tok.Col, fmt.Sprint(msg...))
 
 	return errors.New(errMsg)
 }
@@ -622,21 +628,19 @@ func (p *Parser) parseDeclaration() (*ast.Declaration, error) {
 
 	stmt.Name = p.parseIdentifiers()
 
-	if !p.curTokenKindIs(lexer.TokenColon) {
-		return nil, p.error(p.curToken, "expected colon (:), got ", p.curToken.Text)
+	if p.curTokenKindIs(lexer.TokenColon) {
+		// consume :
+		p.nextToken()
+
+		// type
+		tp, err := p.parseType()
+
+		if err != nil {
+			return nil, err
+		}
+
+		stmt.Type = tp
 	}
-
-	// consume :
-	p.nextToken()
-
-	// type
-	tp, err := p.parseType()
-
-	if err != nil {
-		return nil, err
-	}
-
-	stmt.Type = tp
 
 	if !p.curTokenKindIs(lexer.TokenAssign) && p.curToken.Row == p.prevToken.Row {
 		return nil, p.error(p.curToken, "expected assign (=), got ", p.curToken.Text)
@@ -1395,6 +1399,22 @@ func (p *Parser) parseIdentifier() ast.Expression {
 	return ident
 }
 
+func (p *Parser) parseDirectiveToValue() ast.Expression {
+	var ident ast.Expression
+
+	switch p.curToken.Kind {
+	case lexer.TokenLine:
+		ident = &ast.IntegerLiteral{Token: p.curToken, Value: int64(p.curToken.Row)}
+	case lexer.TokenFile:
+		ident = &ast.StringLiteral{Token: p.curToken, Value: p.filePath}
+	case lexer.TokenDir:
+		ident = &ast.StringLiteral{Token: p.curToken, Value: filepath.Dir(p.filePath)}
+	}
+
+	p.nextToken()
+	return ident
+}
+
 // this function parses multi identifiers
 // attempt to gradually shift into supporting multi values
 func (p *Parser) parseIdentifiers() []*ast.Identifier {
@@ -1551,7 +1571,7 @@ round:
 		return nil
 	}
 
-	// consume [
+	// consume ]
 	p.nextToken()
 
 	return expr

@@ -37,6 +37,9 @@ const (
 	TokenBake        TokenKind = "#bake"
 	TokenDeprecated  TokenKind = "#deprecated"
 	TokenNoInit      TokenKind = "#no_init"
+	TokenLine        TokenKind = "#line"
+	TokenDir         TokenKind = "#dir"
+	TokenFile        TokenKind = "#file"
 
 	// Units
 	TokenCurlyBraceOpen  TokenKind = "{"

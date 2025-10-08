@@ -715,7 +715,7 @@ func (il *IntegerLiteral) expressionNode()       {}
 func (il *IntegerLiteral) lit()                  {}
 func (il *IntegerLiteral) TokenLiteral() string  { return il.Token.Text }
 func (nt *IntegerLiteral) GetToken() lexer.Token { return nt.Token }
-func (il *IntegerLiteral) String() string        { return il.Token.Text }
+func (il *IntegerLiteral) String() string        { return fmt.Sprint(il.Value) }
 
 type FloatLiteral struct {
 	Token lexer.Token

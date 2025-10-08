@@ -135,7 +135,7 @@ func Run(args []string) {
 	l := lexer.NewLexer(targetFile, content)
 
 	filename, _ := os.Stat(targetFile)
-	p := parser.NewParser(l, filename.Name())
+	p := parser.NewParser(l, targetFile, filename.Name())
 	ast := p.Parse()
 
 	errs := p.GetErrors()

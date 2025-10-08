@@ -60,6 +60,9 @@ var (
 		"#bake":        TokenBake,
 		"#deprecated":  TokenDeprecated,
 		"#no_init":     TokenNoInit,
+		"#line":        TokenLine,
+		"#file":        TokenFile,
+		"#dir":         TokenDir,
 	}
 
 	AssignBinOps = [...]TokenKind{
