@@ -40,6 +40,8 @@ const (
 	TokenLine        TokenKind = "#line"
 	TokenDir         TokenKind = "#dir"
 	TokenFile        TokenKind = "#file"
+	TokenInit        TokenKind = "#init"
+	TokenFini        TokenKind = "#fini"
 
 	// Units
 	TokenCurlyBraceOpen  TokenKind = "{"

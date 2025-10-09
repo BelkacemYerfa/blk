@@ -147,6 +147,47 @@ func (a *Analyzer) collectDeclSymbol(node *ast.Declaration) {
 	} else {
 		// first support only first value
 		declarationType = a.types.inferExpr(node.Value[0])
+
+		// directives
+		if _, ok := node.Value[0].(*ast.FunctionExpression); !ok {
+			if node.Inline {
+				a.errors.error(ERROR, node.GetToken(), fmt.Errorf("#inline directive can only be used with function expressions"))
+			}
+
+			dc, ok := node.Directive["#init"]
+
+			if ok {
+				a.errors.error(ERROR, dc.GetToken(), fmt.Errorf("#init directive can only be used with function expressions"))
+			}
+
+			dc, ok = node.Directive["#fini"]
+
+			if ok {
+				a.errors.error(ERROR, dc.GetToken(), fmt.Errorf("#fini directive can only be used with function expressions"))
+			}
+		} else {
+			_, initExists := node.Directive["#init"]
+			dc, finiExists := node.Directive["#fini"]
+
+			if initExists && finiExists {
+				a.errors.error(ERROR, dc.GetToken(), fmt.Errorf("can't use the both %v and %v directives on function expression, one only could exist", a.errors.highlight("#fini", Yellow), a.errors.highlight("#init", Yellow)))
+			}
+
+			// get the function signature
+			fnType := (declarationType).(*ast.FunctionType)
+
+			if initExists || finiExists {
+				if len(fnType.Args) > 0 {
+					a.errors.error(ERROR, fnType.Token, fmt.Errorf("%v function has #init or #fini directive, thus can't have arguments", a.errors.highlight(node.Name[0], Yellow)))
+				}
+
+				if len(fnType.Return) > 0 {
+					if len(fnType.Return) >= 1 && fnType.Return[0].Type() != ast.TypeVoid {
+						a.errors.error(ERROR, fnType.Token, fmt.Errorf("%v function has #init or #fini directive, thus can't have returned values", a.errors.highlight(node.Name[0], Yellow)))
+					}
+				}
+			}
+		}
 	}
 
 	// better to have errors returned later

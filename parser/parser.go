@@ -606,9 +606,19 @@ func (p *Parser) parseType() (ast.Type, error) {
 
 func (p *Parser) addDirective(stmt *ast.Declaration) {
 	// for function
-	if p.curTokenKindIs(lexer.TokenInline) && p.peekTokenKindIs(lexer.TokenFn) {
+	if p.curTokenKindIs(lexer.TokenInline) {
 		stmt.Inline = true
 		p.nextToken()
+	}
+
+	_, curIsDirective := lexer.Directives[p.curToken.Kind]
+	for curIsDirective {
+		stmt.Directive[p.curToken.Text] = &ast.StringLiteral{
+			Token: p.curToken,
+			Value: p.curToken.Text,
+		}
+		p.nextToken()
+		_, curIsDirective = lexer.Directives[p.curToken.Kind]
 	}
 }
 
@@ -660,6 +670,7 @@ func (p *Parser) parseDeclaration() (*ast.Declaration, error) {
 			return stmt, nil
 		}
 
+		// collect all directives
 		p.addDirective(stmt)
 
 		exprs := append([]ast.Expression{}, p.parseExpression(LOWEST))
@@ -2321,7 +2332,7 @@ func (p *Parser) parseMultiAssignStatement() (ast.Statement, error) {
 }
 
 func (p *Parser) parseBindStmt() (ast.Statement, error) {
-	stmt := &ast.Declaration{Token: p.curToken, Mutable: true}
+	stmt := &ast.Declaration{Token: p.curToken, Mutable: true, Directive: make(map[string]*ast.StringLiteral)}
 
 	stmt.Name = p.parseIdentifiers()
 

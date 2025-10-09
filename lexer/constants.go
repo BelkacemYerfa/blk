@@ -63,6 +63,8 @@ var (
 		"#line":        TokenLine,
 		"#file":        TokenFile,
 		"#dir":         TokenDir,
+		"#init":        TokenInit,
+		"#fini":        TokenFini,
 	}
 
 	AssignBinOps = [...]TokenKind{
