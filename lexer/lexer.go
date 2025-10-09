@@ -488,6 +488,20 @@ func isDigit(char rune) bool {
 	return unicode.IsDigit(char) || char == '_'
 }
 
+func isBinaryDigit(char rune) bool {
+	return (char == '0' || char == '1')
+}
+
+func isOctalDigit(char rune) bool {
+	return char >= '0' && char <= '7'
+}
+
+func isHexDigit(char rune) bool {
+	return (char >= '0' && char <= '9') ||
+		(char >= 'a' && char <= 'f') ||
+		(char >= 'A' && char <= 'F')
+}
+
 func (l *Lexer) readDirective() Token {
 	start := l.Cur
 
@@ -731,6 +745,7 @@ func (l *Lexer) readNumber() Token {
 		l.readChar()
 	}
 
+	// floats
 	if l.Cur < len(l.Content) && l.Content[l.Cur] == '.' {
 		if l.Cur < len(l.Content) && l.Content[l.Cur] == '.' && l.Content[l.Cur+1] != '.' {
 			l.readChar() // consume '.'
@@ -755,6 +770,52 @@ func (l *Lexer) readNumber() Token {
 			LiteralToken: LiteralToken{
 				Kind: TokenInteger,
 				Text: text,
+			},
+			Row: row,
+			Col: col,
+		}
+	} else if l.Content[l.Cur] == 'b' || l.Content[l.Cur] == 'o' || l.Content[l.Cur] == 'x' {
+		if l.Cur-startPos != 1 {
+			return Token{
+				LiteralToken: LiteralToken{
+					Kind: TokenError,
+					Text: "expected one digit at the start (only 0)",
+				},
+				Row: row,
+				Col: col,
+			}
+		}
+
+		switch l.Content[l.Cur] {
+		case 'b':
+			// binary
+			l.readChar()
+			// only allowed digits are 1 & 0
+			for l.Cur < len(l.Content) && isBinaryDigit(l.Content[l.Cur]) {
+				l.readChar()
+			}
+			// think about cases like 11 021, return an error the 2 position
+		case 'o':
+			// octal
+			l.readChar()
+			// only allowed digits are from 0..7
+			for l.Cur < len(l.Content) && isOctalDigit(l.Content[l.Cur]) {
+				l.readChar()
+			}
+		case 'x':
+			// hex
+			l.readChar()
+			// only allowed digits are from 0..15
+			// from 0..9 then A..F (ain't case sensitive) where A..F represent 10 to 15
+			for l.Cur < len(l.Content) && isHexDigit(l.Content[l.Cur]) {
+				l.readChar()
+			}
+		}
+
+		return Token{
+			LiteralToken: LiteralToken{
+				Kind: TokenStr,
+				Text: string(l.Content[startPos:l.Cur]),
 			},
 			Row: row,
 			Col: col,

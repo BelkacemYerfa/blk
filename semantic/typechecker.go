@@ -3,8 +3,11 @@ package semantic
 import (
 	"blk/ast"
 	"blk/lexer"
+	"errors"
 	"fmt"
 	"math"
+	"strconv"
+	"strings"
 )
 
 // Typechecker implementation
@@ -674,6 +677,36 @@ func (tc *TypeChecker) inferPrimitiveType(expr ast.Expression) ast.Type {
 
 	switch e := expr.(type) {
 	case *ast.StringLiteral:
+		if strings.HasPrefix(e.Value, "0x") || strings.HasPrefix(e.Value, "0o") || strings.HasPrefix(e.Value, "0b") {
+			// parse the other representation
+			base := 2
+			switch {
+			case strings.HasPrefix(e.Value, "0x"):
+				base = 16
+			case strings.HasPrefix(e.Value, "0o"):
+				base = 8
+			}
+
+			tokenValue := e.Value
+			e.Value = e.Value[2:]
+			_, err := strconv.ParseInt(e.Value, base, 64)
+
+			if err != nil {
+				if errors.Is(err, strconv.ErrRange) {
+					errMsg := fmt.Sprintf("%v is out of range, max values with int is %v", tc.errors.highlight(tokenValue, Yellow), tc.errors.highlight(math.MaxInt64, Yellow))
+					tc.errors.error(ERROR, e.Token, errMsg)
+				} else {
+					tc.errors.error(ERROR, e.Token, err)
+				}
+				return nil
+			}
+
+			return &ast.PrimitiveType{
+				Token: e.GetToken(),
+				Kind:  ast.TypeUInt64, // switch later to sint type
+			}
+		}
+
 		return &ast.PrimitiveType{
 			Token: e.GetToken(),
 			Kind:  ast.TypeString,
