@@ -913,9 +913,10 @@ func (bs *BlockExpression) String() string {
 }
 
 type AssignExpression struct {
-	Token lexer.Token // the token.IDENT token
-	Left  []Expression
-	Right []Expression
+	Token     lexer.Token // the token.IDENT token
+	Left      []Expression
+	Right     []Expression
+	Directive map[string]*StringLiteral // for non usual stuff such as #distinct types
 }
 
 func (b *AssignExpression) expressionNode()        {}

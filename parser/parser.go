@@ -856,7 +856,7 @@ func (p *Parser) parseFields() ([]*ast.Declaration, []*ast.Method, error) {
 			p.nextToken()
 
 			if !p.curTokenKindIs(lexer.TokenIdentifier) {
-				err := p.error(p.curToken, "expected an comma (,) at the end of each field, instead got ", p.curToken.Text)
+				err := p.error(p.curToken, "expected an identifier after #bake directive, instead got ", p.curToken.Text)
 				return nil, nil, err
 			}
 
@@ -1000,32 +1000,49 @@ func (p *Parser) parseEnumType() *ast.EnumType {
 func (p *Parser) parseEnumFields() ([]*ast.AssignExpression, error) {
 	fields := make([]*ast.AssignExpression, 0)
 
-	assignExpr := &ast.AssignExpression{Token: p.curToken}
+	assignExpr := &ast.AssignExpression{Token: p.curToken, Directive: make(map[string]*ast.StringLiteral)}
 
 	for !p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
-		if !p.curTokenKindIs(lexer.TokenIdentifier) {
-			err := p.error(p.curToken, "expected an identifier, instead got ", p.curToken.Text)
-			p.syncUntilTokenIs(lexer.TokenCurlyBraceClose, true)
-			return nil, err
-		}
 
-		field := p.parseIdentifier()
+		if p.curTokenKindIs(lexer.TokenBake) {
+			// bake directive
+			assignExpr.Directive["#bake"] = &ast.StringLiteral{Token: p.curToken, Value: "#bake"}
 
-		assignExpr.Left = append(assignExpr.Left, field)
-
-		// support for custom associated value
-		if p.curTokenKindIs(lexer.TokenAssign) {
-			// consume =
 			p.nextToken()
 
-			if !p.curTokenKindIs(lexer.TokenInteger) {
-				err := p.error(p.curToken, "expected an int literal, instead got ", p.curToken.Text)
+			if !p.curTokenKindIs(lexer.TokenIdentifier) {
+				err := p.error(p.curToken, "expected an identifier after #bake directive, instead got ", p.curToken.Text)
+				return nil, err
+			}
+
+			ident := p.parseIdentifier().(*ast.Identifier)
+
+			assignExpr.Left = append(assignExpr.Left, ident)
+		} else {
+			if !p.curTokenKindIs(lexer.TokenIdentifier) {
+				err := p.error(p.curToken, "expected an identifier, instead got ", p.curToken.Text)
 				p.syncUntilTokenIs(lexer.TokenCurlyBraceClose, true)
 				return nil, err
 			}
 
-			// associated value
-			assignExpr.Right = append(assignExpr.Right, p.parseIntLiteral())
+			field := p.parseIdentifier()
+
+			assignExpr.Left = append(assignExpr.Left, field)
+
+			// support for custom associated value
+			if p.curTokenKindIs(lexer.TokenAssign) {
+				// consume =
+				p.nextToken()
+
+				if !p.curTokenKindIs(lexer.TokenInteger) {
+					err := p.error(p.curToken, "expected an int literal, instead got ", p.curToken.Text)
+					p.syncUntilTokenIs(lexer.TokenCurlyBraceClose, true)
+					return nil, err
+				}
+
+				// associated value
+				assignExpr.Right = append(assignExpr.Right, p.parseIntLiteral())
+			}
 		}
 
 		fields = append(fields, assignExpr)
@@ -1036,6 +1053,7 @@ func (p *Parser) parseEnumFields() ([]*ast.AssignExpression, error) {
 			return nil, err
 		}
 		p.nextToken()
+
 	}
 
 	p.nextToken()
