@@ -622,14 +622,16 @@ func (p *Parser) addDirective(stmt *ast.Declaration) {
 		p.nextToken()
 	}
 
-	_, curIsDirective := lexer.Directives[p.curToken.Kind]
-	for curIsDirective {
-		stmt.Directive[p.curToken.Text] = &ast.StringLiteral{
-			Token: p.curToken,
-			Value: p.curToken.Text,
+	if !p.curTokenKindIs(lexer.TokenLine) && !p.curTokenKindIs(lexer.TokenFile) && !p.curTokenKindIs(lexer.TokenDir) {
+		_, curIsDirective := lexer.Directives[p.curToken.Kind]
+		for curIsDirective {
+			stmt.Directive[p.curToken.Text] = &ast.StringLiteral{
+				Token: p.curToken,
+				Value: p.curToken.Text,
+			}
+			p.nextToken()
+			_, curIsDirective = lexer.Directives[p.curToken.Kind]
 		}
-		p.nextToken()
-		_, curIsDirective = lexer.Directives[p.curToken.Kind]
 	}
 }
 
@@ -2380,11 +2382,9 @@ func (p *Parser) parseBindStmt() (ast.Statement, error) {
 	stmt.Name = p.parseIdentifiers()
 
 	switch p.curToken.Kind {
+	case lexer.TokenWalrus:
 	case lexer.TokenBind:
 		stmt.Mutable = false
-
-	case lexer.TokenWalrus:
-
 	default:
 		return nil, p.error(p.curToken, "expected (:= or ::) operators, instead got ", p.curToken.Text)
 	}
