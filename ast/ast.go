@@ -914,10 +914,11 @@ func (bs *BlockExpression) String() string {
 }
 
 type AssignExpression struct {
-	Token     lexer.Token // the token.IDENT token
-	Left      []Expression
-	Right     []Expression
-	Directive map[string]*StringLiteral // for non usual stuff such as #distinct types
+	Token      lexer.Token // the token.IDENT token
+	Left       []Expression
+	Right      []Expression
+	Directive  map[string]*StringLiteral // for non usual stuff such as #distinct types
+	Embeddable []*Identifier             // used to hold value after #bake directive
 }
 
 func (b *AssignExpression) expressionNode()        {}

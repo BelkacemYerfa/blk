@@ -2,7 +2,9 @@ package semantic
 
 import (
 	"blk/ast"
+	"blk/lexer"
 	"fmt"
+	"strings"
 )
 
 type Analyzer struct {
@@ -30,8 +32,8 @@ func (a *Analyzer) GetErrors() []error {
 func (a *Analyzer) Analyze(node *ast.Program) {
 	// start collecting
 	a.collectSymbols(node)
-
 	a.types.check(node)
+	a.secondPassCheck()
 
 	if main := a.symtab.CurrentScope.Resolve("main"); main == nil {
 		a.errors.error(ERROR, node.GetToken(), fmt.Errorf("no entry point found (main function), an entry point is required"))
@@ -42,11 +44,9 @@ func (a *Analyzer) Analyze(node *ast.Program) {
 			a.errors.error(WARNING, sym.DeclNode.GetToken(), fmt.Errorf("%v is not used", sym.Name))
 		}
 	}
-
 }
 
 func (a *Analyzer) collectSymbols(node ast.Node) {
-
 	switch n := node.(type) {
 	case *ast.Program:
 		for _, stmt := range n.Statements {
@@ -62,6 +62,15 @@ func (a *Analyzer) collectSymbols(node ast.Node) {
 	case *ast.ScopeStatement:
 		for _, stmt := range n.Body.Body {
 			a.collectSymbols(stmt)
+		}
+	}
+}
+
+func (a *Analyzer) secondPassCheck() {
+	for _, sym := range a.symtab.CurrentScope.Symbols {
+		switch dclN := sym.DeclNode.(type) {
+		case *ast.TypeDeclaration:
+			a.checkTypeExpression(dclN.Type)
 		}
 	}
 }
@@ -136,6 +145,95 @@ func (a *Analyzer) collectExpressionSymbol(node ast.Expression) {
 		}
 
 	}
+}
+
+func (a *Analyzer) checkTypeExpression(node ast.Type) {
+	switch n := node.(type) {
+	case *ast.EnumType:
+		a.checkEnumType(n)
+	case *ast.StructType:
+		a.checkStructType(n)
+	}
+}
+
+func (a *Analyzer) checkEnumType(n *ast.EnumType) int {
+	startIdx := 0
+	prevIdxValue := startIdx
+
+	for _, expr := range n.Body {
+		if _, ok := expr.Directive[lexer.TokenBake]; ok {
+			// search for the identifier & bake all of the fields into the current enum
+
+			for _, embed := range expr.Embeddable {
+				sym := a.symtab.CurrentScope.Resolve(embed.Value)
+
+				if sym == nil {
+					(a.errors.error(ERROR, embed.Token, fmt.Sprintf("no declaration found with %v name, consider defining it", a.errors.highlight(embed.Value, Red))))
+					return 0
+				}
+
+				if sym.Kind.Type() != ast.TypeEnum {
+					(a.errors.error(ERROR, embed.Token, fmt.Sprintf("identifier used with bake directive needs to be of type enum, but we got %v as the type of %v, consider removing it", a.errors.highlight(sym.Kind, Red), a.errors.highlight(sym.Kind, Yellow))))
+					return 0
+				}
+
+				embeddableEnum := sym.Kind.(*ast.EnumType)
+				if lastIdx := a.checkEnumType(embeddableEnum); lastIdx != 0 {
+					startIdx = lastIdx
+				}
+				// check if already an enum field of the same name exists or not, if yes error out
+				for _, embedExpr := range embeddableEnum.Body {
+					for _, expr := range n.Body {
+						if len(expr.Left) > 0 && len(embedExpr.Left) > 0 {
+							equal := strings.Contains(expr.Left[0].String(), embedExpr.Left[0].String()) || strings.Contains(embedExpr.Left[0].String(), expr.Left[0].String())
+							if equal {
+								(a.errors.error(ERROR, embed.Token, fmt.Sprintf("%v already exists in embeddable enum %v, consider renaming it or remove it", a.errors.highlight(expr.Left[0], Red), a.errors.highlight(embed.Value, Yellow))))
+								return 0
+							}
+						}
+					}
+					n.Body = append(n.Body, embedExpr)
+				}
+			}
+
+		} else {
+			// check that right side is of type int
+
+			if len(expr.Right) > 0 {
+				rhs := expr.Right[0]
+				infType := a.types.inferExpr(rhs)
+
+				if infType.Type() < ast.TypeSInt8 || infType.Type() > ast.TypeUInt64 {
+					a.errors.error(WARNING, rhs.GetToken(), fmt.Errorf("assigned value for enums needs to be of type int only, instead we got %v", a.errors.highlight(infType, Red)))
+					return 0
+				}
+
+				rhsValue := int(rhs.(*ast.IntegerLiteral).Value)
+				if startIdx == 0 {
+					startIdx = rhsValue
+				}
+
+				if rhsValue <= prevIdxValue {
+					a.errors.error(WARNING, rhs.GetToken(), fmt.Errorf("%v value is smaller or equal to the previous value (%v), consider changing it, or remove the associated value and the compiler will associate the correct next value", a.errors.highlight(rhsValue, Red), a.errors.highlight(prevIdxValue, Yellow)))
+					return 0
+				}
+
+				prevIdxValue = rhsValue
+				startIdx++
+
+			} else {
+				expr.Right = append(expr.Right, &ast.IntegerLiteral{
+					Token: expr.Token,
+					Value: int64(startIdx),
+				})
+			}
+		}
+	}
+	return startIdx
+}
+
+func (a *Analyzer) checkStructType(n *ast.StructType) {
+
 }
 
 func (a *Analyzer) collectDeclSymbol(node *ast.Declaration) {

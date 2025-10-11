@@ -1020,9 +1020,8 @@ func (p *Parser) parseEnumType() *ast.EnumType {
 func (p *Parser) parseEnumFields() ([]*ast.AssignExpression, error) {
 	fields := make([]*ast.AssignExpression, 0)
 
-	assignExpr := &ast.AssignExpression{Token: p.curToken, Directive: make(map[string]*ast.StringLiteral)}
-
 	for !p.curTokenKindIs(lexer.TokenCurlyBraceClose) {
+		assignExpr := &ast.AssignExpression{Token: p.curToken, Directive: make(map[string]*ast.StringLiteral)}
 
 		if p.curTokenKindIs(lexer.TokenBake) {
 			// bake directive
@@ -1037,7 +1036,7 @@ func (p *Parser) parseEnumFields() ([]*ast.AssignExpression, error) {
 
 			ident := p.parseIdentifier().(*ast.Identifier)
 
-			assignExpr.Left = append(assignExpr.Left, ident)
+			assignExpr.Embeddable = append(assignExpr.Embeddable, ident)
 		} else {
 			if !p.curTokenKindIs(lexer.TokenIdentifier) {
 				err := p.error(p.curToken, "expected an identifier, instead got ", p.curToken.Text)
