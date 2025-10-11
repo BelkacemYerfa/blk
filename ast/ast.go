@@ -289,10 +289,11 @@ func (ls *Declaration) String() string {
 }
 
 type TypeDeclaration struct {
-	Token    lexer.Token
-	Alias    *Identifier
-	Type     Type
-	Distinct bool
+	Token     lexer.Token
+	Alias     *Identifier
+	Type      Type
+	Distinct  bool
+	Directive map[string]*StringLiteral
 }
 
 func (ls *TypeDeclaration) statementNode()        {}

@@ -36,6 +36,7 @@ const (
 	TokenForce       TokenKind = "#force"
 	TokenBake        TokenKind = "#bake"
 	TokenDeprecated  TokenKind = "#deprecated"
+	TokenScope       TokenKind = "#scope"
 	TokenNoInit      TokenKind = "#no_init"
 	TokenLine        TokenKind = "#line"
 	TokenDir         TokenKind = "#dir"

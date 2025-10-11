@@ -38,7 +38,7 @@ func (a *Analyzer) Analyze(node *ast.Program) {
 	}
 
 	for _, sym := range a.symtab.CurrentScope.Symbols {
-		if sym.DeclNode != nil && !sym.Used {
+		if sym.DeclNode != nil && !sym.Used && sym.Name != "_" {
 			a.errors.error(WARNING, sym.DeclNode.GetToken(), fmt.Errorf("%v is not used", sym.Name))
 		}
 	}

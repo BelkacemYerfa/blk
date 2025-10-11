@@ -309,6 +309,17 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 
 		return nil, nil
 
+	case lexer.TokenScope:
+		p.nextToken()
+		if !p.curTokenKindIs(lexer.TokenStr) {
+			return nil, p.error(p.curToken, "expected a string after #deprecated directive, instead got ", p.curToken.Text)
+		}
+
+		p.directives["#scope"] = p.curToken
+		p.nextToken()
+
+		return nil, nil
+
 	case lexer.TokenIdentifier, lexer.TokenSelf:
 
 		if p.peekTokenKindIs(lexer.TokenComma) || p.peekTokenKindIs(lexer.TokenAssign) {
@@ -687,8 +698,15 @@ func (p *Parser) parseDeclaration() (*ast.Declaration, error) {
 }
 
 func (p *Parser) parseTypeStatement() (*ast.TypeDeclaration, error) {
-	stmt := &ast.TypeDeclaration{Token: p.curToken}
+	stmt := &ast.TypeDeclaration{Token: p.curToken, Directive: make(map[string]*ast.StringLiteral)}
 	p.nextToken()
+
+	for directive, dValue := range p.directives {
+		stmt.Directive[directive] = &ast.StringLiteral{Token: dValue, Value: dValue.Text}
+	}
+
+	// reset map
+	clear(p.directives)
 
 	if !p.curTokenKindIs(lexer.TokenIdentifier) {
 		return nil, p.error(p.curToken, "expected an identifier, instead got ", p.curToken.Text)
@@ -2351,6 +2369,13 @@ func (p *Parser) parseMultiAssignStatement() (ast.Statement, error) {
 
 func (p *Parser) parseBindStmt() (ast.Statement, error) {
 	stmt := &ast.Declaration{Token: p.curToken, Mutable: true, Directive: make(map[string]*ast.StringLiteral)}
+
+	for directive, dValue := range p.directives {
+		stmt.Directive[directive] = &ast.StringLiteral{Token: dValue, Value: dValue.Text}
+	}
+
+	// reset map
+	clear(p.directives)
 
 	stmt.Name = p.parseIdentifiers()
 

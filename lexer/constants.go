@@ -59,6 +59,7 @@ var (
 		"#force":       TokenForce,
 		"#bake":        TokenBake,
 		"#deprecated":  TokenDeprecated,
+		"#scope":       TokenScope,
 		"#no_init":     TokenNoInit,
 		"#line":        TokenLine,
 		"#file":        TokenFile,
