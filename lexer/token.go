@@ -30,6 +30,7 @@ const (
 	// Directives
 	TokenDistinct    TokenKind = "#distinct"
 	TokenInline      TokenKind = "#inline"
+	TokenNoInline    TokenKind = "#no_inline"
 	TokenMustUse     TokenKind = "#must_use"
 	TokenFallthrough TokenKind = "#fallthrough"
 	TokenPartial     TokenKind = "#partial"

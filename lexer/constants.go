@@ -53,6 +53,7 @@ var (
 	Directives = map[string]TokenKind{
 		"#distinct":    TokenDistinct,
 		"#inline":      TokenInline,
+		"#no_inline":   TokenNoInline,
 		"#must_use":    TokenMustUse,
 		"#fallthrough": TokenFallthrough,
 		"#partial":     TokenPartial,

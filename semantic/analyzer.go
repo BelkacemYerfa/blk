@@ -285,6 +285,13 @@ func (a *Analyzer) collectDeclSymbol(node *ast.Declaration) {
 					}
 				}
 			}
+
+			inlineExists := node.Inline
+			dc, noInlineExists := node.Directive["#no_inline"]
+
+			if inlineExists && noInlineExists {
+				a.errors.error(ERROR, dc.GetToken(), fmt.Errorf("can't use the both %v and %v directives on function expression, one only could exist", a.errors.highlight("#inline", Yellow), a.errors.highlight("#no_inline", Yellow)))
+			}
 		}
 	}
 

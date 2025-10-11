@@ -616,18 +616,16 @@ func (p *Parser) parseType() (ast.Type, error) {
 }
 
 func (p *Parser) addDirective(stmt *ast.Declaration) {
-	// for function
-	if p.curTokenKindIs(lexer.TokenInline) {
-		stmt.Inline = true
-		p.nextToken()
-	}
-
 	if !p.curTokenKindIs(lexer.TokenLine) && !p.curTokenKindIs(lexer.TokenFile) && !p.curTokenKindIs(lexer.TokenDir) {
 		_, curIsDirective := lexer.Directives[p.curToken.Kind]
 		for curIsDirective {
-			stmt.Directive[p.curToken.Text] = &ast.StringLiteral{
-				Token: p.curToken,
-				Value: p.curToken.Text,
+			if p.curTokenKindIs(lexer.TokenInline) {
+				stmt.Inline = true
+			} else {
+				stmt.Directive[p.curToken.Text] = &ast.StringLiteral{
+					Token: p.curToken,
+					Value: p.curToken.Text,
+				}
 			}
 			p.nextToken()
 			_, curIsDirective = lexer.Directives[p.curToken.Kind]
