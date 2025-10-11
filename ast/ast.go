@@ -377,9 +377,8 @@ type Method struct {
 }
 
 type StructType struct {
-	Token   lexer.Token // the token.LET token
-	Fields  []*Declaration
-	Methods []*Method
+	Token  lexer.Token // the token.LET token
+	Fields []*Declaration
 }
 
 func (ss *StructType) Type() TypeKind        { return TypeStruct }
@@ -394,17 +393,6 @@ func (ss *StructType) String() string {
 		for idx, field := range ss.Fields {
 			out.WriteString(field.String())
 			if idx <= len(ss.Fields)-1 {
-				out.WriteString(", ")
-			}
-		}
-	}
-
-	if ss.Methods != nil {
-		for idx, field := range ss.Methods {
-			out.WriteString(field.Key.Value)
-			out.WriteString(":")
-			out.WriteString(field.Value.String())
-			if idx+1 <= len(ss.Fields)-1 {
 				out.WriteString(", ")
 			}
 		}

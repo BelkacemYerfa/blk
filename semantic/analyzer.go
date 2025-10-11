@@ -32,18 +32,20 @@ func (a *Analyzer) GetErrors() []error {
 func (a *Analyzer) Analyze(node *ast.Program) {
 	// start collecting
 	a.collectSymbols(node)
-	a.types.check(node)
-	a.secondPassCheck()
 
 	if main := a.symtab.CurrentScope.Resolve("main"); main == nil {
 		a.errors.error(ERROR, node.GetToken(), fmt.Errorf("no entry point found (main function), an entry point is required"))
 	}
+
+	a.types.check(node)
 
 	for _, sym := range a.symtab.CurrentScope.Symbols {
 		if sym.DeclNode != nil && !sym.Used && sym.Name != "_" {
 			a.errors.error(WARNING, sym.DeclNode.GetToken(), fmt.Errorf("%v is not used", sym.Name))
 		}
 	}
+
+	a.secondPassCheck()
 }
 
 func (a *Analyzer) collectSymbols(node ast.Node) {
@@ -71,79 +73,86 @@ func (a *Analyzer) secondPassCheck() {
 		switch dclN := sym.DeclNode.(type) {
 		case *ast.TypeDeclaration:
 			a.checkTypeExpression(dclN.Type)
+
+		case *ast.Declaration:
+			a.checkDeclarationExpression(dclN.Value)
 		}
 	}
 }
 
-func (a *Analyzer) collectExpressionSymbol(node ast.Expression) {
+func (a *Analyzer) checkDeclarationExpression(nodes []ast.Expression) {
+	for _, node := range nodes {
+		switch n := node.(type) {
+		case *ast.FunctionExpression:
+			a.checkFunctionExpression(n)
 
-	switch n := node.(type) {
-	case *ast.FunctionExpression:
-		a.symtab.EnterScope()
-		defer a.symtab.ExitScope()
+		case *ast.BlockExpression:
+			a.symtab.EnterScope()
+			defer a.symtab.ExitScope()
 
-		if n.Self.Value != "" {
-			// error out, for now, later check for the struct
-			errMsg := fmt.Sprintf("self keyword can only be used withing struct context, but %v function is not a method, so either consider removing it or make this method a part of some struct", a.errors.highlight(n.Token.LiteralToken.Text, Yellow))
-			a.errors.error(ERROR, n.Self.Token, errMsg)
+			for _, stmt := range n.Body {
+				a.collectSymbols(stmt)
+			}
+
+			for _, sym := range a.symtab.CurrentScope.Symbols {
+				if sym.DeclNode != nil && !sym.Used {
+					a.errors.error(WARNING, sym.DeclNode.GetToken(), fmt.Errorf("%v is not used", sym.Name))
+				}
+			}
+		}
+	}
+}
+
+func (a *Analyzer) checkFunctionExpression(fn *ast.FunctionExpression) {
+	a.symtab.EnterScope()
+	defer a.symtab.ExitScope()
+
+	if fn.Self.Value != "" {
+		// error out, for now, later check for the struct
+		errMsg := fmt.Sprintf("self keyword can only be used withing struct context, but %v function is not a method, so either consider removing it or make this method a part of some struct", a.errors.highlight(fn.Token.LiteralToken.Text, Yellow))
+		a.errors.error(ERROR, fn.Self.Token, errMsg)
+		return
+	}
+
+	for _, arg := range fn.Args {
+		if arg.DefaultValue != nil {
+			inferred := a.types.inferExpr(arg.DefaultValue)
+
+			if !a.types.typesCompatible(arg.Type, inferred) {
+				errMsg := fmt.Sprintf("type mismatch on %v argument, explicit type %v doesn't match the inferred type %v, change the explicit type or the associated value", a.errors.highlight(arg.Name.Value, Yellow), a.errors.highlight(arg.Type, Red), a.errors.highlight(inferred, Green))
+				a.errors.error(ERROR, arg.Token, errMsg)
+				return
+			}
+		}
+
+		if err := a.symtab.CurrentScope.Define(arg.Name.Value, &Symbol{
+			Name:      arg.Name.Value,
+			Kind:      arg.Type,
+			IsMutable: true,
+			DeclNode:  arg.Name,
+		}); err != nil {
+			a.errors.error(ERROR, arg.Token, err)
 			return
 		}
 
-		for _, arg := range n.Args {
-			if arg.DefaultValue != nil {
-				inferred := a.types.inferExpr(arg.DefaultValue)
+	}
 
-				if !a.types.typesCompatible(arg.Type, inferred) {
-					errMsg := fmt.Sprintf("type mismatch on %v argument, explicit type %v doesn't match the inferred type %v, change the explicit type or the associated value", a.errors.highlight(arg.Name.Value, Yellow), a.errors.highlight(arg.Type, Red), a.errors.highlight(inferred, Green))
-					a.errors.error(ERROR, arg.Token, errMsg)
-					return
-				}
-			}
+	for _, stmt := range fn.Body.Body {
+		a.collectSymbols(stmt)
 
-			if err := a.symtab.CurrentScope.Define(arg.Name.Value, &Symbol{
-				Name:      arg.Name.Value,
-				Kind:      arg.Type,
-				IsMutable: true,
-				DeclNode:  arg.Name,
-			}); err != nil {
-				a.errors.error(ERROR, arg.Token, err)
-				return
-			}
-
-		}
-
-		for _, stmt := range n.Body.Body {
-			a.collectSymbols(stmt)
-
-			if s, ok := stmt.(*ast.Declaration); ok {
-				if len(s.Value) > 0 {
-					a.types.inferExpr(s.Value[0])
-				}
+		if s, ok := stmt.(*ast.Declaration); ok {
+			if len(s.Value) > 0 {
+				a.types.inferExpr(s.Value[0])
 			}
 		}
+	}
 
-		a.types.checkFunctionBody(n)
+	a.types.checkFunctionBody(fn)
 
-		for _, sym := range a.symtab.CurrentScope.Symbols {
-			if sym.DeclNode != nil && !sym.Used {
-				a.errors.error(WARNING, sym.DeclNode.GetToken(), fmt.Errorf("%v is not used", sym.Name))
-			}
+	for _, sym := range a.symtab.CurrentScope.Symbols {
+		if sym.DeclNode != nil && !sym.Used {
+			a.errors.error(WARNING, sym.DeclNode.GetToken(), fmt.Errorf("%v is not used", sym.Name))
 		}
-
-	case *ast.BlockExpression:
-		a.symtab.EnterScope()
-		defer a.symtab.ExitScope()
-
-		for _, stmt := range n.Body {
-			a.collectSymbols(stmt)
-		}
-
-		for _, sym := range a.symtab.CurrentScope.Symbols {
-			if sym.DeclNode != nil && !sym.Used {
-				a.errors.error(WARNING, sym.DeclNode.GetToken(), fmt.Errorf("%v is not used", sym.Name))
-			}
-		}
-
 	}
 }
 
@@ -151,6 +160,8 @@ func (a *Analyzer) checkTypeExpression(node ast.Type) {
 	switch n := node.(type) {
 	case *ast.EnumType:
 		a.checkEnumType(n)
+	case *ast.UnionType:
+		a.checkUnionType(n)
 	case *ast.StructType:
 		a.checkStructType(n)
 	}
@@ -232,6 +243,17 @@ func (a *Analyzer) checkEnumType(n *ast.EnumType) int {
 	return startIdx
 }
 
+func (a *Analyzer) checkUnionType(n *ast.UnionType) {
+	// check that there is no duplicates
+	for i, cnType := range n.Body {
+		for _, onType := range n.Body[i+1:] {
+			if onType.Type() == cnType.Type() {
+				a.errors.error(ERROR, n.Token, fmt.Sprintf("%v type is already in the union, duplicates are not allowed", a.errors.highlight(onType, Red)))
+			}
+		}
+	}
+}
+
 func (a *Analyzer) checkStructType(n *ast.StructType) {
 
 }
@@ -304,11 +326,6 @@ func (a *Analyzer) collectDeclSymbol(node *ast.Declaration) {
 	}); err != nil {
 		a.errors.error(ERROR, node.Token, err)
 		return
-	}
-
-	// body check of different expression such as functions, if blocks, switches, ...ect
-	if len(node.Value) > 0 {
-		a.collectExpressionSymbol(node.Value[0])
 	}
 }
 

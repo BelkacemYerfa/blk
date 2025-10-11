@@ -97,8 +97,6 @@ const (
 
 	// Bind Operators
 	TokenAssign TokenKind = "="
-	TokenBind   TokenKind = "::"
-	TokenWalrus TokenKind = ":="
 
 	// Logical Operators
 	TokenAnd         TokenKind = "&&"

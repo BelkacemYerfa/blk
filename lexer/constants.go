@@ -84,12 +84,6 @@ var (
 		TokenAssignBitXor,
 	}
 
-	AssignOp = [...]TokenKind{
-		TokenAssign,
-		TokenWalrus,
-		TokenBind,
-	}
-
 	BinOperators = map[TokenKind]Operator{
 		TokenEquals:              "==",
 		TokenGreater:             ">",
