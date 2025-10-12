@@ -107,13 +107,6 @@ func (a *Analyzer) checkFunctionExpression(fn *ast.FunctionExpression) {
 	a.symtab.EnterScope()
 	defer a.symtab.ExitScope()
 
-	if fn.Self.Value != "" {
-		// error out, for now, later check for the struct
-		errMsg := fmt.Sprintf("self keyword can only be used withing struct context, but %v function is not a method, so either consider removing it or make this method a part of some struct", a.errors.highlight(fn.Token.LiteralToken.Text, Yellow))
-		a.errors.error(ERROR, fn.Self.Token, errMsg)
-		return
-	}
-
 	for _, arg := range fn.Args {
 		if arg.DefaultValue != nil {
 			inferred := a.types.inferExpr(arg.DefaultValue)

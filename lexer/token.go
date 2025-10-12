@@ -7,7 +7,6 @@ const (
 	// Keywords
 	TokenLet    TokenKind = "let"
 	TokenConst  TokenKind = "const"
-	TokenSelf   TokenKind = "self"
 	TokenFn     TokenKind = "fn"
 	TokenFor    TokenKind = "for"
 	TokenIn     TokenKind = "in"

@@ -109,7 +109,6 @@ func NewParser(lex *lexer.Lexer, filepath, filename string) *Parser {
 
 	// prefix/unary operators
 	p.registerPrefix(lexer.TokenIdentifier, p.parseIdentifier)
-	p.registerPrefix(lexer.TokenSelf, p.parseIdentifier)
 	p.registerPrefix(lexer.TokenLine, p.parseDirectiveToValue)
 	p.registerPrefix(lexer.TokenFile, p.parseDirectiveToValue)
 	p.registerPrefix(lexer.TokenDir, p.parseDirectiveToValue)
@@ -131,6 +130,7 @@ func NewParser(lex *lexer.Lexer, filepath, filename string) *Parser {
 	p.registerPrefix(lexer.TokenFn, p.parseFunctionExpression)
 	p.registerPrefix(lexer.TokenSwitch, p.parseSwitchExpression)
 	p.registerPrefix(lexer.TokenCast, p.parseCastExpression)
+	p.registerPrefix(lexer.TokenDot, p.parseNonExplicitStructInstanceExpression)
 
 	// infix/binary operators
 	p.registerInfix(lexer.TokenPlus, p.parseInfixExpression)
@@ -318,7 +318,7 @@ func (p *Parser) parseStatement() (ast.Statement, error) {
 
 		return nil, nil
 
-	case lexer.TokenIdentifier, lexer.TokenSelf:
+	case lexer.TokenIdentifier:
 
 		if p.peekTokenKindIs(lexer.TokenComma) || p.peekTokenKindIs(lexer.TokenAssign) {
 			return p.parseMultiAssignStatement()
@@ -1790,10 +1790,7 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 
 	p.nextToken()
 
-	self, args := p.parseArguments()
-
-	// isn't required to exist
-	expr.Self = self
+	args := p.parseArguments()
 	expr.Args = args
 
 	if !p.curTokenKindIs(lexer.TokenArrow) {
@@ -1874,26 +1871,13 @@ func (p *Parser) parseFunctionExpression() ast.Expression {
 	return expr
 }
 
-func (p *Parser) parseArguments() (*ast.Identifier, []*ast.Arg) {
+func (p *Parser) parseArguments() []*ast.Arg {
 	// return another identifier which is
 	args := make([]*ast.Arg, 0)
-	self := &ast.Identifier{}
-
-	// self needs to be defined at first
-	if p.curTokenKindIs(lexer.TokenSelf) {
-		self.Token = p.curToken
-		self.Value = p.curToken.Text
-		// consume the self
-		p.nextToken()
-		if p.curTokenKindIs(lexer.TokenComma) {
-			// consume the comma
-			p.nextToken()
-		}
-	}
 
 	if p.curTokenKindIs(lexer.TokenBraceClose) {
 		p.nextToken()
-		return self, args
+		return args
 	}
 
 	arg := &ast.Arg{
@@ -1902,7 +1886,7 @@ func (p *Parser) parseArguments() (*ast.Identifier, []*ast.Arg) {
 
 	if !p.curTokenKindIs(lexer.TokenIdentifier) {
 		p.add(p.error(p.curToken, "expected identifier, instead got ", p.curToken.Text))
-		return nil, nil
+		return nil
 	}
 
 	arg.Name = p.parseIdentifier().(*ast.Identifier)
@@ -1910,7 +1894,7 @@ func (p *Parser) parseArguments() (*ast.Identifier, []*ast.Arg) {
 	// expect colon
 	if !p.curTokenKindIs(lexer.TokenColon) {
 		p.add(p.error(p.curToken, "expected : after argument name, instead got ", p.curToken.Text))
-		return nil, nil
+		return nil
 	}
 
 	p.nextToken()
@@ -1920,7 +1904,7 @@ func (p *Parser) parseArguments() (*ast.Identifier, []*ast.Arg) {
 
 	if err != nil {
 		p.add(err)
-		return nil, nil
+		return nil
 	}
 
 	arg.Type = tp
@@ -1942,7 +1926,7 @@ func (p *Parser) parseArguments() (*ast.Identifier, []*ast.Arg) {
 
 		if !p.curTokenKindIs(lexer.TokenIdentifier) {
 			p.add(p.error(p.curToken, "expected identifier, instead got ", p.curToken.Text))
-			return nil, nil
+			return nil
 		}
 
 		arg.Name = p.parseIdentifier().(*ast.Identifier)
@@ -1950,7 +1934,7 @@ func (p *Parser) parseArguments() (*ast.Identifier, []*ast.Arg) {
 		// expect colon
 		if !p.curTokenKindIs(lexer.TokenColon) {
 			p.add(p.error(p.curToken, "expected : after argument name, instead got ", p.curToken.Text))
-			return nil, nil
+			return nil
 		}
 
 		p.nextToken()
@@ -1960,7 +1944,7 @@ func (p *Parser) parseArguments() (*ast.Identifier, []*ast.Arg) {
 
 		if err != nil {
 			p.add(err)
-			return nil, nil
+			return nil
 		}
 
 		arg.Type = tp
@@ -1976,12 +1960,12 @@ func (p *Parser) parseArguments() (*ast.Identifier, []*ast.Arg) {
 
 	if !p.curTokenKindIs(lexer.TokenBraceClose) {
 		p.add(p.error(p.curToken, "expected ) token in function definition, instead got ", p.curToken.Text))
-		return nil, nil
+		return nil
 	}
 
 	p.nextToken()
 
-	return self, args
+	return args
 }
 
 func (p *Parser) parseBlockStatement() ast.Expression {
@@ -2122,6 +2106,32 @@ func (p *Parser) parseCurlyBraceOpen(left ast.Expression) ast.Expression {
 		return p.parseBlockStatement()
 	} else {
 		return p.parseStructInstanceExpression(left)
+	}
+}
+
+func (p *Parser) parseNonExplicitStructInstanceExpression() ast.Expression {
+	p.nextToken()
+
+	if p.curTokenKindIs(lexer.TokenCurlyBraceOpen) {
+		expr := &ast.StructInstanceExpression{Token: p.curToken}
+		fields, err := p.parseFieldValues()
+
+		if err != nil {
+			p.add(err)
+			return nil
+		}
+
+		expr.Body = fields
+		return expr
+	} else {
+		if !p.curTokenKindIs(lexer.TokenIdentifier) {
+			// error out
+			p.error(p.curToken, "expected either a curly brace open {, or an identifier, instead got ", p.curToken.Text)
+			p.sync(false)
+			return nil
+		}
+
+		return p.parseIdentifier()
 	}
 }
 

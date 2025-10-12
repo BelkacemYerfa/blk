@@ -631,7 +631,6 @@ type ReturnType struct {
 
 type FunctionExpression struct {
 	Token  lexer.Token
-	Self   *Identifier // this indicates the self key
 	Args   []*Arg
 	Return ReturnType
 	Body   *BlockExpression
@@ -644,9 +643,6 @@ func (fn *FunctionExpression) String() string {
 	var out bytes.Buffer
 	params := []string{}
 	returnTypes := []string{}
-	if fn.Self != nil {
-		params = append(params, fn.Self.String())
-	}
 	for _, p := range fn.Args {
 		formatParam := p.Name.String() + ":" + p.Type.String()
 		params = append(params, formatParam)

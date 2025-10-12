@@ -6,7 +6,6 @@ var (
 	Keywords = map[string]TokenKind{
 		"let":    TokenLet,
 		"const":  TokenConst,
-		"self":   TokenSelf,
 		"switch": TokenSwitch,
 		"case":   TokenCase,
 		"if":     TokenIf,
