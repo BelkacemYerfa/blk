@@ -76,7 +76,9 @@ func (me *MacroEngine) checkTypeExpression(node *ast.TypeDeclaration) {
 		visited[node.Alias.Value] = true
 		me.expandEnumMacros(node, n, visited)
 	case *ast.StructType:
-		me.expandStructMacros(n)
+		visited := make(map[string]bool)
+		visited[node.Alias.Value] = true
+		me.expandStructMacros(node, n, visited)
 	}
 }
 
@@ -93,7 +95,7 @@ func (me *MacroEngine) expandEnumMacros(decl *ast.TypeDeclaration, enum *ast.Enu
 
 		// process each #bake target
 		for _, embed := range expr.Embeddable {
-			baked, err := me.expandBakeDirective(decl, embed, visited)
+			baked, err := me.expandEnumBakeDirective(decl, embed, visited)
 			if err != nil {
 				me.errors.error(ERROR, embed.Token, err.Error())
 				continue
@@ -101,7 +103,7 @@ func (me *MacroEngine) expandEnumMacros(decl *ast.TypeDeclaration, enum *ast.Enu
 
 			// check for name conflicts before merging
 			for _, bakedExpr := range baked {
-				if me.hasConflict(expandedBody, bakedExpr) {
+				if me.enumHasConflict(expandedBody, bakedExpr) {
 					me.errors.error(ERROR, embed.Token,
 						fmt.Sprintf("%v already exists, consider renaming it",
 							me.errors.highlight(bakedExpr.Left[0], Red)))
@@ -117,7 +119,7 @@ func (me *MacroEngine) expandEnumMacros(decl *ast.TypeDeclaration, enum *ast.Enu
 }
 
 // expandBakeDirective resolves and expands a single #bake target
-func (me *MacroEngine) expandBakeDirective(
+func (me *MacroEngine) expandEnumBakeDirective(
 	parentDecl *ast.TypeDeclaration,
 	embed *ast.Identifier,
 	visited map[string]bool,
@@ -164,7 +166,7 @@ func (me *MacroEngine) expandBakeDirective(
 }
 
 // hasConflict checks if an enum variant name already exists
-func (me *MacroEngine) hasConflict(existing []*ast.AssignExpression, candidate *ast.AssignExpression) bool {
+func (me *MacroEngine) enumHasConflict(existing []*ast.AssignExpression, candidate *ast.AssignExpression) bool {
 	if len(candidate.Left) == 0 {
 		return false
 	}
@@ -180,6 +182,100 @@ func (me *MacroEngine) hasConflict(existing []*ast.AssignExpression, candidate *
 	return false
 }
 
-func (me *MacroEngine) expandStructMacros(n *ast.StructType) {
+func (me *MacroEngine) expandStructMacros(decl *ast.TypeDeclaration, strukt *ast.StructType, visited map[string]bool) error {
+	var expandedBody []*ast.Declaration
 
+	for _, expr := range strukt.Fields {
+		// skip expressions without #bake directive
+		if _, hasBake := expr.Directive[lexer.TokenBake]; !hasBake {
+			expandedBody = append(expandedBody, expr)
+			continue
+		}
+
+		// process each #bake target
+		for _, embed := range expr.Name {
+			baked, err := me.expandStructBakeDirective(decl, embed, visited)
+			if err != nil {
+				me.errors.error(ERROR, embed.Token, err.Error())
+				continue
+			}
+
+			// check for name conflicts before merging
+			for _, bakedExpr := range baked {
+				if me.structHasConflict(expandedBody, bakedExpr) {
+					me.errors.error(ERROR, embed.Token,
+						fmt.Sprintf("%v already exists, consider renaming it",
+							me.errors.highlight(bakedExpr.Name[0], Red)))
+					continue
+				}
+				expandedBody = append(expandedBody, bakedExpr)
+			}
+		}
+	}
+
+	strukt.Fields = expandedBody
+	return nil
+}
+
+func (me *MacroEngine) expandStructBakeDirective(
+	parentDecl *ast.TypeDeclaration,
+	embed *ast.Identifier,
+	visited map[string]bool,
+) ([]*ast.Declaration, error) {
+
+	// resolve the baked enum
+	sym := me.symtab.CurrentScope.Resolve(embed.Value)
+	if sym == nil {
+		return nil, fmt.Errorf("no declaration found with name %v",
+			me.errors.highlight(embed.Value, Red))
+	}
+
+	structType, ok := sym.Kind.(*ast.StructType)
+	if !ok {
+		return nil, fmt.Errorf("#bake requires enum type, got %v",
+			me.errors.highlight(sym.Kind, Red))
+	}
+
+	// detect cycles
+	if visited[embed.Value] {
+		return nil, fmt.Errorf("circular #bake detected between %v and %v enums",
+			me.errors.highlight(parentDecl.Alias, Yellow),
+			me.errors.highlight(embed.Value, Red))
+	}
+
+	// mark as visited and recursively expand
+	visited[embed.Value] = true
+	defer delete(visited, embed.Value) // Backtrack for other branches
+
+	structDecl, ok := sym.DeclNode.(*ast.TypeDeclaration)
+	if !ok {
+		return nil, fmt.Errorf("invalid declaration node for %v", embed.Value)
+	}
+
+	if err := me.expandStructMacros(structDecl, structType, visited); err != nil {
+		return nil, fmt.Errorf("failed to expand %v: %w", embed.Value, err)
+	}
+
+	// Return a copy of the expanded body to avoid shared mutations
+	result := make([]*ast.Declaration, len(structType.Fields))
+	copy(result, structType.Fields)
+
+	return result, nil
+}
+
+// hasConflict checks if an enum variant name already exists
+func (me *MacroEngine) structHasConflict(existing []*ast.Declaration, candidate *ast.Declaration) bool {
+	if len(candidate.Name) == 0 {
+		return false
+	}
+
+	candidateName := candidate.Name[0].String()
+
+	for _, expr := range existing {
+		if len(expr.Name) > 0 && expr.Name[0].String() == candidateName {
+			return true
+		}
+	}
+
+	return false
 }
