@@ -178,7 +178,6 @@ func (tc *TypeChecker) unalias(tp ast.Type) ast.Type {
 
 func (tc *TypeChecker) inferExpr(expr ast.Expression) ast.Type {
 	switch e := expr.(type) {
-
 	case *ast.UnaryExpression:
 		return tc.inferUnaryExprType(e)
 
@@ -216,6 +215,9 @@ func (tc *TypeChecker) inferExpr(expr ast.Expression) ast.Type {
 
 	case *ast.IndexExpression:
 		return tc.inferIndexType(e)
+
+	case *ast.MemberShipExpression:
+		return tc.inferPropertyType(e)
 
 	case *ast.CastExpression:
 		// check if expression is supported first
@@ -330,7 +332,7 @@ func (tc *TypeChecker) inferBinaryExprType(expr *ast.BinaryExpression) ast.Type 
 		// cases allowed: bool, string, int, uint, floats
 
 		if leftType.Type() > ast.TypeBool || rightType.Type() > ast.TypeBool {
-			(tc.errors.error(ERROR, expr.Token, "arithmetic operators can only be applied on (integers, unsigned integers, floats, strings), but the received type is ", rightType))
+			(tc.errors.error(ERROR, expr.Token, "equality operators can only be applied on (integers, unsigned integers, floats, strings), but the received type is ", rightType))
 			return nil
 		}
 
@@ -465,6 +467,14 @@ func (tc *TypeChecker) inferSwitchExprType(switchExpr *ast.SwitchExpression) ast
 
 	var bodyType ast.Type
 
+	if switchTargetType.Type() == ast.TypeEnum && !switchExpr.PartialCheck {
+		enumTarget := switchTargetType.(*ast.EnumType)
+		if len(switchExpr.Cases) != len(enumTarget.Body) {
+			errMsg := fmt.Sprintf("each possible value in the enum needs to be handled in separate case arm with switch statement, if u want to disable this check use the %v directive", tc.errors.highlight("#partial", Yellow))
+			(tc.errors.error(ERROR, switchExpr.Condition.GetToken(), errMsg))
+		}
+	}
+
 	for _, cs := range switchExpr.Cases {
 		// check the arm pattern of each case
 		for _, csArm := range cs.ArmPattern {
@@ -543,6 +553,40 @@ func (tc *TypeChecker) inferIndexType(idxExpr *ast.IndexExpression) ast.Type {
 	}
 
 	return castLeftType.LeftType
+}
+
+func (tc *TypeChecker) inferPropertyType(member *ast.MemberShipExpression) ast.Type {
+	symType := tc.inferExpr(member.Object)
+
+	switch tp := symType.(type) {
+	case *ast.EnumType:
+		// check if the property exist on the Object type
+		// if yes we're cool, otherwise error out
+		innerState, ok := member.Property.(*ast.Identifier)
+		if !ok {
+			errMsg := fmt.Sprintf("property on enum expression can only be an %v, can't have other types", tc.errors.highlight("identifier", Yellow))
+			(tc.errors.error(ERROR, member.Property.GetToken(), errMsg))
+			return nil
+		}
+
+		for _, expr := range tp.Body {
+			if len(expr.Left) > 0 {
+				equal := strings.Contains(expr.Left[0].String(), innerState.String()) || strings.Contains(innerState.String(), expr.Left[0].String())
+				if equal {
+					return tp
+				}
+			}
+		}
+
+		errMsg := fmt.Sprintf("no enum option called %v found in %v, consider adding it", tc.errors.highlight(innerState, Red), tc.errors.highlight(member.Object, Yellow))
+		(tc.errors.error(ERROR, member.Property.GetToken(), errMsg))
+		return nil
+
+	case *ast.StructType:
+
+	}
+
+	return nil
 }
 
 func (tc *TypeChecker) inferFunctionType(fn *ast.FunctionExpression) ast.Type {
@@ -1088,6 +1132,8 @@ func (tc *TypeChecker) typesCompatible(expected, inferred ast.Type) bool {
 		return false
 	}
 
+	expected = tc.unalias(expected)
+
 	if expected.Type() != inferred.Type() {
 		return false
 	}
@@ -1115,6 +1161,23 @@ func (tc *TypeChecker) typesCompatible(expected, inferred ast.Type) bool {
 		} else {
 			return tc.checkArrayType(etp, itp)
 		}
+
+	case *ast.EnumType:
+		itp := inferred.(*ast.EnumType)
+
+		if len(etp.Body) != len(itp.Body) {
+			return false
+		}
+
+		for idx, etpExpr := range etp.Body {
+			itpExpr := itp.Body[idx]
+
+			if itpExpr.String() != etpExpr.String() {
+				return false
+			}
+		}
+
+		return true
 
 	}
 
