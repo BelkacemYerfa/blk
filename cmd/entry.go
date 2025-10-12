@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"blk/lexer"
+	"blk/macro"
 	"blk/parser"
 	"blk/semantic"
 	"fmt"
@@ -139,6 +140,18 @@ func Run(args []string) {
 	ast := p.Parse()
 
 	errs := p.GetErrors()
+
+	if len(errs) > 0 {
+		for _, err := range errs {
+			fmt.Println(err)
+		}
+		return
+	}
+
+	me := macro.NewMacroEngine(filename.Name())
+	me.MacroPass(ast)
+
+	errs = me.GetErrors()
 
 	if len(errs) > 0 {
 		for _, err := range errs {

@@ -27,6 +27,29 @@ func NewTypeChecker(filepath string, symtab *SymbolTable, errors *ErrorCollector
 	}
 }
 
+func Unalias(scope *SymbolTable, tp ast.Type) (ast.Type, error) {
+	alsTp, ok := tp.(*ast.AliasType)
+
+	if !ok {
+		return tp, nil
+	}
+
+	// search for the alias
+	sym := scope.CurrentScope.Resolve(alsTp.Alias.Value)
+
+	if sym == nil {
+		return nil, fmt.Errorf("there is no %v type found, consider declaring it", alsTp.Alias)
+	}
+
+	sym.Used = true
+
+	if sym.Kind.Type() == ast.TypeAlias {
+		return Unalias(scope, sym.Kind)
+	}
+
+	return sym.Kind, nil
+}
+
 func (tc *TypeChecker) check(program *ast.Program) {
 	for _, stmt := range program.Statements {
 		tc.checkStmt(stmt)
@@ -150,30 +173,6 @@ func (tc *TypeChecker) checkDeclaration(d *ast.Declaration) {
 		// no explicit type, type will get inferred from the assign expression
 		d.Type = tc.inferExpr(expr)
 	}
-}
-
-func (tc *TypeChecker) unalias(tp ast.Type) ast.Type {
-
-	alsTp, ok := tp.(*ast.AliasType)
-	if !ok {
-		return tp
-	}
-
-	// search for the alias
-	sym := tc.symtab.CurrentScope.Resolve(alsTp.Alias.Value)
-
-	if sym == nil {
-		(tc.errors.error(ERROR, alsTp.Token, "type ", alsTp.Alias, " wasn't found"))
-		return nil
-	}
-
-	sym.Used = true
-
-	if sym.Kind.Type() == ast.TypeAlias {
-		return tc.unalias(sym.Kind)
-	}
-
-	return sym.Kind
 }
 
 func (tc *TypeChecker) inferExpr(expr ast.Expression) ast.Type {
@@ -1132,7 +1131,12 @@ func (tc *TypeChecker) typesCompatible(expected, inferred ast.Type) bool {
 		return false
 	}
 
-	expected = tc.unalias(expected)
+	expected, err := Unalias(tc.symtab, expected)
+
+	if err != nil {
+		tc.errors.add(err)
+		return false
+	}
 
 	if expected.Type() != inferred.Type() {
 		return false

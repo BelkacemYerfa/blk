@@ -2,9 +2,7 @@ package semantic
 
 import (
 	"blk/ast"
-	"blk/lexer"
 	"fmt"
-	"strings"
 )
 
 type Analyzer struct {
@@ -165,72 +163,34 @@ func (a *Analyzer) checkEnumType(n *ast.EnumType) int {
 	prevIdxValue := startIdx
 
 	for _, expr := range n.Body {
-		if _, ok := expr.Directive[lexer.TokenBake]; ok {
-			// search for the identifier & bake all of the fields into the current enum
+		// check that right side is of type int
+		if len(expr.Right) > 0 {
+			rhs := expr.Right[0]
+			infType := a.types.inferExpr(rhs)
 
-			for _, embed := range expr.Embeddable {
-				sym := a.symtab.CurrentScope.Resolve(embed.Value)
-
-				if sym == nil {
-					(a.errors.error(ERROR, embed.Token, fmt.Sprintf("no declaration found with %v name, consider defining it", a.errors.highlight(embed.Value, Red))))
-					return 0
-				}
-
-				if sym.Kind.Type() != ast.TypeEnum {
-					(a.errors.error(ERROR, embed.Token, fmt.Sprintf("identifier used with bake directive needs to be of type enum, but we got %v as the type of %v, consider removing it", a.errors.highlight(sym.Kind, Red), a.errors.highlight(sym.Kind, Yellow))))
-					return 0
-				}
-
-				embeddableEnum := sym.Kind.(*ast.EnumType)
-				if lastIdx := a.checkEnumType(embeddableEnum); lastIdx != 0 {
-					startIdx = lastIdx
-				}
-				// check if already an enum field of the same name exists or not, if yes error out
-				for _, embedExpr := range embeddableEnum.Body {
-					for _, expr := range n.Body {
-						if len(expr.Left) > 0 && len(embedExpr.Left) > 0 {
-							equal := strings.Contains(expr.Left[0].String(), embedExpr.Left[0].String()) || strings.Contains(embedExpr.Left[0].String(), expr.Left[0].String())
-							if equal {
-								(a.errors.error(ERROR, embed.Token, fmt.Sprintf("%v already exists in embeddable enum %v, consider renaming it or remove it", a.errors.highlight(expr.Left[0], Red), a.errors.highlight(embed.Value, Yellow))))
-								return 0
-							}
-						}
-					}
-					n.Body = append(n.Body, embedExpr)
-				}
+			if infType.Type() < ast.TypeSInt8 || infType.Type() > ast.TypeUInt64 {
+				a.errors.error(WARNING, rhs.GetToken(), fmt.Errorf("assigned value for enums needs to be of type int only, instead we got %v", a.errors.highlight(infType, Red)))
+				return 0
 			}
+
+			rhsValue := int(rhs.(*ast.IntegerLiteral).Value)
+			if startIdx == 0 {
+				startIdx = rhsValue
+			}
+
+			if rhsValue <= prevIdxValue {
+				a.errors.error(WARNING, rhs.GetToken(), fmt.Errorf("%v value is smaller or equal to the previous value (%v), consider changing it, or remove the associated value and the compiler will associate the correct next value", a.errors.highlight(rhsValue, Red), a.errors.highlight(prevIdxValue, Yellow)))
+				return 0
+			}
+
+			prevIdxValue = rhsValue
+			startIdx++
 
 		} else {
-			// check that right side is of type int
-
-			if len(expr.Right) > 0 {
-				rhs := expr.Right[0]
-				infType := a.types.inferExpr(rhs)
-
-				if infType.Type() < ast.TypeSInt8 || infType.Type() > ast.TypeUInt64 {
-					a.errors.error(WARNING, rhs.GetToken(), fmt.Errorf("assigned value for enums needs to be of type int only, instead we got %v", a.errors.highlight(infType, Red)))
-					return 0
-				}
-
-				rhsValue := int(rhs.(*ast.IntegerLiteral).Value)
-				if startIdx == 0 {
-					startIdx = rhsValue
-				}
-
-				if rhsValue <= prevIdxValue {
-					a.errors.error(WARNING, rhs.GetToken(), fmt.Errorf("%v value is smaller or equal to the previous value (%v), consider changing it, or remove the associated value and the compiler will associate the correct next value", a.errors.highlight(rhsValue, Red), a.errors.highlight(prevIdxValue, Yellow)))
-					return 0
-				}
-
-				prevIdxValue = rhsValue
-				startIdx++
-
-			} else {
-				expr.Right = append(expr.Right, &ast.IntegerLiteral{
-					Token: expr.Token,
-					Value: int64(startIdx),
-				})
-			}
+			expr.Right = append(expr.Right, &ast.IntegerLiteral{
+				Token: expr.Token,
+				Value: int64(startIdx),
+			})
 		}
 	}
 	return startIdx
@@ -256,7 +216,12 @@ func (a *Analyzer) collectDeclSymbol(node *ast.Declaration) {
 
 	if node.Type != nil {
 		// explicit type
-		declarationType = a.types.unalias(node.Type)
+		unaliasType, err := Unalias(a.symtab, node.Type)
+		if err != nil {
+			a.errors.add(err)
+			return
+		}
+		declarationType = unaliasType
 	} else {
 		// first support only first value
 		declarationType = a.types.inferExpr(node.Value[0])
@@ -324,7 +289,12 @@ func (a *Analyzer) collectDeclSymbol(node *ast.Declaration) {
 
 func (a *Analyzer) collectTypeSymbol(node *ast.TypeDeclaration) {
 	name := node.Alias.String()
-	declarationType := a.types.unalias(node.Type)
+	declarationType, err := Unalias(a.symtab, node.Type)
+
+	if err != nil {
+		a.errors.add(err)
+		return
+	}
 
 	if err := a.symtab.CurrentScope.Define(name, &Symbol{
 		Name:     node.Alias.String(),
