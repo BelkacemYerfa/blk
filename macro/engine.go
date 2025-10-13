@@ -43,16 +43,16 @@ func (me *MacroEngine) collectSymbols(node ast.Node) {
 
 func (me *MacroEngine) collectTypeSymbol(node *ast.TypeDeclaration) {
 	name := node.Alias.String()
-	declarationType, err := smt.Unalias(me.symtab, node.Type)
+	// declarationType, err := smt.Unalias(me.symtab, node.Type)
 
-	if err != nil {
-		me.errors.add(err)
-		return
-	}
+	// if err != nil {
+	// 	me.errors.add(err)
+	// 	return
+	// }
 
 	if err := me.symtab.CurrentScope.Define(name, &smt.Symbol{
 		Name:     node.Alias.String(),
-		Kind:     declarationType,
+		Kind:     node.Type,
 		DeclNode: node,
 	}); err != nil {
 		me.errors.error(ERROR, node.Token, err)
@@ -134,13 +134,13 @@ func (me *MacroEngine) expandEnumBakeDirective(
 
 	enumType, ok := sym.Kind.(*ast.EnumType)
 	if !ok {
-		return nil, fmt.Errorf("#bake requires enum type, got %v",
+		return nil, fmt.Errorf("#bake requires the same type as of the type used on so an enum is required in this case, but got %v",
 			me.errors.highlight(sym.Kind, Red))
 	}
 
 	// detect cycles
 	if visited[embed.Value] {
-		return nil, fmt.Errorf("circular #bake detected between %v and %v",
+		return nil, fmt.Errorf("circular #bake detected between %v and %v enums",
 			me.errors.highlight(parentDecl.Alias, Yellow),
 			me.errors.highlight(embed.Value, Red))
 	}
@@ -232,13 +232,13 @@ func (me *MacroEngine) expandStructBakeDirective(
 
 	structType, ok := sym.Kind.(*ast.StructType)
 	if !ok {
-		return nil, fmt.Errorf("#bake requires enum type, got %v",
+		return nil, fmt.Errorf("#bake requires the same type as of the type used on so an struct is required in this case, but got %v",
 			me.errors.highlight(sym.Kind, Red))
 	}
 
 	// detect cycles
 	if visited[embed.Value] {
-		return nil, fmt.Errorf("circular #bake detected between %v and %v enums",
+		return nil, fmt.Errorf("circular #bake detected between %v and %v structs",
 			me.errors.highlight(parentDecl.Alias, Yellow),
 			me.errors.highlight(embed.Value, Red))
 	}

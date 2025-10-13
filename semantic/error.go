@@ -4,8 +4,6 @@ import (
 	"blk/lexer"
 	"errors"
 	"fmt"
-	"slices"
-	"strings"
 )
 
 type ErrorCollector struct {
@@ -74,11 +72,15 @@ const (
 )
 
 func (ec *ErrorCollector) add(err error) {
-	if _, found := slices.BinarySearchFunc(ec.errors, err, func(a, b error) int {
-		return strings.Compare(a.Error(), b.Error())
-	}); !found {
-		ec.errors = append(ec.errors, err)
+	if err == nil {
+		return
 	}
+	for _, e := range ec.errors {
+		if e.Error() == err.Error() {
+			return
+		}
+	}
+	ec.errors = append(ec.errors, err)
 }
 
 func (ec *ErrorCollector) error(level Level, tok lexer.Token, msg ...interface{}) error {

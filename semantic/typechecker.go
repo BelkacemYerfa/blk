@@ -27,27 +27,53 @@ func NewTypeChecker(filepath string, symtab *SymbolTable, errors *ErrorCollector
 	}
 }
 
-func Unalias(scope *SymbolTable, tp ast.Type) (ast.Type, error) {
+func Unalias(err *ErrorCollector, scope *SymbolTable, tp ast.Type) (ast.Type, error) {
 	alsTp, ok := tp.(*ast.AliasType)
 
 	if !ok {
 		return tp, nil
 	}
 
-	// search for the alias
-	sym := scope.CurrentScope.Resolve(alsTp.Alias.Value)
+	visited := make(map[string]bool)
+	return unalias(err, scope, alsTp, visited, []string{})
+}
+
+func unalias(err *ErrorCollector, scope *SymbolTable, tp *ast.AliasType, visited map[string]bool, chain []string) (ast.Type, error) {
+	aliasName := tp.Alias.Value
+	sym := scope.CurrentScope.Resolve(aliasName)
+
+	if visited[aliasName] {
+		chainStr := formatTypeChain(append(chain, aliasName))
+		return nil, err.error(ERROR, tp.Token,
+			fmt.Errorf("circular type alias detected: %v", err.highlight(chainStr, Red)))
+	}
+
+	visited[aliasName] = true
+	defer delete(visited, aliasName)
 
 	if sym == nil {
-		return nil, fmt.Errorf("there is no %v type found, consider declaring it", alsTp.Alias)
+		return nil, fmt.Errorf("there is no %v type found, consider declaring it", tp.Alias)
 	}
 
 	sym.Used = true
+	newChain := append(chain, aliasName)
 
 	if sym.Kind.Type() == ast.TypeAlias {
-		return Unalias(scope, sym.Kind)
+		return unalias(err, scope, sym.Kind.(*ast.AliasType), visited, newChain)
 	}
 
 	return sym.Kind, nil
+}
+
+func formatTypeChain(chain []string) string {
+	if len(chain) == 0 {
+		return ""
+	}
+	result := chain[0]
+	for i := 1; i < len(chain); i++ {
+		result += " -> " + chain[i]
+	}
+	return result
 }
 
 func (tc *TypeChecker) check(program *ast.Program) {
@@ -1131,7 +1157,7 @@ func (tc *TypeChecker) typesCompatible(expected, inferred ast.Type) bool {
 		return false
 	}
 
-	expected, err := Unalias(tc.symtab, expected)
+	expected, err := Unalias(tc.errors, tc.symtab, expected)
 
 	if err != nil {
 		tc.errors.add(err)

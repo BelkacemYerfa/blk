@@ -155,6 +155,8 @@ func (a *Analyzer) checkTypeExpression(node ast.Type) {
 		a.checkUnionType(n)
 	case *ast.StructType:
 		a.checkStructType(n)
+	case *ast.AliasType:
+		a.checkAliasType(n)
 	}
 }
 
@@ -207,6 +209,12 @@ func (a *Analyzer) checkUnionType(n *ast.UnionType) {
 	}
 }
 
+func (a *Analyzer) checkAliasType(n *ast.AliasType) {
+	if _, err := Unalias(a.errors, a.symtab, n); err != nil {
+		return
+	}
+}
+
 func (a *Analyzer) checkStructType(n *ast.StructType) {
 
 }
@@ -216,7 +224,7 @@ func (a *Analyzer) collectDeclSymbol(node *ast.Declaration) {
 
 	if node.Type != nil {
 		// explicit type
-		unaliasType, err := Unalias(a.symtab, node.Type)
+		unaliasType, err := Unalias(a.errors, a.symtab, node.Type)
 		if err != nil {
 			a.errors.add(err)
 			return
@@ -289,16 +297,10 @@ func (a *Analyzer) collectDeclSymbol(node *ast.Declaration) {
 
 func (a *Analyzer) collectTypeSymbol(node *ast.TypeDeclaration) {
 	name := node.Alias.String()
-	declarationType, err := Unalias(a.symtab, node.Type)
-
-	if err != nil {
-		a.errors.add(err)
-		return
-	}
 
 	if err := a.symtab.CurrentScope.Define(name, &Symbol{
 		Name:     node.Alias.String(),
-		Kind:     declarationType,
+		Kind:     node.Type,
 		DeclNode: node,
 	}); err != nil {
 		a.errors.error(ERROR, node.Token, err)
