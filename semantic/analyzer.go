@@ -29,28 +29,29 @@ func (a *Analyzer) GetErrors() []error {
 
 func (a *Analyzer) Analyze(node *ast.Program) {
 	// start collecting
-	a.collectSymbols(node)
+	a.passCollectSymbols(node)
 
 	if main := a.symtab.CurrentScope.Resolve("main"); main == nil {
 		a.errors.error(ERROR, node.GetToken(), fmt.Errorf("no entry point found (main function), an entry point is required"))
 	}
 
-	a.types.check(node)
+	a.passTypeResolution(node)
+
+	a.passTypeChecking(node)
+	a.secondPassCheck()
 
 	for _, sym := range a.symtab.CurrentScope.Symbols {
 		if sym.DeclNode != nil && !sym.Used && sym.Name != "_" {
 			a.errors.error(WARNING, sym.DeclNode.GetToken(), fmt.Errorf("%v is not used", sym.Name))
 		}
 	}
-
-	a.secondPassCheck()
 }
 
-func (a *Analyzer) collectSymbols(node ast.Node) {
+func (a *Analyzer) passCollectSymbols(node ast.Node) {
 	switch n := node.(type) {
 	case *ast.Program:
 		for _, stmt := range n.Statements {
-			a.collectSymbols(stmt)
+			a.passCollectSymbols(stmt)
 		}
 
 	case *ast.Declaration:
@@ -61,17 +62,47 @@ func (a *Analyzer) collectSymbols(node ast.Node) {
 
 	case *ast.ScopeStatement:
 		for _, stmt := range n.Body.Body {
-			a.collectSymbols(stmt)
+			a.passCollectSymbols(stmt)
 		}
 	}
+}
+
+func (a *Analyzer) passTypeResolution(node ast.Node) {
+	switch n := node.(type) {
+	case *ast.Program:
+		for _, stmt := range n.Statements {
+			a.passTypeResolution(stmt)
+		}
+
+	case *ast.TypeDeclaration:
+		a.checkTypeExpression(n.Type)
+
+	case *ast.Declaration:
+		name := n.Name[0].String()
+		sym := a.symtab.CurrentScope.Resolve(name)
+
+		if sym.Kind == nil && n.Value != nil {
+			// no explicit type, infer from value
+			sym.Kind = a.types.inferExpr(n.Value[0])
+			a.types.symtab.CurrentScope.Update(name, sym)
+		}
+
+	case *ast.ScopeStatement:
+		a.symtab.EnterScope()
+		defer a.symtab.ExitScope()
+		for _, stmt := range n.Body.Body {
+			a.passTypeResolution(stmt)
+		}
+	}
+}
+
+func (a *Analyzer) passTypeChecking(node *ast.Program) {
+	a.types.check(node)
 }
 
 func (a *Analyzer) secondPassCheck() {
 	for _, sym := range a.symtab.CurrentScope.Symbols {
 		switch dclN := sym.DeclNode.(type) {
-		case *ast.TypeDeclaration:
-			a.checkTypeExpression(dclN.Type)
-
 		case *ast.Declaration:
 			a.checkDeclarationExpression(dclN.Value)
 		}
@@ -89,7 +120,7 @@ func (a *Analyzer) checkDeclarationExpression(nodes []ast.Expression) {
 			defer a.symtab.ExitScope()
 
 			for _, stmt := range n.Body {
-				a.collectSymbols(stmt)
+				a.passCollectSymbols(stmt)
 			}
 
 			for _, sym := range a.symtab.CurrentScope.Symbols {
@@ -129,7 +160,7 @@ func (a *Analyzer) checkFunctionExpression(fn *ast.FunctionExpression) {
 	}
 
 	for _, stmt := range fn.Body.Body {
-		a.collectSymbols(stmt)
+		a.passCollectSymbols(stmt)
 
 		if s, ok := stmt.(*ast.Declaration); ok {
 			if len(s.Value) > 0 {
@@ -216,7 +247,25 @@ func (a *Analyzer) checkAliasType(n *ast.AliasType) {
 }
 
 func (a *Analyzer) checkStructType(n *ast.StructType) {
-
+	for _, field := range n.Fields {
+		a.checkTypeExpression(field.Type)
+		// check with associated default value if	 exists
+		if len(field.Value) > 0 {
+			associatedValue := field.Value[0]
+			// associated value can't be a identifier here only a literal
+			if _, ok := associatedValue.(ast.Literal); !ok {
+				a.errors.error(ERROR, field.Token, "associated value of the struct type can't be an identifier, it can only be a literal type (int, float, string, char, ...)")
+				return
+			}
+			inferred := a.types.inferExpr(associatedValue)
+			name := field.Name[0]
+			if !a.types.typesCompatible(field.Type, inferred) {
+				errMsg := fmt.Sprintf("type mismatch on %v argument, explicit type %v doesn't match the inferred type %v, change the explicit type or the associated value", a.errors.highlight(name, Yellow), a.errors.highlight(field.Type, Red), a.errors.highlight(inferred, Green))
+				a.errors.error(ERROR, field.Token, errMsg)
+				return
+			}
+		}
+	}
 }
 
 func (a *Analyzer) collectDeclSymbol(node *ast.Declaration) {
@@ -231,56 +280,56 @@ func (a *Analyzer) collectDeclSymbol(node *ast.Declaration) {
 		}
 		declarationType = unaliasType
 	} else {
-		// first support only first value
-		declarationType = a.types.inferExpr(node.Value[0])
+		// // first support only first value
+		// declarationType = a.types.inferExpr(node.Value[0])
 
-		// directives
-		if _, ok := node.Value[0].(*ast.FunctionExpression); !ok {
-			if node.Inline {
-				a.errors.error(ERROR, node.GetToken(), fmt.Errorf("#inline directive can only be used with function expressions"))
-			}
+		// // directives
+		// if _, ok := node.Value[0].(*ast.FunctionExpression); !ok {
+		// 	if node.Inline {
+		// 		a.errors.error(ERROR, node.GetToken(), fmt.Errorf("#inline directive can only be used with function expressions"))
+		// 	}
 
-			dc, ok := node.Directive["#init"]
+		// 	dc, ok := node.Directive["#init"]
 
-			if ok {
-				a.errors.error(ERROR, dc.GetToken(), fmt.Errorf("#init directive can only be used with function expressions"))
-			}
+		// 	if ok {
+		// 		a.errors.error(ERROR, dc.GetToken(), fmt.Errorf("#init directive can only be used with function expressions"))
+		// 	}
 
-			dc, ok = node.Directive["#fini"]
+		// 	dc, ok = node.Directive["#fini"]
 
-			if ok {
-				a.errors.error(ERROR, dc.GetToken(), fmt.Errorf("#fini directive can only be used with function expressions"))
-			}
-		} else {
-			_, initExists := node.Directive["#init"]
-			dc, finiExists := node.Directive["#fini"]
+		// 	if ok {
+		// 		a.errors.error(ERROR, dc.GetToken(), fmt.Errorf("#fini directive can only be used with function expressions"))
+		// 	}
+		// } else {
+		// 	_, initExists := node.Directive["#init"]
+		// 	dc, finiExists := node.Directive["#fini"]
 
-			if initExists && finiExists {
-				a.errors.error(ERROR, dc.GetToken(), fmt.Errorf("can't use the both %v and %v directives on function expression, one only could exist", a.errors.highlight("#fini", Yellow), a.errors.highlight("#init", Yellow)))
-			}
+		// 	if initExists && finiExists {
+		// 		a.errors.error(ERROR, dc.GetToken(), fmt.Errorf("can't use the both %v and %v directives on function expression, one only could exist", a.errors.highlight("#fini", Yellow), a.errors.highlight("#init", Yellow)))
+		// 	}
 
-			// get the function signature
-			fnType := (declarationType).(*ast.FunctionType)
+		// 	// get the function signature
+		// 	fnType := (declarationType).(*ast.FunctionType)
 
-			if initExists || finiExists {
-				if len(fnType.Args) > 0 {
-					a.errors.error(ERROR, fnType.Token, fmt.Errorf("%v function has #init or #fini directive, thus can't have arguments", a.errors.highlight(node.Name[0], Yellow)))
-				}
+		// 	if initExists || finiExists {
+		// 		if len(fnType.Args) > 0 {
+		// 			a.errors.error(ERROR, fnType.Token, fmt.Errorf("%v function has #init or #fini directive, thus can't have arguments", a.errors.highlight(node.Name[0], Yellow)))
+		// 		}
 
-				if len(fnType.Return) > 0 {
-					if len(fnType.Return) >= 1 && fnType.Return[0].Type() != ast.TypeVoid {
-						a.errors.error(ERROR, fnType.Token, fmt.Errorf("%v function has #init or #fini directive, thus can't have returned values", a.errors.highlight(node.Name[0], Yellow)))
-					}
-				}
-			}
+		// 		if len(fnType.Return) > 0 {
+		// 			if len(fnType.Return) >= 1 && fnType.Return[0].Type() != ast.TypeVoid {
+		// 				a.errors.error(ERROR, fnType.Token, fmt.Errorf("%v function has #init or #fini directive, thus can't have returned values", a.errors.highlight(node.Name[0], Yellow)))
+		// 			}
+		// 		}
+		// 	}
 
-			inlineExists := node.Inline
-			dc, noInlineExists := node.Directive["#no_inline"]
+		// 	inlineExists := node.Inline
+		// 	dc, noInlineExists := node.Directive["#no_inline"]
 
-			if inlineExists && noInlineExists {
-				a.errors.error(ERROR, dc.GetToken(), fmt.Errorf("can't use the both %v and %v directives on function expression, one only could exist", a.errors.highlight("#inline", Yellow), a.errors.highlight("#no_inline", Yellow)))
-			}
-		}
+		// 	if inlineExists && noInlineExists {
+		// 		a.errors.error(ERROR, dc.GetToken(), fmt.Errorf("can't use the both %v and %v directives on function expression, one only could exist", a.errors.highlight("#inline", Yellow), a.errors.highlight("#no_inline", Yellow)))
+		// 	}
+		// }
 	}
 
 	// better to have errors returned later

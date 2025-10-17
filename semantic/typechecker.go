@@ -241,6 +241,9 @@ func (tc *TypeChecker) inferExpr(expr ast.Expression) ast.Type {
 	case *ast.IndexExpression:
 		return tc.inferIndexType(e)
 
+	case *ast.StructInstanceExpression:
+		return tc.inferStructInstanceType(e)
+
 	case *ast.MemberShipExpression:
 		return tc.inferPropertyType(e)
 
@@ -580,42 +583,118 @@ func (tc *TypeChecker) inferIndexType(idxExpr *ast.IndexExpression) ast.Type {
 	return castLeftType.LeftType
 }
 
+func (tc *TypeChecker) inferStructInstanceType(instance *ast.StructInstanceExpression) ast.Type {
+
+	ident, ok := instance.Left.(*ast.Identifier)
+	if !ok {
+		errMsg := fmt.Sprintf("left side of a struct instance expression needs to be an %v", tc.errors.highlight("identifier", Yellow))
+		(tc.errors.error(ERROR, instance.GetToken(), errMsg))
+		return nil
+	}
+
+	identType := tc.inferIdentifierType(ident)
+	unaliasedIdentType, err := Unalias(tc.errors, tc.symtab, identType)
+	if err != nil {
+		return nil
+	}
+	return unaliasedIdentType
+}
+
 func (tc *TypeChecker) inferPropertyType(member *ast.MemberShipExpression) ast.Type {
 	symType := tc.inferExpr(member.Object)
 
 	switch tp := symType.(type) {
 	case *ast.EnumType:
-		// check if the property exist on the Object type
-		// if yes we're cool, otherwise error out
-		innerState, ok := member.Property.(*ast.Identifier)
+		return tc.resolveEnumProperty(tp, member.Property)
+
+	case *ast.StructType:
+		return tc.resolveStructProperty(tp, member.Property)
+	}
+
+	return nil
+}
+
+func (tc *TypeChecker) resolveEnumProperty(enumType *ast.EnumType, property ast.Expression) ast.Type {
+	// check if the property exist on the Object type
+	// if yes we're cool, otherwise error out
+	innerState, ok := property.(*ast.Identifier)
+	if !ok {
+		errMsg := fmt.Sprintf("property on enum expression can only be an %v, can't have other types", tc.errors.highlight("identifier", Yellow))
+		(tc.errors.error(ERROR, property.GetToken(), errMsg))
+		return nil
+	}
+
+	for _, expr := range enumType.Body {
+		if len(expr.Left) > 0 && expr.Left[0].String() == innerState.String() {
+			return enumType
+		}
+	}
+
+	errMsg := fmt.Sprintf("no enum option called %v found in %v, consider adding it", tc.errors.highlight(innerState, Red), tc.errors.highlight(enumType, Yellow))
+	(tc.errors.error(ERROR, property.GetToken(), errMsg))
+	return nil
+}
+
+func (tc *TypeChecker) resolveStructProperty(structType *ast.StructType, property ast.Expression) ast.Type {
+	switch prop := property.(type) {
+
+	case *ast.Identifier:
+		for _, field := range structType.Fields {
+			if field.Name[0].Value == prop.Value {
+				if field.Type != nil {
+					return field.Type
+				}
+				return tc.inferExpr(field.Value[0])
+			}
+		}
+		tc.errors.error(ERROR, prop.Token,
+			fmt.Sprintf("no field '%s' found in struct '%s'", prop.Value))
+		return nil
+
+	case *ast.MemberShipExpression:
+		// infer the type of obj.field
+		firstPart, ok := prop.Object.(*ast.Identifier)
 		if !ok {
-			errMsg := fmt.Sprintf("property on enum expression can only be an %v, can't have other types", tc.errors.highlight("identifier", Yellow))
-			(tc.errors.error(ERROR, member.Property.GetToken(), errMsg))
+			tc.errors.error(ERROR, prop.Object.GetToken(),
+				"invalid member expression on struct (expected identifier)")
 			return nil
 		}
 
-		for _, expr := range tp.Body {
-			if len(expr.Left) > 0 {
-				equal := strings.Contains(expr.Left[0].String(), innerState.String()) || strings.Contains(innerState.String(), expr.Left[0].String())
-				if equal {
-					return tp
+		var fieldType ast.Type
+		for _, field := range structType.Fields {
+			if field.Name[0].Value == firstPart.Value {
+				if field.Type != nil {
+					fieldType = field.Type
+				} else {
+					fieldType = tc.inferExpr(field.Value[0])
 				}
+				break
 			}
 		}
 
-		errMsg := fmt.Sprintf("no enum option called %v found in %v, consider adding it", tc.errors.highlight(innerState, Red), tc.errors.highlight(member.Object, Yellow))
-		(tc.errors.error(ERROR, member.Property.GetToken(), errMsg))
-		return nil
+		if fieldType == nil {
+			tc.errors.error(ERROR, prop.Object.GetToken(),
+				fmt.Sprintf("no field '%s' found in struct '%s'", firstPart.Value))
+			return nil
+		}
 
-	case *ast.StructType:
-
+		// recurse on the next property
+		switch nested := fieldType.(type) {
+		case *ast.StructType:
+			return tc.resolveStructProperty(nested, prop.Property)
+		case *ast.EnumType:
+			return tc.resolveEnumProperty(nested, prop.Property)
+		default:
+			tc.errors.error(ERROR, prop.Property.GetToken(),
+				fmt.Sprintf("'%s' has no properties (type: %T)", firstPart.Value, fieldType))
+			return nil
+		}
 	}
 
 	return nil
 }
 
 func (tc *TypeChecker) inferFunctionType(fn *ast.FunctionExpression) ast.Type {
-
 	fnType := &ast.FunctionType{Token: fn.Token, Kind: ast.TypeFunction}
 
 	for _, arg := range fn.Args {
@@ -658,10 +737,14 @@ func (tc *TypeChecker) functionSignature(fnType ast.Type, call *ast.CallExpressi
 	fnSignature := &ast.FunctionSignature{Token: ft.Token, Kind: ast.TypeFunction, Args: map[string]*ast.Arg{}}
 
 	for _, arg := range fnDecl.Args {
+		unaliasedArgType, err := Unalias(tc.errors, tc.symtab, arg.Type)
+		if err != nil {
+			return nil
+		}
 		fnSignature.Args[arg.Name.Value] = &ast.Arg{
 			Token: arg.Token,
 			Name:  arg.Name,
-			Type:  arg.Type,
+			Type:  unaliasedArgType,
 		}
 	}
 
@@ -689,13 +772,13 @@ func (tc *TypeChecker) inferIdentifierType(ident *ast.Identifier) ast.Type {
 }
 
 func (tc *TypeChecker) inferFunctionExpr(call *ast.CallExpression) ast.Type {
-
 	sym := tc.symtab.CurrentScope.Resolve(call.Function.Value)
 	if sym == nil {
 		(tc.errors.error(ERROR, call.Token, "function ", call.Function.Value, " wasn't found"))
 		return nil
 	}
 
+	sym.Used = true
 	return sym.Kind
 }
 
@@ -703,6 +786,7 @@ func (tc *TypeChecker) checkCallAgainst(fnType ast.Type, fnSign *ast.FunctionSig
 	// get the function Signature
 	ft, ok := fnType.(*ast.FunctionType)
 	if !ok {
+		fmt.Println(call, fnSign, fnType)
 		(tc.errors.error(ERROR, call.Token, "attempted to call non-function type ", fnType))
 		return nil
 	}
@@ -1202,6 +1286,7 @@ func (tc *TypeChecker) typesCompatible(expected, inferred ast.Type) bool {
 		for idx, etpExpr := range etp.Body {
 			itpExpr := itp.Body[idx]
 
+			// issue regarding the comparison
 			if itpExpr.String() != etpExpr.String() {
 				return false
 			}
@@ -1209,6 +1294,22 @@ func (tc *TypeChecker) typesCompatible(expected, inferred ast.Type) bool {
 
 		return true
 
+	case *ast.StructType:
+		itp := inferred.(*ast.StructType)
+
+		if len(etp.Fields) != len(itp.Fields) {
+			return false
+		}
+
+		for idx, etpExpr := range etp.Fields {
+			itpExpr := itp.Fields[idx]
+
+			if itpExpr.String() != etpExpr.String() {
+				return false
+			}
+		}
+
+		return true
 	}
 
 	return false

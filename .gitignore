@@ -1,12 +1,14 @@
 
 # workspace config
 .vscode/
+.zed/
 
 # generated test repo
 test_report.html
 
 # internal tests
 internal_examples/
+logs/
 
 # internal make files
 Makefile

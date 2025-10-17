@@ -2028,15 +2028,10 @@ func (p *Parser) parseCallArguments() []ast.Param {
 		Token: p.curToken,
 	}
 
-	if p.curTokenKindIs(lexer.TokenIdentifier) {
+	if p.curTokenKindIs(lexer.TokenIdentifier) && p.peekTokenKindIs(lexer.TokenAssign) {
 		// parse it
 		param.Name = p.parseIdentifier().(*ast.Identifier)
-
-		if !p.curTokenKindIs(lexer.TokenAssign) {
-			p.add(p.error(p.curToken, "expect assign = after ", param.Name, " instead got ", p.curToken.Text))
-			return nil
-		}
-		p.nextToken()
+		p.nextToken() // consume =
 	}
 
 	param.Value = p.parseExpression(LOWEST)
@@ -2048,13 +2043,10 @@ func (p *Parser) parseCallArguments() []ast.Param {
 			Token: p.curToken,
 		}
 
-		if p.curTokenKindIs(lexer.TokenIdentifier) {
+		if p.curTokenKindIs(lexer.TokenIdentifier) && p.peekTokenKindIs(lexer.TokenAssign) {
 			// parse it
 			param.Name = p.parseIdentifier().(*ast.Identifier)
-
-			if !p.curTokenKindIs(lexer.TokenAssign) {
-				p.nextToken()
-			}
+			p.nextToken() // consume =
 		}
 
 		param.Value = p.parseExpression(LOWEST)
