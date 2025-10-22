@@ -786,7 +786,6 @@ func (tc *TypeChecker) checkCallAgainst(fnType ast.Type, fnSign *ast.FunctionSig
 	// get the function Signature
 	ft, ok := fnType.(*ast.FunctionType)
 	if !ok {
-		fmt.Println(call, fnSign, fnType)
 		(tc.errors.error(ERROR, call.Token, "attempted to call non-function type ", fnType))
 		return nil
 	}

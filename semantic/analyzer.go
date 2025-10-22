@@ -84,7 +84,8 @@ func (a *Analyzer) passTypeResolution(node ast.Node) {
 		if sym.Kind == nil && n.Value != nil {
 			// no explicit type, infer from value
 			sym.Kind = a.types.inferExpr(n.Value[0])
-			a.types.symtab.CurrentScope.Update(name, sym)
+			nwSym := *sym
+			a.types.symtab.CurrentScope.Update(name, &nwSym)
 		}
 
 	case *ast.ScopeStatement:

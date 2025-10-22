@@ -883,7 +883,9 @@ func (p *Parser) parseFields() ([]*ast.Declaration, error) {
 
 		} else {
 
-			if p.peekTokenKindIs(lexer.TokenColon) {
+			switch {
+
+			case p.peekTokenKindIs(lexer.TokenColon):
 				// parse type
 				field := &ast.Declaration{Token: p.peekToken, Mutable: true, Directive: make(map[string]*ast.StringLiteral)}
 
@@ -937,8 +939,42 @@ func (p *Parser) parseFields() ([]*ast.Declaration, error) {
 
 				p.nextToken()
 
-			} else {
-				// throw an error here
+			case p.peekTokenKindIs(lexer.TokenAssign):
+				field := &ast.Declaration{Token: p.peekToken, Mutable: true, Directive: make(map[string]*ast.StringLiteral)}
+
+				if !p.curTokenKindIs(lexer.TokenIdentifier) {
+					err := p.error(p.prevToken, "expected an identifier, got ", p.prevToken.Text)
+					return nil, err
+				}
+
+				ident := p.parseIdentifier().(*ast.Identifier)
+
+				field.Name = append(field.Name, ident)
+
+				p.nextToken() // consume =
+
+				p.addDirective(field)
+
+				val := p.parseExpression(LOWEST)
+
+				if val == nil {
+					return nil, fmt.Errorf("")
+				}
+
+				field.Value = []ast.Expression{val}
+
+				fields = append(fields, field)
+
+				// check if there is a comma
+				if !p.curTokenKindIs(lexer.TokenComma) {
+					err := p.error(p.curToken, "expected an comma (,) at the end of each field, instead got ", p.curToken.Text)
+					p.add(err)
+				}
+
+				p.nextToken()
+
+			default:
+				// throw an error
 				err := p.error(p.curToken, "expected either (:: or :), instead got ", p.curToken.Text)
 				p.add(err)
 				p.nextToken()
