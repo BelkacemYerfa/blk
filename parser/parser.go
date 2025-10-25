@@ -348,7 +348,7 @@ func (p *Parser) parseCompositeType(prev lexer.Token) (*ast.CompositeType, error
 		return nil, p.error(p.curToken, "expected [ after ", p.curToken.Kind, " instead got ", p.curToken.Text)
 	}
 
-	// consume the ( token
+	// consume the [ token
 	p.nextToken()
 
 	if tp.Kind == ast.TypeArray {
@@ -959,6 +959,11 @@ func (p *Parser) parseFields() ([]*ast.Declaration, error) {
 
 				if val == nil {
 					return nil, fmt.Errorf("")
+				}
+
+				// ensures that the function stays non mutable
+				if _, ok := val.(*ast.FunctionType); ok {
+					field.Mutable = false
 				}
 
 				field.Value = []ast.Expression{val}

@@ -14,9 +14,10 @@ import (
 // Responsible of providing an implementation of blk type checker that will be using bidirectional typechecking approach to verify & analyze the types
 
 type TypeChecker struct {
-	filePath string
-	symtab   *SymbolTable
-	errors   *ErrorCollector
+	filePath  string
+	symtab    *SymbolTable
+	errors    *ErrorCollector
+	loopDepth uint
 }
 
 func NewTypeChecker(filepath string, symtab *SymbolTable, errors *ErrorCollector) *TypeChecker {
@@ -103,6 +104,15 @@ func (tc *TypeChecker) checkStmt(stmt ast.Statement) {
 	switch s := stmt.(type) {
 	case *ast.Declaration:
 		tc.checkDeclaration(s)
+
+	case *ast.ForStatement:
+		tc.checkForStatement(s)
+
+	case *ast.NextStatement:
+		tc.checkNextStatement(s)
+
+	case *ast.BreakStatement:
+		tc.checkBreakStatement(s)
 
 	case *ast.ScopeStatement:
 		tc.inferBlockExprType(s.Body)
@@ -198,6 +208,188 @@ func (tc *TypeChecker) checkDeclaration(d *ast.Declaration) {
 	if !isExplicit && isInit {
 		// no explicit type, type will get inferred from the assign expression
 		d.Type = tc.inferExpr(expr)
+	}
+}
+
+func (tc *TypeChecker) checkForStatement(loop *ast.ForStatement) {
+	// to implement
+	// check based on the pattern loop.Pattern
+	switch p := loop.Pattern.(type) {
+	case *ast.IterationPattern:
+		// C-style loop for let idx = 0; idx < 10; idx++ {}
+		tc.checkIterationPattern(p)
+	case *ast.IteratorIn:
+		// in style loop for idx, value in some {}
+		tc.checkIteratorIn(p)
+	}
+
+	tc.loopDepth++
+	tc.inferBlockExprType(loop.Body)
+	tc.loopDepth--
+}
+
+func (tc *TypeChecker) checkIterationPattern(pat *ast.IterationPattern) {
+
+	//infinite style loops
+	if pat.Start == nil && pat.End == nil && pat.Condition == nil {
+		return
+	}
+
+	startExists, endExists := false, false
+
+	if pat.Start != nil {
+		startExists = true
+		start, ok := pat.Start.(*ast.Declaration)
+		if !ok {
+			// error out
+			tc.errors.error(ERROR, pat.Start.GetToken(), "the starting index needs to be declared before use, consider using ", tc.errors.highlight("let <index-name> = <starting-value>", Yellow))
+			return
+		}
+
+		// define the var into the scope later
+		tc.symtab.EnterScope()
+		defer tc.symtab.ExitScope()
+
+		// no directives are allowed in this case
+		if len(start.Directive) > 0 {
+			// error out
+			tc.errors.error(ERROR, start.GetToken(), "no directives are allowed with loop index declaration")
+			return
+		}
+
+		// multi declaration is not allowed
+		if len(start.Name) > 1 {
+			// error out
+			errMsg := fmt.Sprintf("multi value declaration is not allowed, consider removing from %v ...", tc.errors.highlight(start.Name[1], Red))
+			tc.errors.error(ERROR, start.GetToken(), errMsg)
+			return
+		}
+
+		if len(start.Value) > 1 {
+			// error out
+			errMsg := fmt.Sprintf("multi value assignment is not allowed, consider removing from %v ...", tc.errors.highlight(start.Value[1], Red))
+			tc.errors.error(ERROR, start.GetToken(), errMsg)
+			return
+		}
+
+		// associated value need to be of type int
+		startType := tc.inferExpr(start.Value[0])
+
+		if startType == nil {
+			return
+		}
+
+		if startType.Type() > ast.TypeUInt64 {
+			// error out
+			errMsg := fmt.Sprintf("start index needs to be of %v type", tc.errors.highlight("sint | uint", Red))
+			tc.errors.error(ERROR, start.GetToken(), errMsg)
+			return
+		}
+	}
+
+	if pat.Condition != nil {
+		// condition need to evaluate to a boolean result
+		condType := tc.inferExpr(pat.Condition)
+
+		if condType == nil {
+			return
+		}
+
+		if condType.Type() != ast.TypeBool {
+			// error out
+			errMsg := fmt.Sprintf("condition needs to be of type bool, instead got %v", tc.errors.highlight(condType, Red))
+			tc.errors.error(ERROR, pat.Condition.GetToken(), errMsg)
+			return
+		}
+	}
+
+	if pat.End != nil {
+		endExists = true
+		// end need to evaluate to int (sint | uint)
+		endType := tc.inferExpr(pat.End)
+
+		if endType == nil {
+			return
+		}
+
+		if endType.Type() > ast.TypeUInt64 {
+			// error out
+			errMsg := fmt.Sprintf("moving expression needs to evaluate to sint | uint, but got %v", tc.errors.highlight(endType, Red))
+			tc.errors.error(ERROR, pat.End.GetToken(), errMsg)
+			return
+		}
+	}
+
+	// if a start expression exists an end expression needs to exists
+	// condition can exists alone
+	if startExists && !endExists {
+		// means start exists without an end (not allowed)
+		tc.errors.error(ERROR, pat.End.GetToken(), "the moving index expression doesn't exist on the loop, consider adding it")
+		return
+	}
+
+	if endExists && !startExists {
+		// means end exists without a start (not allowed)
+		tc.errors.error(ERROR, pat.End.GetToken(), "declaration index expression doesn't exist on the loop, consider adding it")
+		return
+	}
+
+}
+
+func (tc *TypeChecker) checkIteratorIn(pat *ast.IteratorIn) {
+	// switch on the target
+	target, ok := pat.Target.(*ast.RangePattern)
+	if ok {
+		tc.checkRangePattern(target)
+		return
+	}
+
+	// otherwise accepted ones are strings, arrays, hashmaps
+	// elements of the strings, are going to be the char (rune equivalent in go, char type in blk)
+
+	targetType := tc.inferExpr(pat.Target)
+
+	if targetType.Type() != ast.TypeString && targetType.Type() != ast.TypeMap && targetType.Type() != ast.TypeArray {
+		// error out
+		errMsg := fmt.Sprintf("target expression on with in loop needs to be of type (%v), but instead got %v", tc.errors.highlight("slice | array | map", Green), tc.errors.highlight(targetType, Red))
+		tc.errors.error(ERROR, pat.Target.GetToken(), errMsg)
+		return
+	}
+}
+
+func (tc *TypeChecker) checkRangePattern(pat *ast.RangePattern) {
+	// check the range pattern
+	start := tc.inferExpr(pat.Start)
+	end := tc.inferExpr(pat.End)
+
+	if start.Type() > ast.TypeUInt64 {
+		// error out
+		errMsg := fmt.Sprintf("start needs to be of type %v, instead got %v", tc.errors.highlight("sint | uint", Green), tc.errors.highlight(start, Red))
+		tc.errors.error(ERROR, pat.Start.GetToken(), errMsg)
+		return
+	}
+
+	if end.Type() > ast.TypeUInt64 {
+		// error out
+		errMsg := fmt.Sprintf("end needs to be of type %v, instead got %v", tc.errors.highlight("sint | uint", Green), tc.errors.highlight(end, Red))
+		tc.errors.error(ERROR, pat.End.GetToken(), errMsg)
+		return
+	}
+}
+
+func (tc *TypeChecker) checkNextStatement(next *ast.NextStatement) {
+	// next stmt is only allowed to exist inside of loop block
+	if tc.loopDepth == 0 {
+		// means we're not inside of a loop
+		tc.errors.error(ERROR, next.Token, "next statement can only be used inside for loop only")
+	}
+}
+
+func (tc *TypeChecker) checkBreakStatement(brek *ast.BreakStatement) {
+	// next stmt is only allowed to exist inside of loop block
+	if tc.loopDepth == 0 {
+		// means we're not inside of a loop
+		tc.errors.error(ERROR, brek.Token, "next statement can only be used inside for loop only")
 	}
 }
 
