@@ -1,6 +1,6 @@
 # blk — A Minimalist Dynamic Systems Language
 
-`blk` is a dynamically typed, interpreted language focused on simplicity, expression-oriented design, and minimal syntax. Inspired by Jai, Zig, Odin, and C — but reimagined with flexible semantics and runtime evaluation at its core. Designed for quick scripting, tooling, and prototyping with low ceremony and high expressiveness.
+`blk` is a statically typed, compiled language focused on simplicity, expression-oriented design, and minimal syntax. Inspired by Jai, Zig, Odin, and C. Designed for learning more about compilers.
 
 ---
 
@@ -8,11 +8,11 @@
 
 - Expression-oriented: every block returns a value
 - Minimal syntax: easy to read and parse
-- Dynamically typed, no explicit type declarations
-- Interpreted: fast feedback, no build steps required
+- Statically typed, compiler can infer types or you can annotate them
+- Compiled: ahead-of-time compilation to efficient machine code
+- Simple module system with imports
 - Structs, enums, maps, arrays — all built-in
 - Powerful block scoping and control flow
-- Unified declaration model using `::` and `:=`
 
 ---
 
@@ -21,19 +21,19 @@
 ```blk
 import "math"
 
-User :: struct {
-    name,
-    age,
+type User = struct {
+    name: string,
+    age: u8 = 18,
 
-    greet: fn(self) {
-        print("Hi, I'm " + self.name)
+    greet = fn(user *User) {
+        print("Hi, I'm " + user.Name)
     }
 }
 
-fn main() {
+const main = fn() -> () {
     u := User{ name: "Ali", age: 22 }
-    u.greet()
-    msg := if u.age > 18 {
+    u.greet(u)
+    let msg = if u.age > 18 {
         "Adult"
     } else {
         "Minor"
@@ -42,248 +42,6 @@ fn main() {
 }
 ```
 
----
+## 📄 License
 
-## ✅ Language Features
-
-- **Dynamic values**: no static type annotations
-- **All variables** declared with `:=`
-- **Top-level constants** via `::`
-- **Structs with inline methods**
-- **Enums**
-- **Pattern matching** via `match` expression
-- **Expression-based blocks and control flow**
-- **Unified literals**: maps and structs share `{}` syntax
-- **No distinction between expressions and statements**
-
----
-
-## 🧱 Core Constructs
-
-### Declarations
-
-```blk
-x := 42
-msg :: "Welcome to blk"
-greet :: fn(name) {
-    print("Hello " + name)
-}
-```
-
-### Structs
-
-```blk
-Vec2 :: struct {
-    x := 0.0,
-    y := 0.0,
-
-    len :: fn(self) {
-        sqrt(self.x * self.x + self.y * self.y)
-    }
-}
-
-v := Vec2{
-    x: 3,
-    y: 4
-}
-print(v.len())
-```
-
-### Enums
-
-```blk
-Result :: enum {
-    Ok,
-    Error
-}
-```
-
----
-
-## 🔁 Control Flow
-
-### If expressions
-
-```blk
-# regular if
-name := if loggedIn {
-    "User"
-} else {
-    "Guest"
-}
-
-# ternary-like if
-
-user := User{ name: "Alice", age: 22 }
-
-# with use/else tokens
-age := if user.age > 18 use "Adult" else "Minor"
-
-# with ?/: tokens
-age := if user.age > 18 ? "Adult" : "Minor"
-
-```
-
-### Match expressions
-
-```blk
-kind := match x {
-    0 => "zero",
-    1 => "one",
-    _ => "other"
-}
-```
-
-### While loops
-
-```blk
-i := 0
-while i < 5 {
-    print(i)
-    i += 1
-}
-```
-
-### For loops
-
-```blk
-for idx, val in [1, 2, 3] {
-    print(idx, val)
-}
-
-for k, v in {a: 1, b: 2} {
-    print(k, v)
-}
-```
-
-### next
-
-idea of name `next` suggested by [@gaurangrshah](https://github.com/gaurangrshah)
-
-```blk
-while true {
-    if shouldSkip() {
-        next
-    }
-    doStuff()
-}
-```
-
----
-
-## 📦 Modules & Imports
-
-```blk
-import "math"
-import "utils"
-```
-
-for aliasing use the as keyword:
-
-```blk
-import "custom.blk" as mod
-```
-
----
-
-## 🗃️ Data Types
-
-### Arrays
-
-```blk
-nums := [1, 2, 3]
-names := ["foo", "bar"]
-```
-
-### Maps
-
-```blk
-config := {
-    "host": "localhost",
-    "port": "8080"
-}
-```
-
-### Struct literals
-
-```blk
-person := Person{
-    name: "Zed",
-    age: 20
-}
-```
-
----
-
-## Nul values
-
-this is a special value representing the absence of a value, similar to `null/nil` in other languages. It can be used in any context where a value is expected.
-
-idea of name `nul` suggested by [@unmarine](https://github.com/unmarine)
-
-```blk
-x := nul # Represents a null value
-```
-
-## 🧠 Expression-Based Semantics
-
-Every code block is an expression. The last expression is the return value of the block — no `return` keyword required.
-
-```blk
-double := fn(x) {
-    x * 2
-}
-```
-
----
-
-## 🧪 Example Evaluation
-
-```blk
-result := fn(x, y) {
-    if x > y {
-        x
-    } else {
-        y
-    }
-}
-
-print(result(10, 20))  # 20
-```
-
----
-
-## 📐 Data Shape & Reflection
-
-Types are tracked at runtime via introspection:
-
-```blk
-typeOf(x) == types.INTEGER
-```
-
-**Note:** types can be found in the [types](https://github.com/BelkacemYerfa/blk/blob/master/stdlib/type.go) module.
-
----
-
-## 🛠️ Development Roadmap
-
-- [x] Lexer and Tokenizer
-- [x] Parser and AST
-- [x] Core Interpreter Engine
-- [x] REPL
-- [x] Built-in Modules (math, strings, hashmap, array, types)
-- [ ] Error System and Stack Traces
-
----
-
-## ⚙️ Tooling
-
-### Run
-
-```bash
-blk run -f ./main.blk
-```
-
----
-
-**NOTE:** the project ins't finished yet. Expect bugs and breaking changes, don't use it for **production**.
+Licensed under the MIT License. See `LICENSE` for more information.
